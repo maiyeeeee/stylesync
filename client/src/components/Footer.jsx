@@ -1,38 +1,73 @@
-function Footer() {
-  return (
-    <footer className="bg-purple-700 text-white mt-16 px-8 py-8">
-      <div className="max-w-6xl mx-auto grid md:grid-cols-4 gap-6 text-center md:text-left">
-        <div>
-          <h3 className="font-bold text-lg mb-2">Dahling’s Salon & Spa</h3>
-          <p className="text-sm">Relieve, relax, and revive.</p>
-        </div>
+import { Link } from "react-router-dom"
+import { LuArrowUpRight, LuPhone } from "react-icons/lu"
+import { FaFacebookF } from "react-icons/fa6"
+import Brand from "./Brand"
 
-        <div>
-          <h3 className="font-bold mb-2">Address</h3>
-          <p className="text-sm">
-            Nichlos Plaza Roxas Avenue Brgy. Poblacion II, Sagay City
-          </p>
-        </div>
-
-        <div>
-          <h3 className="font-bold mb-2">Contact</h3>
-          <p className="text-sm">09695619380</p>
-          <a
-            href="https://web.facebook.com/dahlingsescapesalonandspa"
-            target="_blank"
-            className="text-sm underline"
-          >
-            Facebook Page
-          </a>
-        </div>
-
-        <div>
-          <h3 className="font-bold mb-2">Business Hours</h3>
-          <p className="text-sm">8:00 AM – 7:00 PM</p>
-        </div>
-      </div>
-    </footer>
-  )
+export default function Footer() {
+    return (
+        <footer className="site-footer">
+            <div className="site-container">
+                <div className="footer-grid">
+                    <div>
+                        <Link to="/" aria-label="Dahling’s Escape home">
+                            <Brand />
+                        </Link>
+                        <p>
+                            A space to unwind.
+                            <br />A moment to feel like you.
+                        </p>
+                        <a
+                            className="social-link"
+                            href="https://web.facebook.com/dahlingsescapesalonandspa"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Find Dahling’s on Facebook"
+                        >
+                            <FaFacebookF />
+                        </a>
+                    </div>
+                    <div>
+                        <h3>Come find your calm</h3>
+                        <p>
+                            Nichlos Plaza, Roxas Avenue
+                            <br />
+                            Brgy. Poblacion II, Sagay City
+                            <br />
+                            Negros Occidental, Philippines
+                        </p>
+                    </div>
+                    <div>
+                        <h3>Let’s make time</h3>
+                        <p>
+                            Business hours
+                            <br />
+                            <span className="footer-hours">8:00 AM – 7:00 PM</span>
+                        </p>
+                        <a href="tel:09695619380" className="footer-phone">
+                            <LuPhone /> 0969 561 9380
+                        </a>
+                    </div>
+                    <div>
+                        <h3>A little exploring</h3>
+                        <Link to="/services">
+                            Our services <LuArrowUpRight />
+                        </Link>
+                        <Link to="/book">
+                            Book an appointment <LuArrowUpRight />
+                        </Link>
+                        <Link to="/contact">
+                            Get in touch <LuArrowUpRight />
+                        </Link>
+                    </div>
+                </div>
+                <div className="footer-bottom">
+                    <span>© {new Date().getFullYear()} Dahling’s Escape Salon & Spa.</span>
+                    <span>Relieve. Relax. Revive.</span>
+                    <Link to="/admin-login">
+                        Team portal <LuArrowUpRight />
+                    </Link>
+                </div>
+            </div>
+        </footer>
+    )
 }
-
-export default Footer

@@ -90,42 +90,36 @@ const preferencesSql = `
 `
 
 function sendQuery(sql, countField) {
-  return async (req, res) => {
-    try {
-      const [rows] = await database.query(sql)
+    return async (req, res) => {
+        try {
+            const [rows] = await database.query(sql)
 
-      res.json(
-        rows.map((row) => ({
-          ...row,
-          [countField]: Number(row[countField]),
-        }))
-      )
-    } catch (error) {
-      console.error(
-        "GAD data load failed:",
-        error.code || error.name
-      )
+            res.json(
+                rows.map((row) => ({
+                    ...row,
+                    [countField]: Number(row[countField]),
+                })),
+            )
+        } catch (error) {
+            console.error("GAD data load failed:", error.code || error.name)
 
-      res.status(500).json({
-        error: "Unable to load GAD analytics. Please try again.",
-      })
+            res.status(500).json({
+                error: "Unable to load GAD analytics. Please try again.",
+            })
+        }
     }
-  }
 }
 
 router.get("/", (req, res) => {
-  res.json({ message: "GAD analytics available." })
+    res.json({ message: "GAD analytics available." })
 })
 
-router.get(
-  "/customer-preferences",
-  sendQuery(preferencesSql, "total_bookings")
-)
+router.get("/customer-preferences", sendQuery(preferencesSql, "total_bookings"))
 
 router.get(
-  "/gender-summary",
-  sendQuery(
-    `
+    "/gender-summary",
+    sendQuery(
+        `
     SELECT
       ${genderExpression} AS gender,
       COUNT(DISTINCT c.customer_id) AS total
@@ -133,25 +127,19 @@ router.get(
     GROUP BY ${genderExpression}
     ORDER BY gender ASC
     `,
-    "total"
-  )
+        "total",
+    ),
 )
 
 // Preserve existing endpoints for compatibility.
-router.get(
-  "/marketing-insights",
-  sendQuery(preferencesSql, "total_bookings")
-)
+router.get("/marketing-insights", sendQuery(preferencesSql, "total_bookings"))
+
+router.get("/recommendations", sendQuery(preferencesSql, "total_bookings"))
 
 router.get(
-  "/recommendations",
-  sendQuery(preferencesSql, "total_bookings")
-)
-
-router.get(
-  "/service-trends",
-  sendQuery(
-    `
+    "/service-trends",
+    sendQuery(
+        `
     SELECT
       ${customerTypeExpression} AS customer_type,
       ${serviceExpression} AS service,
@@ -164,8 +152,8 @@ router.get(
       ${serviceExpression}
     ORDER BY total_bookings DESC, service ASC
     `,
-    "total_bookings"
-  )
+        "total_bookings",
+    ),
 )
 
 module.exports = router

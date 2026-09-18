@@ -170,18 +170,18 @@ Availability checking intentionally rejects a booking when no qualified staff is
 
 Use one 120-minute service and a staff shift of 09:00–18:00.
 
-| Test | Action | Expected result |
-|---|---|---|
-| Full interval | Book the 120-minute service at 10:00 | Interval shown as 10:00–12:00 |
-| Exact overlap | Try the same staff/service at 10:00 | Rejected |
-| Partial overlap | Try at 11:00 | Rejected because 11:00–13:00 overlaps |
-| Back-to-back | Try at 12:00 | Allowed if no other conflict exists |
-| Shift boundary | Try at 17:00 | Rejected because it ends after 18:00 |
-| Qualification | Remove that service from the staff member | Slot becomes unavailable |
-| Daily override | Mark the staff member Unavailable | Slot becomes unavailable |
-| Leave/break | Add an unavailable period covering 10:30–11:00 | The 10:00–12:00 slot is rejected |
-| Approval recheck | Create a pending request, then create a new conflict before approving it | Approval is blocked |
-| Concurrent booking | Submit the same last available slot in two browser windows almost together | Only one succeeds |
+| Test               | Action                                                                     | Expected result                       |
+| ------------------ | -------------------------------------------------------------------------- | ------------------------------------- |
+| Full interval      | Book the 120-minute service at 10:00                                       | Interval shown as 10:00–12:00         |
+| Exact overlap      | Try the same staff/service at 10:00                                        | Rejected                              |
+| Partial overlap    | Try at 11:00                                                               | Rejected because 11:00–13:00 overlaps |
+| Back-to-back       | Try at 12:00                                                               | Allowed if no other conflict exists   |
+| Shift boundary     | Try at 17:00                                                               | Rejected because it ends after 18:00  |
+| Qualification      | Remove that service from the staff member                                  | Slot becomes unavailable              |
+| Daily override     | Mark the staff member Unavailable                                          | Slot becomes unavailable              |
+| Leave/break        | Add an unavailable period covering 10:30–11:00                             | The 10:00–12:00 slot is rejected      |
+| Approval recheck   | Create a pending request, then create a new conflict before approving it   | Approval is blocked                   |
+| Concurrent booking | Submit the same last available slot in two browser windows almost together | Only one succeeds                     |
 
 ## 9. Emergency offline acceptance tests
 

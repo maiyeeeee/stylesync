@@ -3,24 +3,22 @@ const router = express.Router()
 const database = require("../db").promise()
 
 router.get("/", async (req, res) => {
-  const days = Number(req.query.days) === 30 ? 30 : 7
+    const days = Number(req.query.days) === 30 ? 30 : 7
 
-  let connection
-  let originalTimezone
+    let connection
+    let originalTimezone
 
-  try {
-    connection = await database.getConnection()
+    try {
+        connection = await database.getConnection()
 
-    const [[timezone]] = await connection.query(
-      "SELECT @@session.time_zone AS timezone"
-    )
+        const [[timezone]] = await connection.query("SELECT @@session.time_zone AS timezone")
 
-    originalTimezone = timezone.timezone
+        originalTimezone = timezone.timezone
 
-    // Dashboard dates follow Philippine time.
-    await connection.query("SET time_zone = '+08:00'")
+        // Dashboard dates follow Philippine time.
+        await connection.query("SET time_zone = '+08:00'")
 
-    const [[clock]] = await connection.query(`
+        const [[clock]] = await connection.query(`
       SELECT
         DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS today,
         DATE_FORMAT(
@@ -29,11 +27,11 @@ router.get("/", async (req, res) => {
         ) AS generatedAt
     `)
 
-    /*
-     * Hide unfinished deposit reservations.
-     * Existing appointments without deposit records remain visible.
-     */
-    const visibleBooking = `
+        /*
+         * Hide unfinished deposit reservations.
+         * Existing appointments without deposit records remain visible.
+         */
+        const visibleBooking = `
       (
         NOT EXISTS (
           SELECT 1
@@ -52,7 +50,7 @@ router.get("/", async (req, res) => {
       )
     `
 
-    const activeBooking = `
+        const activeBooking = `
       a.status IN (
         'Pending',
         'Pending Validation',
@@ -61,7 +59,7 @@ router.get("/", async (req, res) => {
       )
     `
 
-    const [[sales]] = await connection.query(`
+        const [[sales]] = await connection.query(`
       SELECT
         COALESCE(
           SUM(
@@ -78,7 +76,7 @@ router.get("/", async (req, res) => {
         AND transaction_date < NOW()
     `)
 
-    const [[appointments]] = await connection.query(`
+        const [[appointments]] = await connection.query(`
       SELECT
         COALESCE(
           SUM(
@@ -108,15 +106,15 @@ router.get("/", async (req, res) => {
       WHERE ${visibleBooking}
     `)
 
-    const [lowStockItems] = await connection.query(`
+        const [lowStockItems] = await connection.query(`
       SELECT id, name, stock, alertLevel
       FROM inventory
       WHERE stock <= alertLevel
       ORDER BY stock ASC, name ASC
     `)
 
-    const [salesRows] = await connection.query(
-      `
+        const [salesRows] = await connection.query(
+            `
       SELECT
         DATE_FORMAT(
           transaction_date,
@@ -134,11 +132,11 @@ router.get("/", async (req, res) => {
       )
       ORDER BY date
       `,
-      [days - 1]
-    )
+            [days - 1],
+        )
 
-    const [appointmentRows] = await connection.query(
-      `
+        const [appointmentRows] = await connection.query(
+            `
       SELECT
         DATE_FORMAT(
           a.appointment_date,
@@ -154,11 +152,11 @@ router.get("/", async (req, res) => {
       GROUP BY a.appointment_date
       ORDER BY a.appointment_date
       `,
-      [days - 1]
-    )
+            [days - 1],
+        )
 
-    const [topServices] = await connection.query(
-      `
+        const [topServices] = await connection.query(
+            `
       SELECT
         a.service,
         COUNT(*) AS requests
@@ -172,11 +170,11 @@ router.get("/", async (req, res) => {
       ORDER BY requests DESC, a.service ASC
       LIMIT 5
       `,
-      [days - 1]
-    )
+            [days - 1],
+        )
 
-    const [salesMix] = await connection.query(
-      `
+        const [salesMix] = await connection.query(
+            `
       SELECT
         COALESCE(sale_type, 'Service') AS type,
         SUM(amount) AS sales
@@ -188,10 +186,10 @@ router.get("/", async (req, res) => {
       GROUP BY COALESCE(sale_type, 'Service')
       ORDER BY sales DESC
       `,
-      [days - 1]
-    )
+            [days - 1],
+        )
 
-    const [todaySchedule] = await connection.query(`
+        const [todaySchedule] = await connection.query(`
       SELECT
         a.id,
         a.customer_name,
@@ -214,11 +212,11 @@ router.get("/", async (req, res) => {
       ORDER BY a.appointment_time, a.id
     `)
 
-    /*
-     * This is availability NOW, not a promise that a staff
-     * member can perform every service or a full future interval.
-     */
-    const [staffRows] = await connection.query(`
+        /*
+         * This is availability NOW, not a promise that a staff
+         * member can perform every service or a full future interval.
+         */
+        const [staffRows] = await connection.query(`
       SELECT
         s.staff_id,
         s.name,
@@ -278,112 +276,87 @@ router.get("/", async (req, res) => {
       ORDER BY s.name, s.staff_id
     `)
 
-    const staff = staffRows.map((item) => {
-      let availability = "Off shift"
+        const staff = staffRows.map((item) => {
+            let availability = "Off shift"
 
-      if (
-        item.daily_status !== "Available" ||
-        Number(item.unavailableNow) === 1
-      ) {
-        availability = "Unavailable"
-      } else if (Number(item.onShift) === 1) {
-        availability =
-          Number(item.occupiedNow) === 1
-            ? "Occupied / reserved"
-            : "Available now"
-      }
+            if (item.daily_status !== "Available" || Number(item.unavailableNow) === 1) {
+                availability = "Unavailable"
+            } else if (Number(item.onShift) === 1) {
+                availability =
+                    Number(item.occupiedNow) === 1 ? "Occupied / reserved" : "Available now"
+            }
 
-      return {
-        id: item.staff_id,
-        name: item.name,
-        role: item.role,
-        availability,
-      }
-    })
+            return {
+                id: item.staff_id,
+                name: item.name,
+                role: item.role,
+                availability,
+            }
+        })
 
-    const salesMap = new Map(
-      salesRows.map((item) => [
-        item.date,
-        Number(item.sales),
-      ])
-    )
+        const salesMap = new Map(salesRows.map((item) => [item.date, Number(item.sales)]))
 
-    const appointmentMap = new Map(
-      appointmentRows.map((item) => [
-        item.date,
-        Number(item.appointments),
-      ])
-    )
+        const appointmentMap = new Map(
+            appointmentRows.map((item) => [item.date, Number(item.appointments)]),
+        )
 
-    // Include dates with zero records.
-    const trend = []
+        // Include dates with zero records.
+        const trend = []
 
-    for (let offset = days - 1; offset >= 0; offset -= 1) {
-      const date = new Date(`${clock.today}T00:00:00Z`)
-      date.setUTCDate(date.getUTCDate() - offset)
+        for (let offset = days - 1; offset >= 0; offset -= 1) {
+            const date = new Date(`${clock.today}T00:00:00Z`)
+            date.setUTCDate(date.getUTCDate() - offset)
 
-      const key = date.toISOString().slice(0, 10)
+            const key = date.toISOString().slice(0, 10)
 
-      trend.push({
-        date: key,
-        sales: salesMap.get(key) || 0,
-        appointments: appointmentMap.get(key) || 0,
-      })
-    }
-
-    res.json({
-      days,
-      today: clock.today,
-      generatedAt: clock.generatedAt,
-      salesToday: Number(sales.salesToday),
-      appointmentsToday: Number(
-        appointments.appointmentsToday
-      ),
-      pendingRequests: Number(
-        appointments.pendingRequests
-      ),
-      availableStaff: staff.filter(
-        (item) => item.availability === "Available now"
-      ).length,
-      lowStockCount: lowStockItems.length,
-      lowStockItems,
-      trend,
-      topServices: topServices.map((item) => ({
-        ...item,
-        requests: Number(item.requests),
-      })),
-      salesMix: salesMix.map((item) => ({
-        ...item,
-        sales: Number(item.sales),
-      })),
-      todaySchedule,
-      staff,
-    })
-  } catch (error) {
-    console.error(
-      "Dashboard load failed:",
-      error.code || error.name
-    )
-
-    res.status(500).json({
-      error: "Unable to load the dashboard. Please try again.",
-    })
-  } finally {
-    if (connection) {
-      try {
-        if (originalTimezone !== undefined) {
-          await connection.query(
-            "SET time_zone = ?",
-            [originalTimezone]
-          )
+            trend.push({
+                date: key,
+                sales: salesMap.get(key) || 0,
+                appointments: appointmentMap.get(key) || 0,
+            })
         }
 
-        connection.release()
-      } catch {
-        connection.destroy()
-      }
+        res.json({
+            days,
+            today: clock.today,
+            generatedAt: clock.generatedAt,
+            salesToday: Number(sales.salesToday),
+            appointmentsToday: Number(appointments.appointmentsToday),
+            pendingRequests: Number(appointments.pendingRequests),
+            availableStaff: staff.filter((item) => item.availability === "Available now").length,
+            lowStockCount: lowStockItems.length,
+            lowStockItems,
+            trend,
+            topServices: topServices.map((item) => ({
+                ...item,
+                requests: Number(item.requests),
+            })),
+            salesMix: salesMix.map((item) => ({
+                ...item,
+                sales: Number(item.sales),
+            })),
+            todaySchedule,
+            staff,
+        })
+    } catch (error) {
+        console.error("Dashboard load failed:", error.code || error.name)
+
+        res.status(500).json({
+            error: "Unable to load the dashboard. Please try again.",
+        })
+    } finally {
+        if (connection) {
+            try {
+                if (originalTimezone !== undefined) {
+                    await connection.query("SET time_zone = ?", [originalTimezone])
+                }
+
+                connection.release()
+            } catch {
+                connection.destroy()
+            }
+        }
     }
-  }
 })
 
 // The bulk-delete-sales endpoint has been removed.

@@ -1,22 +1,101 @@
-import { Link } from "react-router-dom"
+import { useState } from "react"
+import { Link, NavLink } from "react-router-dom"
+import { LuArrowUpRight, LuMenu, LuMapPin } from "react-icons/lu"
+import Brand from "./Brand"
+import { Button } from "./ui/button"
+import {
+    Sheet,
+    SheetClose,
+    SheetContent,
+    SheetDescription,
+    SheetTitle,
+    SheetTrigger,
+} from "./ui/sheet"
 
-function Navbar() {
-  return (
-    <nav aria-label="Website navigation" className="sticky top-0 z-50 flex flex-wrap items-center justify-between gap-4 bg-purple-700 px-6 py-4 text-white">
-      <Link to="/" className="text-2xl font-bold">Dahling&apos;s Salon & Spa</Link>
-      <ul className="flex flex-wrap items-center gap-5 font-medium">
-        <li><Link to="/">Home</Link></li>
-        <li><Link to="/services">Services</Link></li>
-        <li><Link to="/book">Book</Link></li>
-        <li><Link to="/contact">Contact</Link></li>
-        <li>
-          <Link to="/admin-login" className="inline-block rounded-xl border border-purple-300 px-4 py-2 text-sm hover:bg-purple-800">
-            Admin Login
-          </Link>
-        </li>
-      </ul>
-    </nav>
-  )
+const links = [
+    ["/", "Home"],
+    ["/services", "Our services"],
+    ["/contact", "Visit us"],
+]
+
+export default function Navbar() {
+    const [open, setOpen] = useState(false)
+    return (
+        <>
+            <a href="#main-content" className="skip-link">
+                Skip to content
+            </a>
+            <div className="announcement-bar">
+                <span>A little time for you. A little more beautiful.</span>
+                <span>
+                    <LuMapPin aria-hidden="true" /> Sagay City, Negros Occidental
+                </span>
+            </div>
+            <header className="site-header">
+                <div className="site-container nav-inner">
+                    <Link to="/" aria-label="Dahling’s Escape home">
+                        <Brand />
+                    </Link>
+                    <nav className="desktop-nav" aria-label="Website navigation">
+                        {links.map(([to, label]) => (
+                            <NavLink key={to} to={to} end={to === "/"}>
+                                {label}
+                            </NavLink>
+                        ))}
+                    </nav>
+                    <div className="nav-actions">
+                        <Button asChild className="nav-book">
+                            <Link to="/book">
+                                Book a visit <LuArrowUpRight />
+                            </Link>
+                        </Button>
+                        <Sheet open={open} onOpenChange={setOpen}>
+                            <SheetTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="mobile-menu"
+                                    aria-label="Open navigation"
+                                >
+                                    <LuMenu />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent>
+                                <SheetTitle className="mt-10">
+                                    <Brand />
+                                </SheetTitle>
+                                <SheetDescription className="mt-4 text-sm text-muted-foreground">
+                                    Your next moment of self-care starts here.
+                                </SheetDescription>
+                                <nav className="mobile-nav" aria-label="Mobile navigation">
+                                    {links.map(([to, label]) => (
+                                        <SheetClose asChild key={to}>
+                                            <NavLink to={to} end={to === "/"}>
+                                                {label}
+                                                <LuArrowUpRight />
+                                            </NavLink>
+                                        </SheetClose>
+                                    ))}
+                                    <SheetClose asChild>
+                                        <Link to="/book">
+                                            Book an appointment
+                                            <LuArrowUpRight />
+                                        </Link>
+                                    </SheetClose>
+                                </nav>
+                                <SheetClose asChild>
+                                    <Link
+                                        to="/admin-login"
+                                        className="mt-auto text-sm text-muted-foreground"
+                                    >
+                                        Team portal <LuArrowUpRight className="inline" />
+                                    </Link>
+                                </SheetClose>
+                            </SheetContent>
+                        </Sheet>
+                    </div>
+                </div>
+            </header>
+        </>
+    )
 }
-
-export default Navbar
