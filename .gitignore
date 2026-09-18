@@ -1,0 +1,46 @@
+node_modules/
+client/node_modules/
+.env
+client/.env
+backups/
+server/uploads/
+client/dist/
+*.log
+# Environment files; allow placeholder examples
+.env.*
+!.env.example
+!.env.*.example
+
+# Uploads and payment assets
+uploads/
+server/payment-assets/
+
+# Old update packages and backups
+payment-update/
+payment-backups/
+
+# Compressed backups
+*.zip
+*.7z
+*.rar
+
+# SQL files: review before sharing
+*.sql
+# Environment files; keep placeholder examples
+.env.*
+!.env.example
+!.env.*.example
+
+# Uploads and payment assets
+uploads/
+server/payment-assets/
+
+# Update packages and backups
+payment-update/
+payment-backups/
+*.zip
+*.7z
+*.rar
+
+# Review database scripts before sharing
+*.sql
