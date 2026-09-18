@@ -2,6 +2,25 @@
 
 @layer components {
   .input-field {
-    @apply w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-400;
+    @apply w-full rounded-xl border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-pink-400;
   }
+}
+
+/* Local system fonts also work without an internet connection. */
+.admin-shell {
+  font-family: "Segoe UI", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.admin-shell :where(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+.admin-shell :where(h1, h2, h3, h4) {
+  letter-spacing: -0.02em;
+}
+
+.admin-shell nav {
+  scrollbar-width: thin;
+  scrollbar-color: #a78bfa transparent;
 }
