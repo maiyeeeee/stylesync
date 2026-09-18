@@ -1,30 +1,23 @@
-const {
-  addMinutes,
-  isValidDate,
-  normalizeTime,
-} = require("./time")
+const { addMinutes, isValidDate, normalizeTime } = require("./time")
 
-async function resolveService(
-  connection,
-  { service_id, service }
-) {
-  const params = []
-  let where = ""
+async function resolveService(connection, { service_id, service }) {
+    const params = []
+    let where = ""
 
-  if (service_id) {
-    where = "service_id = ?"
-    params.push(Number(service_id))
-  } else if (service) {
-    where = "service = ?"
-    params.push(String(service))
-  } else {
-    const error = new Error("A valid service is required")
-    error.status = 400
-    throw error
-  }
+    if (service_id) {
+        where = "service_id = ?"
+        params.push(Number(service_id))
+    } else if (service) {
+        where = "service = ?"
+        params.push(String(service))
+    } else {
+        const error = new Error("A valid service is required")
+        error.status = 400
+        throw error
+    }
 
-  const [rows] = await connection.query(
-    `SELECT
+    const [rows] = await connection.query(
+        `SELECT
        service_id,
        service,
        price,
@@ -36,49 +29,33 @@ async function resolveService(
      FROM services
      WHERE ${where}
      LIMIT 1`,
-    params
-  )
-
-  if (
-    !rows.length ||
-    rows[0].status !== "Available"
-  ) {
-    const error = new Error(
-      "Service is unavailable or does not exist"
+        params,
     )
-    error.status = 404
-    throw error
-  }
 
-  return rows[0]
+    if (!rows.length || rows[0].status !== "Available") {
+        const error = new Error("Service is unavailable or does not exist")
+        error.status = 404
+        throw error
+    }
+
+    return rows[0]
 }
 
 async function listQualifiedScheduledStaff(
-  connection,
-  {
-    serviceId,
-    appointmentDate,
-    startTime,
-    endTime,
-    preferredStaffId,
-  }
+    connection,
+    { serviceId, appointmentDate, startTime, endTime, preferredStaffId },
 ) {
-  const params = [
-    serviceId,
-    appointmentDate,
-    startTime,
-    endTime,
-  ]
+    const params = [serviceId, appointmentDate, startTime, endTime]
 
-  let staffFilter = ""
+    let staffFilter = ""
 
-  if (preferredStaffId) {
-    staffFilter = "AND s.staff_id = ?"
-    params.push(Number(preferredStaffId))
-  }
+    if (preferredStaffId) {
+        staffFilter = "AND s.staff_id = ?"
+        params.push(Number(preferredStaffId))
+    }
 
-  const [rows] = await connection.query(
-    `SELECT DISTINCT
+    const [rows] = await connection.query(
+        `SELECT DISTINCT
        s.staff_id,
        s.name,
        s.role
@@ -96,74 +73,56 @@ async function listQualifiedScheduledStaff(
        AND s.daily_status = 'Available'
        ${staffFilter}
      ORDER BY s.name, s.staff_id`,
-    params
-  )
+        params,
+    )
 
-  return rows
+    return rows
 }
 
 async function staffHasConflict(
-  connection,
-  {
-    staffId,
-    appointmentDate,
-    startTime,
-    endTime,
-    excludeAppointmentId,
-    lockRows = false,
-  }
+    connection,
+    { staffId, appointmentDate, startTime, endTime, excludeAppointmentId, lockRows = false },
 ) {
-  const requestedStart =
-    `${appointmentDate} ${startTime}:00`
+    const requestedStart = `${appointmentDate} ${startTime}:00`
 
-  const requestedEnd =
-    `${appointmentDate} ${endTime}:00`
+    const requestedEnd = `${appointmentDate} ${endTime}:00`
 
-  const [unavailable] = await connection.query(
-    `SELECT unavailability_id
+    const [unavailable] = await connection.query(
+        `SELECT unavailability_id
      FROM staff_unavailability
      WHERE staff_id = ?
        AND start_at < ?
        AND end_at > ?
      LIMIT 1${lockRows ? " FOR UPDATE" : ""}`,
-    [
-      staffId,
-      requestedEnd,
-      requestedStart,
-    ]
-  )
+        [staffId, requestedEnd, requestedStart],
+    )
 
-  if (unavailable.length) return true
+    if (unavailable.length) return true
 
-  const params = [
-    staffId,
-    appointmentDate,
-    endTime,
-    startTime,
-  ]
+    const params = [staffId, appointmentDate, endTime, startTime]
 
-  let exclude = ""
+    let exclude = ""
 
-  if (excludeAppointmentId) {
-    exclude = "AND a.id <> ?"
-    params.push(Number(excludeAppointmentId))
-  }
+    if (excludeAppointmentId) {
+        exclude = "AND a.id <> ?"
+        params.push(Number(excludeAppointmentId))
+    }
 
-  /*
-   * Existing appointments without a deposit record retain
-   * their original scheduling behavior.
-   *
-   * A deposit booking blocks the slot while:
-   * - its payment window is still open;
-   * - its submitted payment awaits verification; or
-   * - its payment has been verified.
-   *
-   * Expired or rejected deposit bookings do not block a slot.
-   * UTC_TIMESTAMP() makes expiry independent of the
-   * customer's device clock.
-   */
-  const [appointments] = await connection.query(
-    `SELECT a.id
+    /*
+     * Existing appointments without a deposit record retain
+     * their original scheduling behavior.
+     *
+     * A deposit booking blocks the slot while:
+     * - its payment window is still open;
+     * - its submitted payment awaits verification; or
+     * - its payment has been verified.
+     *
+     * Expired or rejected deposit bookings do not block a slot.
+     * UTC_TIMESTAMP() makes expiry independent of the
+     * customer's device clock.
+     */
+    const [appointments] = await connection.query(
+        `SELECT a.id
      FROM appointments a
      LEFT JOIN booking_deposits bd
        ON bd.appointment_id = a.id
@@ -192,137 +151,111 @@ async function staffHasConflict(
        )
        ${exclude}
      LIMIT 1${lockRows ? " FOR UPDATE" : ""}`,
-    params
-  )
+        params,
+    )
 
-  return appointments.length > 0
+    return appointments.length > 0
 }
 
 async function getAvailableStaff(
-  connection,
-  {
-    serviceId,
-    appointmentDate,
-    startTime,
-    durationMinutes,
-    preferredStaffId,
-    excludeAppointmentId,
-  }
-) {
-  if (!isValidDate(appointmentDate)) {
-    const error = new Error(
-      "Appointment date must use YYYY-MM-DD format"
-    )
-    error.status = 400
-    throw error
-  }
-
-  const duration = Number(durationMinutes)
-
-  if (
-    !Number.isInteger(duration) ||
-    duration <= 0
-  ) {
-    const error = new Error(
-      "The service duration is invalid"
-    )
-    error.status = 400
-    throw error
-  }
-
-  const normalizedStart = normalizeTime(startTime)
-
-  const endTime = addMinutes(
-    normalizedStart,
-    duration
-  )
-
-  const candidates = await listQualifiedScheduledStaff(
     connection,
     {
-      serviceId,
-      appointmentDate,
-      startTime: normalizedStart,
-      endTime,
-      preferredStaffId,
+        serviceId,
+        appointmentDate,
+        startTime,
+        durationMinutes,
+        preferredStaffId,
+        excludeAppointmentId,
+    },
+) {
+    if (!isValidDate(appointmentDate)) {
+        const error = new Error("Appointment date must use YYYY-MM-DD format")
+        error.status = 400
+        throw error
     }
-  )
 
-  const available = []
+    const duration = Number(durationMinutes)
 
-  for (const candidate of candidates) {
-    const conflict = await staffHasConflict(
-      connection,
-      {
-        staffId: candidate.staff_id,
+    if (!Number.isInteger(duration) || duration <= 0) {
+        const error = new Error("The service duration is invalid")
+        error.status = 400
+        throw error
+    }
+
+    const normalizedStart = normalizeTime(startTime)
+
+    const endTime = addMinutes(normalizedStart, duration)
+
+    const candidates = await listQualifiedScheduledStaff(connection, {
+        serviceId,
         appointmentDate,
         startTime: normalizedStart,
         endTime,
-        excludeAppointmentId,
-      }
-    )
+        preferredStaffId,
+    })
 
-    if (!conflict) {
-      available.push(candidate)
+    const available = []
+
+    for (const candidate of candidates) {
+        const conflict = await staffHasConflict(connection, {
+            staffId: candidate.staff_id,
+            appointmentDate,
+            startTime: normalizedStart,
+            endTime,
+            excludeAppointmentId,
+        })
+
+        if (!conflict) {
+            available.push(candidate)
+        }
     }
-  }
 
-  return {
-    available,
-    endTime,
-    startTime: normalizedStart,
-  }
+    return {
+        available,
+        endTime,
+        startTime: normalizedStart,
+    }
 }
 
-async function reserveAvailableStaff(
-  connection,
-  options
-) {
-  const availability = await getAvailableStaff(
-    connection,
-    options
-  )
+async function reserveAvailableStaff(connection, options) {
+    const availability = await getAvailableStaff(connection, options)
 
-  for (const candidate of availability.available) {
-    await connection.query(
-      `SELECT staff_id
+    for (const candidate of availability.available) {
+        await connection.query(
+            `SELECT staff_id
        FROM staff
        WHERE staff_id = ?
        FOR UPDATE`,
-      [candidate.staff_id]
-    )
+            [candidate.staff_id],
+        )
 
-    const conflict = await staffHasConflict(
-      connection,
-      {
-        staffId: candidate.staff_id,
-        appointmentDate: options.appointmentDate,
-        startTime: availability.startTime,
-        endTime: availability.endTime,
-        excludeAppointmentId:
-          options.excludeAppointmentId,
-        lockRows: true,
-      }
-    )
+        const conflict = await staffHasConflict(connection, {
+            staffId: candidate.staff_id,
+            appointmentDate: options.appointmentDate,
+            startTime: availability.startTime,
+            endTime: availability.endTime,
+            excludeAppointmentId: options.excludeAppointmentId,
+            lockRows: true,
+        })
 
-    if (!conflict) {
-      return {
-        staff: candidate,
-        endTime: availability.endTime,
-        startTime: availability.startTime,
-      }
+        if (!conflict) {
+            return {
+                staff: candidate,
+                endTime: availability.endTime,
+                startTime: availability.startTime,
+            }
+        }
     }
-  }
 
-  return {
-    staff: null,
-    endTime: availability.endTime,
-    startTime: availability.startTime,
-  }
+    return {
+        staff: null,
+        endTime: availability.endTime,
+        startTime: availability.startTime,
+    }
 }
 
 module.exports = {
-  getAvailableStaff,
-  reserveAvailableStaff,
-  resolveService,
+    getAvailableStaff,
+    reserveAvailableStaff,
+    resolveService,
 }

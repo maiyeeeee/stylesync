@@ -1,0 +1,11 @@
+node_modules/
+client/node_modules/
+client/dist/
+backups/
+server/uploads/
+server/payment-assets/
+package-lock.json
+client/package-lock.json
+*.min.js
+*.min.css
+*.sql

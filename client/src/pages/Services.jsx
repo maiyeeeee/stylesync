@@ -1,167 +1,163 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
+import { useSearchParams } from "react-router-dom"
+import { LuArrowUpRight, LuPhone, LuSearch, LuSearchX, LuRefreshCw } from "react-icons/lu"
 import Navbar from "../components/Navbar"
 import Footer from "../components/Footer"
-import { Link } from "react-router-dom"
+import ServiceCard from "../components/ServiceCard"
+import { Button } from "../components/ui/button"
+import { categoryFor, useServices } from "../lib/services"
 
-function Services() {
-  const [services, setServices] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  const API_URL = import.meta.env.VITE_API_URL
-
-  useEffect(() => {
-    fetch(`${API_URL}/services`)
-      .then((res) => res.json())
-      .then((data) => {
-        const availableServices = Array.isArray(data)
-          ? data.filter((service) => service.status === "Available")
-          : []
-
-        setServices(availableServices)
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setLoading(false))
-  }, [API_URL])
-
-  const formatCategory = (category) => {
-    const lowerCategory = category?.toLowerCase() || ""
-
-    if (lowerCategory === "nails" || lowerCategory === "nail") {
-      return "Nail Care"
-    }
-
-    if (lowerCategory === "face" || lowerCategory === "facial") {
-      return "Facial Care"
-    }
-
-    if (lowerCategory.includes("hair")) {
-      return "Hair Care"
-    }
-
-    if (lowerCategory.includes("spa") || lowerCategory.includes("massage")) {
-      return "Spa & Massage"
-    }
-
-    return category || "Other Services"
-  }
-
-  const getServiceImage = (category) => {
-    const lowerCategory = category?.toLowerCase() || ""
-
-    if (lowerCategory.includes("hair")) {
-      return "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e"
-    }
-
-    if (lowerCategory.includes("facial") || lowerCategory.includes("face")) {
-      return "https://images.unsplash.com/photo-1515377905703-c4788e51af15"
-    }
-
-    if (lowerCategory.includes("spa") || lowerCategory.includes("massage")) {
-      return "https://images.unsplash.com/photo-1544161515-4ab6ce6db874"
-    }
-
-    if (lowerCategory.includes("nail")) {
-      return "https://images.unsplash.com/photo-1604654894610-df63bc536371"
-    }
-
-    return "https://images.unsplash.com/photo-1560066984-138dadb4c035"
-  }
-
-  const groupedServices = services.reduce((groups, service) => {
-    const category = formatCategory(service.category)
-
-    if (!groups[category]) {
-      groups[category] = []
-    }
-
-    groups[category].push(service)
-
-    return groups
-  }, {})
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-white to-purple-100">
-      <Navbar />
-
-      <section className="py-16 px-8">
-        <h1 className="text-5xl font-bold text-center text-purple-700 mb-4">
-          Our Services
-        </h1>
-
-        <p className="text-center text-gray-600 mb-12">
-          Choose a service and send your appointment request.
-        </p>
-
-        {loading ? (
-          <p className="text-center text-gray-500">
-            Loading services...
-          </p>
-        ) : services.length === 0 ? (
-          <p className="text-center text-gray-500">
-            No services available yet.
-          </p>
-        ) : (
-          <div className="max-w-6xl mx-auto space-y-12">
-            {Object.entries(groupedServices).map(([category, items]) => (
-              <div key={category}>
-                <h2 className="text-3xl font-bold text-purple-700 mb-6 border-l-8 border-pink-500 pl-4">
-                  {category}
-                </h2>
-
-                <div className="grid md:grid-cols-3 gap-8">
-                  {items.map((service) => (
-                    <div
-                      key={service.service_id || service.id}
-                      className="bg-white rounded-3xl shadow-lg overflow-hidden hover:scale-105 transition"
-                    >
-                      <img
-                        src={
-                          service.image_url
-                            ? `${API_URL}${service.image_url}`
-                            : getServiceImage(service.category)
-                        }
-                        alt={service.service || service.name}
-                        className="w-full h-56 object-cover"
-                      />
-
-                      <div className="p-6 text-center">
-                        <h3 className="text-2xl font-bold text-purple-700 mb-3">
-                          {service.service || service.name}
-                        </h3>
-
-                        <p className="text-gray-600">
-                          {service.description ||
-                            `${formatCategory(service.category)} service available at Dahling’s Salon and Spa.`}
-                        </p>
-
-                        <p className="text-pink-500 font-bold mt-4">
-                          ₱{Number(service.price || 0).toLocaleString()}
-                        </p>
-
-                        <p className="text-gray-500 mt-1">
-                          {service.duration || "Duration not specified"}
-                        </p>
-
-                        <Link
-                          to="/book"
-                          state={{ selectedService: service.service || service.name }}
-                          className="inline-block mt-5 bg-pink-500 hover:bg-pink-600 text-white px-5 py-2 rounded-full font-semibold"
-                        >
-                          Book This Service
-                        </Link>
-                      </div>
+export default function Services() {
+    const { services, loading, error, retry } = useServices()
+    const [params, setParams] = useSearchParams()
+    const [search, setSearch] = useState("")
+    const selected = params.get("category") || "all"
+    const categories = [
+        ...new Map(
+            services.map((service) => {
+                const category = categoryFor(service.category)
+                return [category.key, category]
+            }),
+        ).values(),
+    ]
+    const filtered = services.filter(
+        (service) =>
+            (selected === "all" || categoryFor(service.category).key === selected) &&
+            `${service.service} ${service.category} ${service.description || ""}`
+                .toLowerCase()
+                .includes(search.toLowerCase()),
+    )
+    return (
+        <div className="public-site">
+            <Navbar />
+            <main id="main-content" tabIndex={-1}>
+                <section className="page-intro site-container">
+                    <p className="eyebrow">THE SERVICE MENU</p>
+                    <h1>
+                        Find your <em>feel-good.</em>
+                    </h1>
+                    <p>
+                        A fresh look, a quiet moment, or a little of both.
+                        <br />
+                        Choose the care that feels right for you.
+                    </p>
+                </section>
+                <section
+                    className="site-container services-section"
+                    aria-label="Available services"
+                >
+                    <div className="service-toolbar">
+                        <div className="filter-tabs" aria-label="Filter by category">
+                            <button aria-pressed={selected === "all"} onClick={() => setParams({})}>
+                                All services
+                            </button>
+                            {categories.map((category) => (
+                                <button
+                                    key={category.key}
+                                    aria-pressed={selected === category.key}
+                                    onClick={() => setParams({ category: category.key })}
+                                >
+                                    {category.name}
+                                </button>
+                            ))}
+                        </div>
+                        <label className="search-field">
+                            <LuSearch />
+                            <input
+                                type="search"
+                                placeholder="Find your treatment…"
+                                aria-label="Search services"
+                                value={search}
+                                onChange={(event) => setSearch(event.target.value)}
+                            />
+                        </label>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <Footer />
-    </div>
-  )
+                    {loading ? (
+                        <div className="services-grid" role="status" aria-label="Loading services">
+                            {[1, 2, 3].map((key) => (
+                                <div className="service-skeleton" key={key}>
+                                    <div />
+                                    <span />
+                                    <span />
+                                </div>
+                            ))}
+                        </div>
+                    ) : error ? (
+                        <div className="service-empty" role="alert">
+                            <span className="empty-icon">
+                                <LuRefreshCw />
+                            </span>
+                            <h2>A little pause in our menu</h2>
+                            <p>{error}</p>
+                            <div className="flex flex-wrap justify-center gap-3">
+                                <Button onClick={retry}>
+                                    <LuRefreshCw /> Try again
+                                </Button>
+                                <Button asChild variant="outline">
+                                    <a href="tel:09695619380">
+                                        <LuPhone /> Call the salon
+                                    </a>
+                                </Button>
+                            </div>
+                        </div>
+                    ) : filtered.length ? (
+                        <>
+                            <p className="results-count" role="status">
+                                {filtered.length}{" "}
+                                {filtered.length === 1 ? "treatment" : "treatments"} for a little
+                                more you
+                            </p>
+                            <div className="services-grid">
+                                {filtered.map((service) => (
+                                    <ServiceCard key={service.service_id} service={service} />
+                                ))}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="service-empty" role="status">
+                            <span className="empty-icon">
+                                <LuSearchX />
+                            </span>
+                            <h2>
+                                {services.length
+                                    ? "Let’s try something else"
+                                    : "Your next visit starts here"}
+                            </h2>
+                            <p>
+                                {services.length
+                                    ? "No treatments match your search. Try another name or explore all services."
+                                    : "Our online menu is being prepared. Call us to discover available treatments and plan your visit."}
+                            </p>
+                            {services.length ? (
+                                <Button
+                                    onClick={() => {
+                                        setSearch("")
+                                        setParams({})
+                                    }}
+                                >
+                                    Show all services
+                                </Button>
+                            ) : (
+                                <Button asChild>
+                                    <a href="tel:09695619380">
+                                        <LuPhone /> Call the salon
+                                    </a>
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                    <div className="service-help">
+                        <div>
+                            <h3>Not sure where to start?</h3>
+                            <p>Let’s find the right treatment for you.</p>
+                        </div>
+                        <a href="tel:09695619380" className="text-link">
+                            Talk to our team <LuArrowUpRight />
+                        </a>
+                    </div>
+                </section>
+            </main>
+            <Footer />
+        </div>
+    )
 }
-
-export default Services

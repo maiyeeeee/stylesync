@@ -5,43 +5,38 @@ const db = require("../db")
 const promiseDb = db.promise()
 
 const periods = {
-  daily: {
-    label: "Today",
-    start: "CURDATE()",
-    end: "DATE_ADD(CURDATE(), INTERVAL 1 DAY)",
-  },
+    daily: {
+        label: "Today",
+        start: "CURDATE()",
+        end: "DATE_ADD(CURDATE(), INTERVAL 1 DAY)",
+    },
 
-  weekly: {
-    label: "This Week",
-    start:
-      "DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)",
-    end:
-      "DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)",
-  },
+    weekly: {
+        label: "This Week",
+        start: "DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)",
+        end: "DATE_ADD(DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY), INTERVAL 7 DAY)",
+    },
 
-  monthly: {
-    label: "This Month",
-    start: "DATE_FORMAT(CURDATE(), '%Y-%m-01')",
-    end:
-      "DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)",
-  },
+    monthly: {
+        label: "This Month",
+        start: "DATE_FORMAT(CURDATE(), '%Y-%m-01')",
+        end: "DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH)",
+    },
 }
 
 router.get("/", async (req, res) => {
-  const periodKey = Object.hasOwn(periods, req.query.period)
-    ? req.query.period
-    : "weekly"
+    const periodKey = Object.hasOwn(periods, req.query.period) ? req.query.period : "weekly"
 
-  const period = periods[periodKey]
-  let connection
+    const period = periods[periodKey]
+    let connection
 
-  try {
-    connection = await promiseDb.getConnection()
+    try {
+        connection = await promiseDb.getConnection()
 
-    // All report dates and times follow Philippine time.
-    await connection.query("SET time_zone = '+08:00'")
+        // All report dates and times follow Philippine time.
+        await connection.query("SET time_zone = '+08:00'")
 
-    const activeAppointment = `
+        const activeAppointment = `
       status NOT IN (
         'Declined',
         'Cancelled',
@@ -50,15 +45,15 @@ router.get("/", async (req, res) => {
       )
     `
 
-    const [
-      [salesRows],
-      [appointmentRows],
-      [salesTrend],
-      [appointmentStatus],
-      [mostRequestedServices],
-      [summary],
-    ] = await Promise.all([
-      connection.query(`
+        const [
+            [salesRows],
+            [appointmentRows],
+            [salesTrend],
+            [appointmentStatus],
+            [mostRequestedServices],
+            [summary],
+        ] = await Promise.all([
+            connection.query(`
         SELECT
           COALESCE(SUM(amount), 0) AS sales,
           COUNT(*) AS transactions,
@@ -69,7 +64,7 @@ router.get("/", async (req, res) => {
           AND transaction_date < ${period.end}
       `),
 
-      connection.query(`
+            connection.query(`
         SELECT COUNT(*) AS appointments
         FROM appointments
         WHERE ${activeAppointment}
@@ -77,7 +72,7 @@ router.get("/", async (req, res) => {
           AND appointment_date < DATE(${period.end})
       `),
 
-      connection.query(`
+            connection.query(`
         SELECT
           DATE_FORMAT(days.report_date, '%Y-%m-%d') AS date,
           COALESCE(SUM(t.amount), 0) AS sales
@@ -115,7 +110,7 @@ router.get("/", async (req, res) => {
         ORDER BY days.report_date
       `),
 
-      connection.query(`
+            connection.query(`
         SELECT
           status,
           COUNT(*) AS count
@@ -127,7 +122,7 @@ router.get("/", async (req, res) => {
         ORDER BY count DESC, status
       `),
 
-      connection.query(`
+            connection.query(`
         SELECT
           service,
           COUNT(*) AS count
@@ -140,7 +135,7 @@ router.get("/", async (req, res) => {
         LIMIT 5
       `),
 
-      connection.query(`
+            connection.query(`
         SELECT
           DATE_FORMAT(d.report_date, '%Y-%m-%d') AS date,
           COALESCE(s.sales, 0) AS sales,
@@ -206,37 +201,31 @@ router.get("/", async (req, res) => {
 
         ORDER BY d.report_date DESC
       `),
-    ])
+        ])
 
-    res.json({
-      period: periodKey,
-      periodLabel: period.label,
+        res.json({
+            period: periodKey,
+            periodLabel: period.label,
 
-      sales: Number(salesRows[0]?.sales || 0),
-      transactions: Number(
-        salesRows[0]?.transactions || 0
-      ),
-      averageSale: Number(
-        salesRows[0]?.averageSale || 0
-      ),
-      appointments: Number(
-        appointmentRows[0]?.appointments || 0
-      ),
+            sales: Number(salesRows[0]?.sales || 0),
+            transactions: Number(salesRows[0]?.transactions || 0),
+            averageSale: Number(salesRows[0]?.averageSale || 0),
+            appointments: Number(appointmentRows[0]?.appointments || 0),
 
-      salesTrend,
-      appointmentStatus,
-      mostRequestedServices,
-      summary,
-    })
-  } catch (error) {
-    console.error("Reports error:", error)
+            salesTrend,
+            appointmentStatus,
+            mostRequestedServices,
+            summary,
+        })
+    } catch (error) {
+        console.error("Reports error:", error)
 
-    res.status(500).json({
-      error: "Unable to generate reports.",
-    })
-  } finally {
-    connection?.release()
-  }
+        res.status(500).json({
+            error: "Unable to generate reports.",
+        })
+    } finally {
+        connection?.release()
+    }
 })
 
 module.exports = router
