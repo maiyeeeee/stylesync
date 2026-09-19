@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom"
 import { LuArrowLeft, LuLockKeyhole } from "react-icons/lu"
-import { PiFlowerLotusLight } from "react-icons/pi"
 import Brand from "./Brand"
 import "./AuthLayout.css"
 
@@ -31,7 +30,6 @@ export default function AuthLayout({ title, subtitle, children }) {
                         </p>
                     </div>
                     <div className="auth-brand-bottom">
-                        <PiFlowerLotusLight />
                         <span>Beauty begins with thoughtful care.</span>
                     </div>
                 </aside>

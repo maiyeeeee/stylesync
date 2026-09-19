@@ -8,6 +8,7 @@ import {
     LuSparkles,
 } from "react-icons/lu"
 import { PiFlowerLotusLight } from "react-icons/pi"
+import { BrandMark } from "../components/Brand"
 import Navbar from "../components/Navbar"
 import Footer from "../components/Footer"
 import { Button } from "../components/ui/button"
@@ -45,7 +46,7 @@ export default function Home() {
                         </div>
                         <div className="hero-note">
                             <span className="hero-note-icon">
-                                <PiFlowerLotusLight />
+                                <BrandMark />
                             </span>
                             <p>
                                 A little care goes a long way.
@@ -74,7 +75,7 @@ export default function Home() {
                             </Link>
                         </div>
                         <div className="hero-seal">
-                            <PiFlowerLotusLight />
+                            <PiFlowerLotusLight aria-hidden="true" />
                             <span>
                                 RELIEVE · RELAX
                                 <br />& REVIVE
@@ -87,11 +88,11 @@ export default function Home() {
                 </section>
                 <div className="care-ribbon">
                     <span>HAIR & BEAUTY</span>
-                    <PiFlowerLotusLight />
+                    <PiFlowerLotusLight aria-hidden="true" />
                     <span>REST & RENEWAL</span>
-                    <PiFlowerLotusLight />
+                    <PiFlowerLotusLight aria-hidden="true" />
                     <span>CARE, MADE PERSONAL</span>
-                    <PiFlowerLotusLight />
+                    <PiFlowerLotusLight aria-hidden="true" />
                     <span>YOUR EVERYDAY ESCAPE</span>
                 </div>
                 <section className="section-space site-container" id="our-services">
@@ -179,7 +180,7 @@ export default function Home() {
                 </section>
                 <section className="site-container section-space">
                     <div className="booking-cta">
-                        <PiFlowerLotusLight className="cta-flower" />
+                        <BrandMark className="cta-brand" />
                         <p className="eyebrow">A LITTLE TIME, JUST FOR YOU</p>
                         <h2>
                             Your next good day

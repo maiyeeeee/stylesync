@@ -398,7 +398,7 @@ function AdminDashboard() {
                                 <Line
                                     type="linear"
                                     dataKey="sales"
-                                    stroke="#896379"
+                                    stroke="var(--primary)"
                                     strokeWidth={3}
                                     dot={days === 7}
                                 />
@@ -425,7 +425,7 @@ function AdminDashboard() {
                                 <Bar
                                     name="Appointments"
                                     dataKey="appointments"
-                                    fill="#b991a7"
+                                    fill="var(--ring)"
                                     radius={[5, 5, 0, 0]}
                                 />
                             </BarChart>
