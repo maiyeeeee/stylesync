@@ -11,7 +11,7 @@ import {
     LuPhone,
     LuShieldCheck,
 } from "react-icons/lu"
-import { PiFlowerLotusLight } from "react-icons/pi"
+import { BrandMark } from "../components/Brand"
 
 const base = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "")
 const API = base.endsWith("/api") ? base : `${base}/api`
@@ -643,7 +643,7 @@ export default function Book() {
                     </div>
                     <aside className="booking-sidebar">
                         <div className="booking-summary">
-                            <PiFlowerLotusLight className="booking-flower" />
+                            <BrandMark />
                             <p className="eyebrow">A LITTLE CARE, A LITTLE CLARITY</p>
                             <h2>
                                 Your escape,

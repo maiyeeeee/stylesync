@@ -47,7 +47,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    background: #674558;
+    background: var(--primary);
 }
 .auth-background {
     position: absolute;
@@ -62,7 +62,7 @@
     position: absolute;
     z-index: -1;
     inset: 0;
-    background: linear-gradient(180deg, #3d26376b 0%, #3d2637b8 55%, #352032e8 100%);
+    background: linear-gradient(180deg, #45135b66 0%, #491064aa 55%, #310746ed 100%);
 }
 .auth-brand .brand {
     color: white;
@@ -120,8 +120,8 @@
     width: 49px;
     height: 49px;
     border-radius: 13px;
-    background: #f2eaf0;
-    color: #805b71;
+    background: #f3e6fb;
+    color: #922bc7;
     margin-bottom: 22px;
     font-size: 20px;
 }
@@ -129,7 +129,7 @@
     font-size: 9px;
     letter-spacing: 0.17em;
     font-weight: 500;
-    color: #97798b;
+    color: #9853bd;
     margin-bottom: 12px;
 }
 .auth-form-panel h1 {
@@ -192,8 +192,8 @@
     color: #ab9ca5;
 }
 .auth-input:focus {
-    border-color: #ab8199;
-    box-shadow: 0 0 0 3px #ad89a020;
+    border-color: #b673d9;
+    box-shadow: 0 0 0 3px #8b24c820;
 }
 .auth-password {
     position: relative;
@@ -218,14 +218,14 @@
     gap: 12px;
     width: 100%;
     border-radius: 7px;
-    background: #674558;
+    background: var(--primary);
     color: white;
     font-size: 13px;
     font-weight: 500;
     transition: background 0.2s;
 }
 .auth-submit:hover {
-    background: #56384b;
+    background: var(--primary-hover);
 }
 .auth-submit:disabled,
 .auth-fields:disabled .auth-submit {
@@ -250,7 +250,7 @@
 }
 .auth-switch a,
 .auth-text-button {
-    color: #78536b;
+    color: #8b24c8;
     font-weight: 600;
     text-underline-offset: 4px;
 }
@@ -278,13 +278,13 @@
 }
 .auth-info {
     border: 1px solid #e4d8e0;
-    background: #f8f2f6;
-    color: #79566e;
+    background: #faf4fd;
+    color: #8143a4;
 }
 .auth-tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    background: #f5f0f3;
+    background: #f7f0fc;
     border-radius: 8px;
     gap: 4px;
     padding: 4px;
@@ -298,7 +298,7 @@
     font-weight: 500;
 }
 .auth-tabs button[aria-pressed="true"] {
-    color: #725469;
+    color: #8b24c8;
     background: white;
     box-shadow: 0 1px 3px #31212c12;
 }
@@ -364,4 +364,12 @@
     .auth-input {
         font-size: 16px;
     }
+}
+
+.auth-brand .brand-symbol {
+    width: 62px;
+    height: 62px;
+    border-radius: 50%;
+    background: white;
+    mix-blend-mode: normal;
 }
