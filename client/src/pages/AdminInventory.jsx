@@ -231,37 +231,50 @@ function AdminInventory() {
 
         const matchesFilter =
             filter === "All" ||
-            (filter === "Needs restocking"
-                ? Number(product.stock) <= Number(product.alertLevel)
-                : stockStatus(product) === filter)
+            stockStatus(product) === filter
 
         return matchesSearch && matchesFilter
     })
 
+    const availableProductCount = products.filter((product) => Number(product.stock) > 0).length
+
+    const totalUnitsAvailable = products.reduce(
+        (total, product) => total + Math.max(0, Number(product.stock) || 0),
+        0,
+    )
+
     const lowStockCount = products.filter(
-        (product) => Number(product.stock) <= Number(product.alertLevel),
+        (product) =>
+            Number(product.stock) > 0 &&
+            Number(product.stock) <= Number(product.alertLevel),
     ).length
 
     const outOfStockCount = products.filter((product) => Number(product.stock) === 0).length
 
     const cards = [
         {
-            label: "Total products",
+            label: "Product types",
             value: products.length,
-            note: "Products in your inventory",
+            note: "All products, including zero-stock items",
             color: "text-purple-800",
         },
         {
-            label: "Needs restocking",
-            value: lowStockCount,
-            note: "At or below reorder level, including zero stock",
-            color: "text-amber-700",
+            label: "Available products",
+            value: availableProductCount,
+            note: "Product types with at least one unit",
+            color: "text-emerald-700",
         },
         {
-            label: "Out of stock",
-            value: outOfStockCount,
-            note: "Products with no remaining units",
-            color: "text-rose-600",
+            label: "Total units available",
+            value: totalUnitsAvailable.toLocaleString("en-PH"),
+            note: "Combined remaining quantity of all products",
+            color: "text-purple-800",
+        },
+        {
+            label: "Needs attention",
+            value: lowStockCount + outOfStockCount,
+            note: `${lowStockCount} low stock · ${outOfStockCount} out of stock`,
+            color: "text-amber-700",
         },
     ]
 
@@ -333,7 +346,10 @@ function AdminInventory() {
                 </div>
             )}
 
-            <section className="grid gap-4 md:grid-cols-3" aria-label="Inventory summary">
+            <section
+                className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                aria-label="Inventory summary"
+            >
                 {cards.map((card) => (
                     <div key={card.label} className={`${panel} p-5`}>
                         <p className="text-sm text-gray-500">{card.label}</p>
@@ -478,7 +494,7 @@ function AdminInventory() {
                             >
                                 <option value="All">All stock levels</option>
                                 <option>In stock</option>
-                                <option>Needs restocking</option>
+                                <option>Low stock</option>
                                 <option>Out of stock</option>
                             </select>
                         </div>
@@ -490,7 +506,7 @@ function AdminInventory() {
                         <thead className="border-y border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                             <tr>
                                 <th className="px-6 py-4">Product</th>
-                                <th className="px-4 py-4 text-right">Stock</th>
+                                <th className="px-4 py-4 text-right">Available quantity</th>
                                 <th className="px-4 py-4 text-right">Reorder level</th>
                                 <th className="px-4 py-4 text-right">Unit price</th>
                                 <th className="px-4 py-4">Status</th>
@@ -536,7 +552,7 @@ function AdminInventory() {
                                                 </p>
                                             </td>
                                             <td className="px-4 py-4 text-right font-semibold tabular-nums text-gray-800">
-                                                {Number(product.stock).toLocaleString("en-PH")}
+                                                {Number(product.stock).toLocaleString("en-PH")} units
                                             </td>
                                             <td className="px-4 py-4 text-right tabular-nums text-gray-500">
                                                 {Number(product.alertLevel).toLocaleString("en-PH")}

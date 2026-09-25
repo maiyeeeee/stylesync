@@ -94,9 +94,13 @@ async function publicReservation(hash) {
     d.service_total, d.required_amount, d.payment_status, d.receiving_name,
     d.receiving_number, d.qr_snapshot, d.submitted_reference,
     DATE_FORMAT(d.expires_at, '%Y-%m-%dT%H:%i:%sZ') AS expires_at,
-    a.service, DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointment_date,
+    a.service_id, a.service,
+    DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointment_date,
     TIME_FORMAT(a.appointment_time, '%H:%i') AS start_time,
-    TIME_FORMAT(a.appointment_end_time, '%H:%i') AS end_time, a.status AS appointment_status
+    TIME_FORMAT(a.appointment_end_time, '%H:%i') AS end_time,
+    a.status AS appointment_status, a.decline_reason,
+    DATE_FORMAT(a.suggested_date, '%Y-%m-%d') AS suggested_date,
+    TIME_FORMAT(a.suggested_time, '%H:%i') AS suggested_time
     FROM booking_deposits d JOIN appointments a ON a.id = d.appointment_id
     WHERE d.access_token_hash = ?`,
         [hash],

@@ -81,6 +81,19 @@ function Field({ label, children }) {
     )
 }
 
+function formatBookingDate(value) {
+    if (!value) return ""
+    const text = String(value).slice(0, 10)
+    const date = new Date(`${text}T00:00:00+08:00`)
+    if (Number.isNaN(date.getTime())) return text
+    return date.toLocaleDateString("en-PH", {
+        timeZone: "Asia/Manila",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+    })
+}
+
 export default function Book() {
     const location = useLocation()
     const [services, setServices] = useState([])
@@ -276,13 +289,31 @@ export default function Book() {
             setBusy(false)
         }
     }
-    function newBooking() {
+    function newBooking(prefill = null) {
         sessionStorage.removeItem(KEY)
         setEntry(null)
         setReservation(null)
         setReference("")
         setError("")
         setAvailability(null)
+
+        if (prefill) {
+            setForm((current) => ({ ...current, ...prefill }))
+        }
+    }
+
+    function bookSuggestedSchedule() {
+        const previous = entry?.payload || {}
+        newBooking({
+            ...previous,
+            service_id: String(previous.service_id || reservation?.service_id || ""),
+            appointment_date: reservation?.suggested_date
+                ? String(reservation.suggested_date).slice(0, 10)
+                : "",
+            appointment_time: reservation?.suggested_time
+                ? String(reservation.suggested_time).slice(0, 5)
+                : "",
+        })
     }
     const total = Math.round(Number(selected?.price || 0) * 100)
     const down = Math.round(total / 5)
@@ -453,6 +484,90 @@ export default function Book() {
                                                     salon and keep your receipt. Do not pay twice.
                                                 </p>
                                             </>
+                                        ) : reservation.payment_status === "Verified" &&
+                                          reservation.appointment_status === "Approved" ? (
+                                            <>
+                                                <div
+                                                    role="status"
+                                                    className="rounded-xl bg-emerald-50 p-5 text-emerald-900"
+                                                >
+                                                    <p className="font-bold">
+                                                        Your appointment is approved.
+                                                    </p>
+                                                    <p className="mt-2 text-sm">
+                                                        Please arrive on time for your scheduled
+                                                        appointment on {formatBookingDate(
+                                                            reservation.appointment_date,
+                                                        )} at {reservation.start_time}.
+                                                    </p>
+                                                </div>
+                                                <p className="text-sm text-gray-500">
+                                                    Payment status: Verified · Appointment status:
+                                                    Approved
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    className={button}
+                                                    onClick={() => newBooking()}
+                                                >
+                                                    Start another booking
+                                                </button>
+                                            </>
+                                        ) : reservation.payment_status === "Verified" &&
+                                          reservation.appointment_status === "Declined" ? (
+                                            <>
+                                                <div
+                                                    role="status"
+                                                    className="rounded-xl bg-red-50 p-5 text-red-900"
+                                                >
+                                                    <p className="font-bold">
+                                                        Your appointment request was declined.
+                                                    </p>
+                                                    <p className="mt-2 text-sm">
+                                                        {reservation.decline_reason ||
+                                                            "The selected schedule is unavailable. Please choose another date and time."}
+                                                    </p>
+                                                </div>
+
+                                                {reservation.suggested_date &&
+                                                    reservation.suggested_time && (
+                                                        <div className="rounded-xl border border-purple-100 bg-purple-50 p-5 text-purple-900">
+                                                            <p className="text-sm font-semibold">
+                                                                Suggested alternative schedule
+                                                            </p>
+                                                            <p className="mt-1 text-lg font-bold">
+                                                                {formatBookingDate(
+                                                                    reservation.suggested_date,
+                                                                )}{" "}
+                                                                at {String(
+                                                                    reservation.suggested_time,
+                                                                ).slice(0, 5)}
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                <div className="flex flex-wrap gap-3">
+                                                    {reservation.suggested_date &&
+                                                        reservation.suggested_time && (
+                                                            <button
+                                                                type="button"
+                                                                className={button}
+                                                                onClick={bookSuggestedSchedule}
+                                                            >
+                                                                Book suggested schedule
+                                                            </button>
+                                                        )}
+                                                    <button
+                                                        type="button"
+                                                        className="rounded-xl border border-purple-200 bg-white px-4 py-3 font-semibold text-purple-800"
+                                                        onClick={() =>
+                                                            newBooking(entry?.payload || {})
+                                                        }
+                                                    >
+                                                        Choose another schedule
+                                                    </button>
+                                                </div>
+                                            </>
                                         ) : (
                                             <>
                                                 <p
@@ -469,7 +584,11 @@ export default function Book() {
                                                 <p className="text-sm text-gray-500">
                                                     Payment status: {reservation.payment_status}
                                                 </p>
-                                                <button className={button} onClick={newBooking}>
+                                                <button
+                                                    type="button"
+                                                    className={button}
+                                                    onClick={() => newBooking()}
+                                                >
                                                     Start another booking
                                                 </button>
                                             </>
@@ -604,7 +723,7 @@ export default function Book() {
                                                 className={`rounded-xl p-4 text-sm ${validAvailability ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}
                                             >
                                                 {validAvailability
-                                                    ? `Available: ${availability.start_time}–${availability.end_time}`
+                                                    ? `Available: ${availability.start_time}–${availability.end_time} · ${availability.available_count} qualified staff slot${Number(availability.available_count) === 1 ? "" : "s"} remaining`
                                                     : "Slot unavailable. Choose another time."}
                                             </p>
                                         )}

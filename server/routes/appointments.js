@@ -185,6 +185,9 @@ router.put("/:id/status", async (req, res) => {
     try {
         const appointmentId = Number(req.params.id)
         const status = String(req.body.status || "")
+        const requestedDeclineReason = String(req.body.decline_reason || "").trim()
+        const requestedSuggestedDate = String(req.body.suggested_date || "").trim()
+        const requestedSuggestedTime = String(req.body.suggested_time || "").trim()
         const allowedStatuses = ["Pending", "Approved", "Declined", "Cancelled", "Completed"]
 
         if (!allowedStatuses.includes(status)) {
@@ -209,6 +212,9 @@ router.put("/:id/status", async (req, res) => {
         const appointment = rows[0]
         let assignedStaffId = appointment.staff_id
         let endTime = appointment.appointment_end_time
+        let declineReason = null
+        let suggestedDate = null
+        let suggestedTime = null
 
         if (status === "Approved") {
             const reservation = await reserveAvailableStaff(connection, {
@@ -231,11 +237,69 @@ router.put("/:id/status", async (req, res) => {
             endTime = reservation.endTime
         }
 
+        if (status === "Declined") {
+            if (!requestedDeclineReason) {
+                const error = new Error("Enter a reason for declining this appointment")
+                error.status = 400
+                throw error
+            }
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedSuggestedDate)) {
+                const error = new Error("Select a valid suggested alternative date")
+                error.status = 400
+                throw error
+            }
+
+            if (!/^\d{2}:\d{2}(:\d{2})?$/.test(requestedSuggestedTime)) {
+                const error = new Error("Select a valid suggested alternative time")
+                error.status = 400
+                throw error
+            }
+
+            const alternativeMoment = new Date(
+                `${requestedSuggestedDate}T${requestedSuggestedTime.slice(0, 5)}:00+08:00`,
+            )
+            if (Number.isNaN(alternativeMoment.getTime()) || alternativeMoment <= new Date()) {
+                const error = new Error("The suggested alternative schedule must be in the future")
+                error.status = 400
+                throw error
+            }
+
+            const alternative = await getAvailableStaff(connection, {
+                serviceId: appointment.service_id,
+                appointmentDate: requestedSuggestedDate,
+                startTime: requestedSuggestedTime,
+                durationMinutes: Number(appointment.duration_minutes),
+                excludeAppointmentId: appointmentId,
+            })
+
+            if (!alternative.available.length) {
+                const error = new Error(
+                    "No qualified staff is available for the suggested alternative schedule",
+                )
+                error.status = 409
+                throw error
+            }
+
+            declineReason = requestedDeclineReason.slice(0, 500)
+            suggestedDate = requestedSuggestedDate
+            suggestedTime = alternative.startTime
+        }
+
         await connection.query(
             `UPDATE appointments
-       SET status = ?, staff_id = ?, appointment_end_time = ?
+       SET status = ?, staff_id = ?, appointment_end_time = ?,
+           decline_reason = ?, suggested_date = ?, suggested_time = ?
        WHERE id = ?`,
-            [status, assignedStaffId, endTime, appointmentId],
+            [
+                status,
+                assignedStaffId,
+                endTime,
+                declineReason,
+                suggestedDate,
+                suggestedTime,
+                appointmentId,
+            ],
         )
         await connection.commit()
         res.json({
@@ -243,6 +307,9 @@ router.put("/:id/status", async (req, res) => {
             id: appointmentId,
             status,
             staff_id: assignedStaffId,
+            decline_reason: declineReason,
+            suggested_date: suggestedDate,
+            suggested_time: suggestedTime,
         })
     } catch (error) {
         await connection.rollback()

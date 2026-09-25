@@ -60,12 +60,19 @@ const transactionSelect = `
          COALESCE(da.amount_applied, 0) AS deposit_applied,
          t.amount - COALESCE(da.amount_applied, 0) AS balance_collected,
          CASE WHEN da.application_id IS NOT NULL
-              THEN d.payment_method ELSE NULL END AS deposit_payment_method
+              THEN d.payment_method ELSE NULL END AS deposit_payment_method,
+         a.contact_number AS customer_contact,
+         a.email AS customer_email,
+         DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointment_date,
+         TIME_FORMAT(a.appointment_time, '%H:%i') AS appointment_time,
+         a.status AS appointment_status
   FROM transactions t
   LEFT JOIN booking_deposit_applications da
     ON da.transaction_id = t.transaction_id
   LEFT JOIN booking_deposits d
     ON d.deposit_id = da.deposit_id
+  LEFT JOIN appointments a
+    ON a.id = t.appointment_id
 `
 
 router.get("/", async (req, res) => {
@@ -273,7 +280,7 @@ router.post("/", async (req, res) => {
             itemId = positiveId(body.item_id, "Product")
 
             const [products] = await connection.query(
-                "SELECT name, stock, alertLevel FROM inventory WHERE id = ? ? FOR UPDATE",
+                "SELECT name, stock, alertLevel FROM inventory WHERE id = ? FOR UPDATE",
                 [itemId],
             )
 

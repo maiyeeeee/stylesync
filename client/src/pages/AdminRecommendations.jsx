@@ -158,7 +158,7 @@ function AdminRecommendations() {
 
             {!loading && !error && data && (
                 <>
-                    <div className="grid gap-3 md:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm">
                             <p className="text-sm text-gray-500">Stock alerts</p>
 
@@ -180,6 +180,18 @@ function AdminRecommendations() {
 
                             <p className="mt-2 text-xs text-gray-500">
                                 Service-demand and staffing reviews
+                            </p>
+                        </div>
+
+                        <div className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm">
+                            <p className="text-sm text-gray-500">Appointments evaluated</p>
+
+                            <p className="mt-3 text-3xl font-bold text-purple-900">
+                                {Number(data.appointmentsReviewed || 0)}
+                            </p>
+
+                            <p className="mt-2 text-xs text-gray-500">
+                                Eligible records used by service and staffing rules
                             </p>
                         </div>
 
@@ -249,13 +261,28 @@ function AdminRecommendations() {
 
                                 return (
                                     <article
-                                        key={`${item.title}-${index}`}
+                                        key={item.ruleId || `${item.title}-${index}`}
                                         className="flex min-w-0 flex-col rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6"
                                     >
                                         <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <h4 className="min-w-0 flex-1 break-words text-lg font-bold text-purple-950">
-                                                {item.title}
-                                            </h4>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold">
+                                                    {item.ruleId && (
+                                                        <span className="rounded-full bg-purple-50 px-2.5 py-1 text-purple-700">
+                                                            Rule {item.ruleId}
+                                                        </span>
+                                                    )}
+                                                    {item.category && (
+                                                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-600">
+                                                            {item.category}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <h4 className="break-words text-lg font-bold text-purple-950">
+                                                    {item.title}
+                                                </h4>
+                                            </div>
 
                                             <span
                                                 className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${priorityClass(
@@ -270,17 +297,49 @@ function AdminRecommendations() {
                                             {item.description}
                                         </p>
 
-                                        {item.rule && (
-                                            <div className="mt-4 rounded-xl bg-purple-50 p-4">
-                                                <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
-                                                    Rule applied
-                                                </p>
+                                        <div className="mt-4 space-y-3">
+                                            {item.rule && (
+                                                <div className="rounded-xl bg-purple-50 p-4">
+                                                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+                                                        Rule triggered
+                                                    </p>
 
-                                                <p className="mt-2 text-sm font-medium text-purple-900">
-                                                    {item.rule}
-                                                </p>
-                                            </div>
-                                        )}
+                                                    <p className="mt-2 text-sm font-medium leading-relaxed text-purple-900">
+                                                        {item.rule}
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {item.evidence && (
+                                                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                        Exact evidence
+                                                    </p>
+
+                                                    <p className="mt-2 text-sm leading-relaxed text-gray-700">
+                                                        {item.evidence}
+                                                    </p>
+
+                                                    {item.dataPeriod && (
+                                                        <p className="mt-2 text-xs text-gray-500">
+                                                            Data period: {item.dataPeriod}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {item.action && (
+                                                <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                                                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                                                        Recommended action
+                                                    </p>
+
+                                                    <p className="mt-2 text-sm font-medium leading-relaxed text-emerald-900">
+                                                        {item.action}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
 
                                         {actionLabel && (
                                             <div className="mt-auto pt-5">
@@ -301,7 +360,7 @@ function AdminRecommendations() {
                     <p className="text-xs leading-relaxed text-gray-500">
                         Stock alerts use current inventory levels. Service and staffing suggestions
                         use recorded appointment counts for the stated period. Recommendations are
-                        advisory; the salon owner decides which actions to take.
+                        advisory; the salon owner decides which actions to take. Method: {data.method || "deterministic rule-based decision support"}.
                     </p>
                 </>
             )}

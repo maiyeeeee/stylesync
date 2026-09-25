@@ -31,6 +31,15 @@ function formatDate(value) {
     })
 }
 
+function todayInManila() {
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(new Date())
+}
+
 function statusClass(status) {
     if (["Approved", "Completed"].includes(status)) {
         return "bg-green-100 text-green-800"
@@ -53,6 +62,12 @@ function AdminAppointments() {
     const [error, setError] = useState("")
     const [message, setMessage] = useState("")
     const [busy, setBusy] = useState(false)
+    const [declineTarget, setDeclineTarget] = useState(null)
+    const [declineForm, setDeclineForm] = useState({
+        reason: "",
+        suggestedDate: "",
+        suggestedTime: "",
+    })
 
     const mutationLock = useRef(false)
     const loadSequence = useRef(0)
@@ -117,24 +132,63 @@ function AdminAppointments() {
 
             setMessage(successMessage)
             await fetchAppointments()
+            return true
         } catch (requestError) {
             setError(requestError.message || "Unable to save this change. Please try again.")
+            return false
         } finally {
             mutationLock.current = false
             setBusy(false)
         }
     }
 
-    function updateStatus(id, status) {
+    function updateStatus(id, status, details = {}) {
         return mutate(
             `${API_URL}/appointments/${id}/status`,
             {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status }),
+                body: JSON.stringify({ status, ...details }),
             },
             "Appointment status updated.",
         )
+    }
+
+    function openDecline(appointment) {
+        setError("")
+        setMessage("")
+        setDeclineTarget(appointment)
+        setDeclineForm({
+            reason: appointment.decline_reason || "Selected schedule is unavailable.",
+            suggestedDate: appointment.suggested_date
+                ? String(appointment.suggested_date).slice(0, 10)
+                : "",
+            suggestedTime: appointment.suggested_time
+                ? String(appointment.suggested_time).slice(0, 5)
+                : "",
+        })
+    }
+
+    async function submitDecline(event) {
+        event.preventDefault()
+        if (!declineTarget || blocked || mutationLock.current) return
+
+        const reason = declineForm.reason.trim()
+        if (!reason || !declineForm.suggestedDate || !declineForm.suggestedTime) {
+            setError("Enter a decline reason and a suggested alternative date and time.")
+            return
+        }
+
+        const saved = await updateStatus(getAppointmentId(declineTarget), "Declined", {
+            decline_reason: reason,
+            suggested_date: declineForm.suggestedDate,
+            suggested_time: declineForm.suggestedTime,
+        })
+
+        if (saved) {
+            setDeclineTarget(null)
+            setDeclineForm({ reason: "", suggestedDate: "", suggestedTime: "" })
+        }
     }
 
     function deleteAppointment(appointment) {
@@ -268,6 +322,109 @@ function AdminAppointments() {
                 <p role="status" className="rounded-xl bg-green-50 p-4 text-sm text-green-800">
                     {message}
                 </p>
+            )}
+
+            {declineTarget && (
+                <section
+                    aria-labelledby="decline-appointment-title"
+                    className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm md:p-6"
+                >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-widest text-red-600">
+                                Decline appointment
+                            </p>
+                            <h3
+                                id="decline-appointment-title"
+                                className="mt-2 text-xl font-bold text-purple-950"
+                            >
+                                {declineTarget.customer_name} — {declineTarget.service}
+                            </h3>
+                            <p className="mt-1 text-sm text-gray-500">
+                                Explain why the request cannot be accepted and provide another
+                                schedule the client may book.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setDeclineTarget(null)}
+                            className={`${actionClass} border-gray-200 bg-white text-gray-600 hover:bg-gray-100`}
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    <form onSubmit={submitDecline} className="mt-5 grid gap-4 md:grid-cols-2">
+                        <label className="text-sm font-medium text-purple-950 md:col-span-2">
+                            Reason for declining
+                            <textarea
+                                required
+                                maxLength={500}
+                                value={declineForm.reason}
+                                onChange={(event) =>
+                                    setDeclineForm((current) => ({
+                                        ...current,
+                                        reason: event.target.value,
+                                    }))
+                                }
+                                className={`${controlClass} mt-2 min-h-24 w-full`}
+                                placeholder="Example: The selected stylist is unavailable for the requested schedule."
+                            />
+                        </label>
+
+                        <label className="text-sm font-medium text-purple-950">
+                            Suggested alternative date
+                            <input
+                                required
+                                type="date"
+                                min={todayInManila()}
+                                value={declineForm.suggestedDate}
+                                onChange={(event) =>
+                                    setDeclineForm((current) => ({
+                                        ...current,
+                                        suggestedDate: event.target.value,
+                                    }))
+                                }
+                                className={`${controlClass} mt-2 w-full`}
+                            />
+                        </label>
+
+                        <label className="text-sm font-medium text-purple-950">
+                            Suggested alternative time
+                            <input
+                                required
+                                type="time"
+                                value={declineForm.suggestedTime}
+                                onChange={(event) =>
+                                    setDeclineForm((current) => ({
+                                        ...current,
+                                        suggestedTime: event.target.value,
+                                    }))
+                                }
+                                className={`${controlClass} mt-2 w-full`}
+                            />
+                        </label>
+
+                        <div className="flex flex-wrap gap-3 md:col-span-2">
+                            <button
+                                type="submit"
+                                disabled={busy}
+                                className={`${actionClass} border-red-600 bg-red-600 px-4 text-white hover:bg-red-700`}
+                            >
+                                {busy ? "Saving…" : "Decline and send suggestion"}
+                            </button>
+                            <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setDeclineTarget(null)}
+                                className={`${actionClass} border-gray-200 bg-white px-4 text-gray-600 hover:bg-gray-100`}
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </section>
             )}
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -431,6 +588,23 @@ function AdminAppointments() {
                                                 >
                                                     {appointment.status || "Unspecified"}
                                                 </span>
+                                                {appointment.status === "Declined" &&
+                                                    appointment.decline_reason && (
+                                                        <div className="mt-2 max-w-[240px] text-xs leading-relaxed text-gray-500">
+                                                            <p>{appointment.decline_reason}</p>
+                                                            {appointment.suggested_date &&
+                                                                appointment.suggested_time && (
+                                                                    <p className="mt-1 font-medium text-purple-700">
+                                                                        Suggested: {formatDate(
+                                                                            appointment.suggested_date,
+                                                                        )}{" "}
+                                                                        at {String(
+                                                                            appointment.suggested_time,
+                                                                        ).slice(0, 5)}
+                                                                    </p>
+                                                                )}
+                                                        </div>
+                                                    )}
                                             </td>
 
                                             <td className="px-5 py-4 align-middle">
@@ -468,7 +642,7 @@ function AdminAppointments() {
                                                             blocked ||
                                                             appointment.status === "Declined"
                                                         }
-                                                        onClick={() => updateStatus(id, "Declined")}
+                                                        onClick={() => openDecline(appointment)}
                                                         aria-label={`Decline appointment for ${appointment.customer_name}`}
                                                         className={`${actionClass} border-red-200 bg-red-50 text-red-700 hover:bg-red-100`}
                                                     >

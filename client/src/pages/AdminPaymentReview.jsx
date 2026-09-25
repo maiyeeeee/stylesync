@@ -105,16 +105,24 @@ export default function AdminPaymentReview() {
             {chosen && (
                 <section className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6">
                     <h2 className="text-lg font-bold text-purple-950">
-                        Review booking #{chosen.appointment_id} — {chosen.customer_name}
+                        Payment details for booking #{chosen.appointment_id} —{" "}
+                        {chosen.customer_name}
                     </h2>
                     <p className="mt-2 text-sm text-gray-500">
                         Receiving account shown to customer: {chosen.receiving_name} ·{" "}
                         {chosen.receiving_number}
                     </p>
-                    <p className="mb-5 mt-1 text-sm text-gray-500">
-                        Requested: {peso(chosen.required_amount)} · Customer reference:{" "}
-                        {chosen.submitted_reference}
-                    </p>
+                    <div className="mb-5 mt-3 grid gap-2 rounded-xl bg-purple-50 p-4 text-sm text-gray-700 md:grid-cols-2">
+                        <p>Required deposit: {peso(chosen.required_amount)}</p>
+                        <p>Submitted amount: {peso(chosen.submitted_amount)}</p>
+                        <p>
+                            Customer reference: {chosen.submitted_reference || "Not provided"}
+                        </p>
+                        <p>
+                            Payment status: <strong>{chosen.payment_status}</strong>
+                        </p>
+                    </div>
+                    {chosen.payment_status === "Awaiting Verification" ? (
                     <fieldset disabled={busy} className="grid gap-4 md:grid-cols-2">
                         <label className={field}>
                             Actual received reference
@@ -167,16 +175,34 @@ export default function AdminPaymentReview() {
                             </Button>
                             <Button
                                 type="button"
+                                disabled={busy}
                                 onClick={() => review("reject")}
                                 className="bg-red-50 text-red-700 hover:bg-red-100"
                             >
-                                Reject and release slot
+                                Reject payment
                             </Button>
                             <Button type="button" variant="outline" onClick={() => setChosen(null)}>
                                 Close
                             </Button>
                         </div>
                     </fieldset>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="rounded-xl border border-purple-100 p-4 text-sm text-gray-600">
+                                <p className="font-medium text-purple-950">Review note</p>
+                                <p className="mt-1">
+                                    {chosen.review_note || "No review note was recorded."}
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setChosen(null)}
+                            >
+                                Close details
+                            </Button>
+                        </div>
+                    )}
                 </section>
             )}
             <div className="overflow-x-auto rounded-2xl border border-purple-100 bg-white p-5 shadow-sm">
@@ -189,7 +215,7 @@ export default function AdminPaymentReview() {
                                 "Deposit",
                                 "Reference",
                                 "Status",
-                                "Action",
+                                "Payment Review",
                             ].map((h) => (
                                 <th className="p-3 text-gray-500" key={h}>
                                     {h}
@@ -214,26 +240,27 @@ export default function AdminPaymentReview() {
                                 <td className="p-3">{row.submitted_reference}</td>
                                 <td className="p-3">{row.payment_status}</td>
                                 <td className="p-3">
-                                    {row.payment_status === "Awaiting Verification" && (
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="secondary"
-                                            disabled={busy || loading}
-                                            onClick={() => {
-                                                setChosen(row)
-                                                setForm({
-                                                    reference: row.submitted_reference || "",
-                                                    amount: row.submitted_amount || "",
-                                                    note: "",
-                                                    confirm_received: false,
-                                                })
-                                                setError("")
-                                            }}
-                                        >
-                                            Review
-                                        </Button>
-                                    )}
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="secondary"
+                                        disabled={busy || loading}
+                                        onClick={() => {
+                                            setChosen(row)
+                                            setForm({
+                                                reference: row.submitted_reference || "",
+                                                amount: row.submitted_amount || "",
+                                                note: row.review_note || "",
+                                                confirm_received: false,
+                                            })
+                                            setError("")
+                                            setMessage("")
+                                        }}
+                                    >
+                                        {row.payment_status === "Awaiting Verification"
+                                            ? "Review Payment"
+                                            : "View Details"}
+                                    </Button>
                                 </td>
                             </tr>
                         ))}

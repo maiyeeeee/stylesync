@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { API_URL, apiFetch } from "../lib/sessionApi"
 
 const panel = "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6"
@@ -452,13 +452,72 @@ function AdminTransactions() {
     const paidToday = todayRows.filter((row) => row.status === "Paid")
     const salesToday = paidToday.reduce((sum, row) => sum + Number(row.amount), 0)
 
+    const searchTerm = search.trim().toLowerCase()
+
     const filtered = transactions.filter((row) =>
-        [row.customer, row.service, row.transaction_id, row.appointment_id].some((value) =>
-            String(value ?? "")
-                .toLowerCase()
-                .includes(search.trim().toLowerCase()),
-        ),
+        [
+            row.customer,
+            row.customer_contact,
+            row.customer_email,
+            row.service,
+            row.transaction_id,
+            row.appointment_id,
+            row.payment,
+            row.status,
+        ].some((value) => String(value ?? "").toLowerCase().includes(searchTerm)),
     )
+
+    const customerRecords = useMemo(() => {
+        if (!searchTerm) return []
+
+        const matches = transactions.filter((row) =>
+            [row.customer, row.customer_contact, row.customer_email].some((value) =>
+                String(value ?? "").toLowerCase().includes(searchTerm),
+            ),
+        )
+        const grouped = new Map()
+
+        for (const row of matches) {
+            const key =
+                String(row.customer_contact || "").trim() ||
+                String(row.customer_email || "").trim().toLowerCase() ||
+                String(row.customer || "").trim().toLowerCase()
+
+            if (!grouped.has(key)) {
+                grouped.set(key, {
+                    key,
+                    customer: row.customer,
+                    contact: row.customer_contact || "Not recorded",
+                    email: row.customer_email || "Not recorded",
+                    transactions: 0,
+                    totalPaid: 0,
+                    depositPaid: 0,
+                    services: new Set(),
+                    latestVisit: row.transaction_date,
+                })
+            }
+
+            const record = grouped.get(key)
+            record.transactions += 1
+            if (row.status === "Paid") {
+                record.totalPaid += Number(row.amount || 0)
+                record.depositPaid += Number(row.deposit_applied || 0)
+            }
+            if (row.service) record.services.add(row.service)
+
+            if (
+                new Date(row.transaction_date).getTime() >
+                new Date(record.latestVisit).getTime()
+            ) {
+                record.latestVisit = row.transaction_date
+            }
+        }
+
+        return Array.from(grouped.values()).map((record) => ({
+            ...record,
+            services: Array.from(record.services),
+        }))
+    }, [searchTerm, transactions])
 
     return (
         <div className="min-w-0 space-y-6">
@@ -764,23 +823,110 @@ function AdminTransactions() {
                     <input
                         type="search"
                         aria-label="Search transaction history"
-                        placeholder="Search customer, booking, or service…"
+                        placeholder="Search name, contact, email, booking, or service…"
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                         className={`${input} md:max-w-sm`}
                     />
                 </div>
 
+                {searchTerm && customerRecords.length > 0 && (
+                    <div className="mb-6">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h3 className="font-bold text-purple-950">
+                                    Customer record{customerRecords.length > 1 ? "s" : ""}
+                                </h3>
+                                <p className="mt-1 text-xs text-gray-500">
+                                    Complete recorded transaction and service history matching your
+                                    search.
+                                </p>
+                            </div>
+                            <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
+                                {customerRecords.length} customer match
+                                {customerRecords.length > 1 ? "es" : ""}
+                            </span>
+                        </div>
+
+                        <div className="grid gap-3 lg:grid-cols-2">
+                            {customerRecords.map((record) => (
+                                <article
+                                    key={record.key}
+                                    className="rounded-xl border border-purple-100 bg-purple-50/40 p-4"
+                                >
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <p className="font-bold text-purple-950">
+                                                {record.customer}
+                                            </p>
+                                            <p className="mt-1 text-xs text-gray-600">
+                                                Contact: {record.contact}
+                                            </p>
+                                            <p className="mt-1 text-xs text-gray-600">
+                                                Email: {record.email}
+                                            </p>
+                                        </div>
+                                        <p className="text-right text-xs text-gray-500">
+                                            Latest visit
+                                            <span className="mt-1 block font-semibold text-gray-700">
+                                                {dateLabel(record.latestVisit)}
+                                            </span>
+                                        </p>
+                                    </div>
+
+                                    <div className="mt-4 grid grid-cols-3 gap-2 border-y border-purple-100 py-3 text-center">
+                                        <div>
+                                            <p className="text-xs text-gray-500">Transactions</p>
+                                            <p className="mt-1 font-bold text-purple-900">
+                                                {record.transactions}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500">Total paid</p>
+                                            <p className="mt-1 font-bold text-purple-900">
+                                                {money(record.totalPaid)}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-500">Deposits</p>
+                                            <p className="mt-1 font-bold text-emerald-700">
+                                                {money(record.depositPaid)}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3">
+                                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                            Services / items
+                                        </p>
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {record.services.map((service) => (
+                                                <span
+                                                    key={service}
+                                                    className="rounded-full bg-white px-3 py-1 text-xs text-purple-800 shadow-sm"
+                                                >
+                                                    {service}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </article>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px] text-left text-sm">
+                    <table className="w-full min-w-[1060px] text-left text-sm">
                         <thead className="bg-gray-50 text-gray-500">
                             <tr>
                                 {[
-                                    "Customer / Date",
+                                    "Customer Record",
                                     "Service / Item",
                                     "Sale total",
                                     "Deposit",
                                     "Balance collected",
+                                    "Payment",
                                     "Status",
                                     "Receipt",
                                 ].map((title) => (
@@ -803,6 +949,16 @@ function AdminTransactions() {
                                                 Booking #{row.appointment_id}
                                             </p>
                                         )}
+                                        {row.customer_contact && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {row.customer_contact}
+                                            </p>
+                                        )}
+                                        {row.customer_email && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {row.customer_email}
+                                            </p>
+                                        )}
                                     </td>
                                     <td className="px-3 py-4">{row.service}</td>
                                     <td className="whitespace-nowrap px-3 py-4">
@@ -813,6 +969,20 @@ function AdminTransactions() {
                                     </td>
                                     <td className="whitespace-nowrap px-3 py-4">
                                         {money(row.balance_collected)}
+                                    </td>
+                                    <td className="px-3 py-4 text-xs text-gray-600">
+                                        {Number(row.deposit_applied) > 0 && (
+                                            <p>
+                                                Deposit: {row.deposit_payment_method || "Recorded"}
+                                            </p>
+                                        )}
+                                        {Number(row.balance_collected) > 0 ? (
+                                            <p className={Number(row.deposit_applied) > 0 ? "mt-1" : ""}>
+                                                Balance: {row.payment}
+                                            </p>
+                                        ) : (
+                                            <p>No additional payment</p>
+                                        )}
                                     </td>
                                     <td className="px-3 py-4">{row.status}</td>
                                     <td className="px-3 py-4">
@@ -830,7 +1000,7 @@ function AdminTransactions() {
                             ))}
                             {!filtered.length && (
                                 <tr>
-                                    <td colSpan={7} className="p-8 text-center text-gray-500">
+                                    <td colSpan={8} className="p-8 text-center text-gray-500">
                                         {loading ? "Loading…" : "No transactions found."}
                                     </td>
                                 </tr>
