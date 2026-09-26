@@ -722,9 +722,45 @@ export default function Book() {
                                                 role="status"
                                                 className={`rounded-xl p-4 text-sm ${validAvailability ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}
                                             >
-                                                {validAvailability
-                                                    ? `Available: ${availability.start_time}–${availability.end_time} · ${availability.available_count} qualified staff slot${Number(availability.available_count) === 1 ? "" : "s"} remaining`
-                                                    : "Slot unavailable. Choose another time."}
+                                                {validAvailability ? (
+                                                    <>
+                                                        Available: {availability.start_time}–
+                                                        {availability.end_time}
+                                                        {" · "}
+                                                        {Number(
+                                                            availability.qualified_staff_count ??
+                                                                availability.available_count,
+                                                        )}{" "}
+                                                        qualified staff{" "}
+                                                        {Number(
+                                                            availability.qualified_staff_count ??
+                                                                availability.available_count,
+                                                        ) === 1
+                                                            ? "member"
+                                                            : "members"}{" "}
+                                                        available
+                                                        {availability.daily_limit_configured && (
+                                                            <>
+                                                                {" · "}
+                                                                {Number(
+                                                                    availability.daily_remaining,
+                                                                )}{" "}
+                                                                daily client{" "}
+                                                                {Number(
+                                                                    availability.daily_remaining,
+                                                                ) === 1
+                                                                    ? "slot"
+                                                                    : "slots"}{" "}
+                                                                remaining
+                                                            </>
+                                                        )}
+                                                    </>
+                                                ) : availability?.daily_limit_configured &&
+                                                  Number(availability.daily_remaining) === 0 ? (
+                                                    "The owner's daily client limit has been reached. Choose another date."
+                                                ) : (
+                                                    "Slot unavailable. Choose another time."
+                                                )}
                                             </p>
                                         )}
                                         {selected && (

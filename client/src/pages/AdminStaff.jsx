@@ -1,1155 +1,1531 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { API_URL, apiFetch } from "../lib/sessionApi"
 
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+const DAYS = [
+  { value: 0, label: "Sunday" },
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+]
 
 const inputClass =
-    "w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
-
-const secondaryButton =
-    "rounded-xl border border-purple-200 bg-white px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40"
+  "w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
 
 const primaryButton =
-    "rounded-xl bg-purple-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-40"
+  "rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
+
+const secondaryButton =
+  "rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-semibold text-purple-700 transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50"
+
+const dangerButton =
+  "rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+
+function defaultSchedules() {
+  return [1, 2, 3, 4, 5, 6].map((day) => ({
+    day_of_week: day,
+    shift_start: "09:00",
+    shift_end: "18:00",
+    break_start: "",
+    break_end: "",
+  }))
+}
 
 function blankForm() {
-    return {
-        name: "",
-        role: "Stylist",
-        active_status: "Active",
-        daily_status: "Available",
-        service_ids: [],
-        schedules: [1, 2, 3, 4, 5, 6].map((day) => ({
-            day_of_week: day,
-            shift_start: "09:00",
-            shift_end: "18:00",
-        })),
-    }
+  return {
+    name: "",
+    role: "",
+    active_status: "Active",
+    daily_status: "Available",
+    service_ids: [],
+    schedules: defaultSchedules(),
+  }
+}
+
+function blankLeaveForm() {
+  return {
+    staff_id: "",
+    start_at: "",
+    end_at: "",
+    reason: "",
+  }
+}
+
+function normalizeTime(value) {
+  return String(value || "").slice(0, 5)
 }
 
 function initials(name) {
-    return (
-        String(name || "")
-            .trim()
-            .split(/\s+/)
-            .slice(0, 2)
-            .map((word) => word[0])
-            .join("")
-            .toUpperCase() || "?"
-    )
+  const parts = String(name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+
+  if (!parts.length) return "?"
+
+  return parts
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("")
 }
 
-function statusLabel(item) {
-    if (item.active_status !== "Active") return "Inactive"
-
-    return item.daily_status === "Available" ? "Marked available" : "Marked unavailable"
-}
-
-function activeSchedules(item) {
-    return (item.schedules || []).filter(
-        (schedule) => schedule.active == null || Number(schedule.active) === 1,
-    )
-}
-
-function formatPeriod(value) {
-    if (!value) return "—"
-
-    const text = String(value)
-
-    // Preserve wall-clock values when the API returns SQL DATETIME text.
-    if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(text)) {
-        return text.replace("T", " ").slice(0, 16)
+function statusLabel(staff) {
+  if (staff.active_status !== "Active") {
+    return {
+      label: "Inactive",
+      className: "bg-gray-100 text-gray-700",
     }
+  }
 
-    const date = new Date(text)
+  if (staff.daily_status === "Unavailable") {
+    return {
+      label: "Unavailable today",
+      className: "bg-orange-100 text-orange-700",
+    }
+  }
 
-    if (Number.isNaN(date.getTime())) return text
-
-    return date.toLocaleString("en-PH", {
-        timeZone: "Asia/Manila",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    })
+  return {
+    label: "Available",
+    className: "bg-green-100 text-green-700",
+  }
 }
 
-function Field({ label, children }) {
-    return (
-        <label className="block">
-            <span className="mb-2 block text-sm font-semibold text-gray-700">{label}</span>
-            {children}
-        </label>
-    )
+function activeSchedules(staff) {
+  return Array.isArray(staff.schedules)
+    ? staff.schedules.filter((schedule) => Number(schedule.active) !== 0)
+    : []
 }
 
-function Notice({ children, error = false }) {
-    return (
-        <div
-            role={error ? "alert" : "status"}
-            className={`rounded-xl p-4 text-sm ${
-                error ? "bg-red-50 text-red-800" : "bg-green-50 text-green-800"
-            }`}
-        >
-            {children}
-        </div>
-    )
+function formatTime(value) {
+  if (!value) return ""
+
+  const [hourValue, minuteValue] = normalizeTime(value).split(":")
+  const hour = Number(hourValue)
+  const minute = minuteValue || "00"
+
+  if (!Number.isFinite(hour)) return normalizeTime(value)
+
+  const suffix = hour >= 12 ? "PM" : "AM"
+  const displayHour = hour % 12 || 12
+
+  return `${displayHour}:${minute} ${suffix}`
+}
+
+function formatDateTime(value) {
+  if (!value) return "Not recorded"
+
+  const parsed = new Date(String(value).replace(" ", "T"))
+
+  if (Number.isNaN(parsed.getTime())) {
+    return String(value)
+  }
+
+  return parsed.toLocaleString("en-PH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-semibold text-gray-700">
+        {label}
+      </span>
+
+      {children}
+
+      {hint && (
+        <span className="mt-1 block text-xs leading-5 text-gray-500">
+          {hint}
+        </span>
+      )}
+    </label>
+  )
+}
+
+function Notice({ type = "error", children }) {
+  const styles =
+    type === "success"
+      ? "border-green-200 bg-green-50 text-green-800"
+      : "border-red-200 bg-red-50 text-red-700"
+
+  return (
+    <div role={type === "error" ? "alert" : "status"} className={`rounded-xl border p-4 text-sm ${styles}`}>
+      {children}
+    </div>
+  )
 }
 
 async function request(path, options = {}) {
-    const response = await apiFetch(`${API_URL}${path}`, options)
+  const response = await apiFetch(`${API_URL}${path}`, {
+    cache: "no-store",
+    ...options,
+  })
 
-    const data = await response.json().catch(() => null)
+  const result = await response.json().catch(() => null)
 
-    if (!response.ok) {
-        throw new Error(data?.error || "Unable to complete the request.")
-    }
+  if (!response.ok) {
+    throw new Error(
+      result?.error ||
+        result?.message ||
+        "The request could not be completed.",
+    )
+  }
 
-    return data
+  return result
 }
 
 function AdminStaff() {
-    const [staff, setStaff] = useState([])
-    const [services, setServices] = useState([])
+  const [staff, setStaff] = useState([])
+  const [services, setServices] = useState([])
 
-    const [loading, setLoading] = useState(true)
-    const [loadError, setLoadError] = useState("")
-    const [error, setError] = useState("")
-    const [message, setMessage] = useState("")
-    const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
+  const [mutationError, setMutationError] = useState("")
+  const [busyAction, setBusyAction] = useState("")
 
-    const [search, setSearch] = useState("")
-    const [filter, setFilter] = useState("All")
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("All")
 
-    const [form, setForm] = useState(blankForm)
-    const [editingId, setEditingId] = useState(null)
-    const [showForm, setShowForm] = useState(false)
+  const [showStaffForm, setShowStaffForm] = useState(false)
+  const [editingStaffId, setEditingStaffId] = useState(null)
+  const [form, setForm] = useState(blankForm)
 
-    const [leaveStaff, setLeaveStaff] = useState(null)
-    const [leave, setLeave] = useState({
-        start_at: "",
-        end_at: "",
-        reason: "",
+  const [showLeaveForm, setShowLeaveForm] = useState(false)
+  const [leaveForm, setLeaveForm] = useState(blankLeaveForm)
+  const leaveFormRef = useRef(null)
+
+  const loadData = useCallback(async (signal) => {
+    setLoading(true)
+    setLoadError("")
+
+    try {
+      const [staffData, serviceData] = await Promise.all([
+        request("/staff", { signal }),
+        request("/services", { signal }),
+      ])
+
+      setStaff(Array.isArray(staffData) ? staffData : [])
+      setServices(Array.isArray(serviceData) ? serviceData : [])
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        setLoadError(error.message)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    loadData(controller.signal)
+
+    return () => controller.abort()
+  }, [loadData])
+
+  const selectableServices = useMemo(() => {
+    const selected = new Set(form.service_ids.map(Number))
+
+    return services.filter(
+      (service) =>
+        service.status === "Available" ||
+        selected.has(Number(service.service_id)),
+    )
+  }, [form.service_ids, services])
+
+  const filteredStaff = useMemo(() => {
+    const term = search.trim().toLowerCase()
+
+    return staff.filter((member) => {
+      const memberStatus = statusLabel(member).label
+
+      const matchesSearch =
+        !term ||
+        member.name?.toLowerCase().includes(term) ||
+        member.role?.toLowerCase().includes(term) ||
+        member.services?.some((service) =>
+          service.service?.toLowerCase().includes(term),
+        )
+
+      const matchesStatus =
+        statusFilter === "All" ||
+        (statusFilter === "Active" &&
+          member.active_status === "Active") ||
+        (statusFilter === "Inactive" &&
+          member.active_status !== "Active") ||
+        (statusFilter === "Available" &&
+          memberStatus === "Available") ||
+        (statusFilter === "Unavailable" &&
+          memberStatus === "Unavailable today")
+
+      return matchesSearch && matchesStatus
     })
+  }, [search, staff, statusFilter])
 
-    const mutationLock = useRef(false)
-    const loadSequence = useRef(0)
-    const editorRef = useRef(null)
-    const leaveRef = useRef(null)
-
-    const loadData = useCallback(async (signal) => {
-        const sequence = ++loadSequence.current
-
-        setLoading(true)
-        setLoadError("")
-
-        try {
-            const [staffData, serviceData] = await Promise.all([
-                request("/staff", { signal }),
-                request("/services", { signal }),
-            ])
-
-            if (signal?.aborted || sequence !== loadSequence.current) {
-                return
-            }
-
-            if (!Array.isArray(staffData) || !Array.isArray(serviceData)) {
-                throw new Error("Invalid staff or services response.")
-            }
-
-            setStaff(staffData)
-            setServices(serviceData)
-        } catch (requestError) {
-            if (!signal?.aborted && sequence === loadSequence.current) {
-                setLoadError(requestError.message || "Cannot load staff information.")
-            }
-        } finally {
-            if (!signal?.aborted && sequence === loadSequence.current) {
-                setLoading(false)
-            }
-        }
-    }, [])
-
-    useEffect(() => {
-        const controller = new AbortController()
-        loadData(controller.signal)
-
-        return () => controller.abort()
-    }, [loadData])
-
-    useEffect(() => {
-        if (showForm) {
-            editorRef.current?.scrollIntoView({
-                block: "start",
-            })
-            editorRef.current?.focus({ preventScroll: true })
-        }
-    }, [showForm, editingId])
-
-    useEffect(() => {
-        if (leaveStaff) {
-            leaveRef.current?.scrollIntoView({
-                block: "start",
-            })
-            leaveRef.current?.focus({ preventScroll: true })
-        }
-    }, [leaveStaff])
-
-    const blocked = busy || loading || Boolean(loadError)
-
-    const clearNotices = () => {
-        setError("")
-        setMessage("")
-    }
-
-    const mutate = async (path, options, successMessage, afterSave) => {
-        if (mutationLock.current || loading || loadError) return
-
-        mutationLock.current = true
-        setBusy(true)
-        clearNotices()
-
-        try {
-            await request(path, options)
-            afterSave?.()
-            setMessage(successMessage)
-            await loadData()
-        } catch (requestError) {
-            setError(requestError.message || "Unable to save the change.")
-        } finally {
-            mutationLock.current = false
-            setBusy(false)
-        }
-    }
-
-    const openNewStaff = () => {
-        clearNotices()
-        setLeaveStaff(null)
-        setEditingId(null)
-        setForm(blankForm())
-        setShowForm(true)
-    }
-
-    const editStaff = (item) => {
-        clearNotices()
-        setLeaveStaff(null)
-        setEditingId(item.staff_id)
-
-        setForm({
-            name: item.name || "",
-            role: item.role || "",
-            active_status: item.active_status || "Active",
-            daily_status: item.daily_status || "Available",
-            service_ids: (item.service_ids || []).map(Number),
-            schedules: activeSchedules(item).map((schedule) => ({
-                day_of_week: Number(schedule.day_of_week),
-                shift_start: String(schedule.shift_start).slice(0, 5),
-                shift_end: String(schedule.shift_end).slice(0, 5),
-            })),
-        })
-
-        setShowForm(true)
-    }
-
-    const toggleService = (id) => {
-        setForm((previous) => ({
-            ...previous,
-            service_ids: previous.service_ids.includes(id)
-                ? previous.service_ids.filter((value) => value !== id)
-                : [...previous.service_ids, id],
-        }))
-    }
-
-    const updateSchedule = (index, field, value) => {
-        setForm((previous) => ({
-            ...previous,
-            schedules: previous.schedules.map((schedule, position) =>
-                position === index ? { ...schedule, [field]: value } : schedule,
-            ),
-        }))
-    }
-
-    const submitStaff = (event) => {
-        event.preventDefault()
-
-        if (!form.name.trim() || !form.role.trim()) {
-            setError("Enter the staff name and role.")
-            return
-        }
-
-        if (!form.service_ids.length) {
-            setError("Select at least one qualified service.")
-            return
-        }
-
-        if (!form.schedules.length) {
-            setError("Add at least one working shift.")
-            return
-        }
-
-        const invalidShift = form.schedules.some(
-            (schedule) =>
-                !schedule.shift_start ||
-                !schedule.shift_end ||
-                schedule.shift_end <= schedule.shift_start,
-        )
-
-        if (invalidShift) {
-            setError("Every shift must end after its start time.")
-            return
-        }
-
-        const overlap = form.schedules.some((first, index) =>
-            form.schedules.some(
-                (second, otherIndex) =>
-                    otherIndex > index &&
-                    Number(first.day_of_week) === Number(second.day_of_week) &&
-                    first.shift_start < second.shift_end &&
-                    second.shift_start < first.shift_end,
-            ),
-        )
-
-        if (overlap) {
-            setError("Shifts on the same day must not overlap.")
-            return
-        }
-
-        mutate(
-            editingId ? `/staff/${editingId}` : "/staff",
-            {
-                method: editingId ? "PUT" : "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...form,
-                    name: form.name.trim(),
-                    role: form.role.trim(),
-                }),
-            },
-            editingId ? "Staff updated successfully." : "Staff added successfully.",
-            () => setShowForm(false),
-        )
-    }
-
-    const toggleAvailability = (item) =>
-        mutate(
-            `/staff/${item.staff_id}/daily-status`,
-            {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    daily_status: item.daily_status === "Available" ? "Unavailable" : "Available",
-                }),
-            },
-            "Availability setting updated.",
-        )
-
-    const archiveStaff = (item) => {
-        if (
-            blocked ||
-            item.active_status !== "Active" ||
-            !window.confirm(
-                `Archive ${item.name}? They will no longer appear as available for new appointments, but their historical records will be preserved.`,
-            )
-        ) {
-            return
-        }
-
-        mutate(
-            `/staff/${item.staff_id}`,
-            { method: "DELETE" },
-            `${item.name} was archived and removed from new booking assignments.`,
-            () => {
-                if (editingId === item.staff_id) {
-                    setEditingId(null)
-                    setShowForm(false)
-                }
-
-                if (leaveStaff?.staff_id === item.staff_id) {
-                    setLeaveStaff(null)
-                }
-            },
-        )
-    }
-
-    const openLeave = (item) => {
-        clearNotices()
-        setShowForm(false)
-        setLeave({
-            start_at: "",
-            end_at: "",
-            reason: "",
-        })
-        setLeaveStaff(item)
-    }
-
-    const submitLeave = (event) => {
-        event.preventDefault()
-
-        if (!leave.start_at || !leave.end_at || leave.end_at <= leave.start_at) {
-            setError("Choose an end date/time after the start.")
-            return
-        }
-
-        mutate(
-            `/staff/${leaveStaff.staff_id}/unavailability`,
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    start_at: leave.start_at.replace("T", " ") + ":00",
-                    end_at: leave.end_at.replace("T", " ") + ":00",
-                    reason: leave.reason.trim() || "Unavailable",
-                }),
-            },
-            "Leave or break recorded. Review any existing bookings during this period.",
-            () => setLeaveStaff(null),
-        )
-    }
-
-    const removeLeave = (id) => {
-        if (blocked || !window.confirm("Remove this unavailable period?")) {
-            return
-        }
-
-        mutate(`/staff/unavailability/${id}`, { method: "DELETE" }, "Unavailable period removed.")
-    }
-
-    const activeStaff = staff.filter((item) => item.active_status === "Active")
-
-    const availableCount = activeStaff.filter((item) => item.daily_status === "Available").length
-
-    const unavailableCount = activeStaff.filter((item) => item.daily_status !== "Available").length
-
-    const filteredStaff = staff.filter((item) => {
-        const text = [
-            item.name,
-            item.role,
-            ...(item.services || []).map((service) => service.service),
-        ]
-            .join(" ")
-            .toLowerCase()
-
-        const matchesSearch = text.includes(search.trim().toLowerCase())
-
-        const matchesFilter =
-            filter === "All" ||
-            (filter === "Active" && item.active_status === "Active") ||
-            (filter === "Inactive" && item.active_status !== "Active") ||
-            (filter === "Available" &&
-                item.active_status === "Active" &&
-                item.daily_status === "Available") ||
-            (filter === "Unavailable" &&
-                item.active_status === "Active" &&
-                item.daily_status !== "Available")
-
-        return matchesSearch && matchesFilter
-    })
-
-    const selectableServices = services.filter(
-        (service) =>
-            service.status === "Available" || form.service_ids.includes(Number(service.service_id)),
+  const metrics = useMemo(() => {
+    const active = staff.filter(
+      (member) => member.active_status === "Active",
     )
 
-    return (
-        <div className="space-y-6">
-            <header className="rounded-3xl bg-gradient-to-br from-purple-950 via-purple-800 to-pink-700 p-6 text-white shadow-sm md:p-8">
-                <div className="flex flex-wrap items-start justify-between gap-5">
-                    <div>
-                        <p className="text-xs font-semibold uppercase tracking-widest text-purple-200">
-                            Team management
+    return {
+      total: staff.length,
+      active: active.length,
+      available: active.filter(
+        (member) => member.daily_status === "Available",
+      ).length,
+      unavailable: active.filter(
+        (member) => member.daily_status === "Unavailable",
+      ).length,
+    }
+  }, [staff])
+
+  function clearMessages() {
+    setMutationError("")
+    setSuccessMessage("")
+  }
+
+  function openNewStaffForm() {
+    clearMessages()
+    setEditingStaffId(null)
+    setForm(blankForm())
+    setShowStaffForm(true)
+  }
+
+  function editStaff(member) {
+    clearMessages()
+
+    const schedules = activeSchedules(member).map((schedule) => ({
+      day_of_week: Number(schedule.day_of_week),
+      shift_start: normalizeTime(schedule.shift_start),
+      shift_end: normalizeTime(schedule.shift_end),
+      break_start: normalizeTime(schedule.break_start),
+      break_end: normalizeTime(schedule.break_end),
+    }))
+
+    setEditingStaffId(member.staff_id)
+    setForm({
+      name: member.name || "",
+      role: member.role || "",
+      active_status:
+        member.active_status === "Inactive" ? "Inactive" : "Active",
+      daily_status:
+        member.daily_status === "Unavailable"
+          ? "Unavailable"
+          : "Available",
+      service_ids: Array.isArray(member.service_ids)
+        ? member.service_ids.map(Number)
+        : [],
+      schedules: schedules.length ? schedules : defaultSchedules(),
+    })
+
+    setShowStaffForm(true)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  function closeStaffForm() {
+    if (busyAction) return
+
+    setShowStaffForm(false)
+    setEditingStaffId(null)
+    setForm(blankForm())
+    setMutationError("")
+  }
+
+  function updateSchedule(index, field, value) {
+    setForm((previous) => ({
+      ...previous,
+      schedules: previous.schedules.map((schedule, scheduleIndex) =>
+        scheduleIndex === index
+          ? { ...schedule, [field]: value }
+          : schedule,
+      ),
+    }))
+  }
+
+  function addSchedule() {
+    setForm((previous) => ({
+      ...previous,
+      schedules: [
+        ...previous.schedules,
+        {
+          day_of_week: 1,
+          shift_start: "09:00",
+          shift_end: "18:00",
+          break_start: "",
+          break_end: "",
+        },
+      ],
+    }))
+  }
+
+  function removeSchedule(index) {
+    setForm((previous) => ({
+      ...previous,
+      schedules: previous.schedules.filter(
+        (_, scheduleIndex) => scheduleIndex !== index,
+      ),
+    }))
+  }
+
+  function toggleService(serviceId) {
+    const numericId = Number(serviceId)
+
+    setForm((previous) => {
+      const alreadySelected = previous.service_ids.includes(numericId)
+
+      return {
+        ...previous,
+        service_ids: alreadySelected
+          ? previous.service_ids.filter((id) => id !== numericId)
+          : [...previous.service_ids, numericId],
+      }
+    })
+  }
+
+  function validateStaffForm() {
+    if (!form.name.trim() || !form.role.trim()) {
+      return "Staff name and role are required."
+    }
+
+    if (!form.service_ids.length) {
+      return "Select at least one qualified service."
+    }
+
+    if (!form.schedules.length) {
+      return "Add at least one working shift."
+    }
+
+    for (const schedule of form.schedules) {
+      const shiftStart = normalizeTime(schedule.shift_start)
+      const shiftEnd = normalizeTime(schedule.shift_end)
+      const breakStart = normalizeTime(schedule.break_start)
+      const breakEnd = normalizeTime(schedule.break_end)
+
+      if (!shiftStart || !shiftEnd || shiftEnd <= shiftStart) {
+        return "Each working day must have a valid shift start and shift end."
+      }
+
+      const hasBreakStart = Boolean(breakStart)
+      const hasBreakEnd = Boolean(breakEnd)
+
+      if (hasBreakStart !== hasBreakEnd) {
+        return "Enter both the break start and break end, or leave both empty."
+      }
+
+      if (
+        hasBreakStart &&
+        (breakStart <= shiftStart ||
+          breakEnd >= shiftEnd ||
+          breakEnd <= breakStart)
+      ) {
+        return "Break time must be completely inside the staff member's working shift."
+      }
+    }
+
+    const schedulesByDay = new Map()
+
+    for (const schedule of form.schedules) {
+      const day = Number(schedule.day_of_week)
+      const existing = schedulesByDay.get(day) || []
+
+      for (const other of existing) {
+        if (
+          normalizeTime(schedule.shift_start) <
+            normalizeTime(other.shift_end) &&
+          normalizeTime(schedule.shift_end) >
+            normalizeTime(other.shift_start)
+        ) {
+          return "A staff member cannot have overlapping shifts on the same day."
+        }
+      }
+
+      existing.push(schedule)
+      schedulesByDay.set(day, existing)
+    }
+
+    return ""
+  }
+
+  async function submitStaff(event) {
+    event.preventDefault()
+    clearMessages()
+
+    const validationError = validateStaffForm()
+
+    if (validationError) {
+      setMutationError(validationError)
+      return
+    }
+
+    const action = editingStaffId ? "updating-staff" : "creating-staff"
+    setBusyAction(action)
+
+    try {
+      const payload = {
+        name: form.name.trim(),
+        role: form.role.trim(),
+        active_status: form.active_status,
+        daily_status: form.daily_status,
+        service_ids: form.service_ids.map(Number),
+        schedules: form.schedules.map((schedule) => ({
+          day_of_week: Number(schedule.day_of_week),
+          shift_start: normalizeTime(schedule.shift_start),
+          shift_end: normalizeTime(schedule.shift_end),
+          break_start: normalizeTime(schedule.break_start) || null,
+          break_end: normalizeTime(schedule.break_end) || null,
+        })),
+      }
+
+      const result = await request(
+        editingStaffId ? `/staff/${editingStaffId}` : "/staff",
+        {
+          method: editingStaffId ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        },
+      )
+
+      setSuccessMessage(
+        result.message ||
+          (editingStaffId
+            ? "Staff member updated successfully."
+            : "Staff member created successfully."),
+      )
+
+      setShowStaffForm(false)
+      setEditingStaffId(null)
+      setForm(blankForm())
+      await loadData()
+    } catch (error) {
+      setMutationError(error.message)
+    } finally {
+      setBusyAction("")
+    }
+  }
+
+  async function toggleDailyStatus(member) {
+    clearMessages()
+
+    const newStatus =
+      member.daily_status === "Available"
+        ? "Unavailable"
+        : "Available"
+
+    setBusyAction(`status-${member.staff_id}`)
+
+    try {
+      const result = await request(
+        `/staff/${member.staff_id}/daily-status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            daily_status: newStatus,
+          }),
+        },
+      )
+
+      setSuccessMessage(
+        result.message || "Daily availability updated.",
+      )
+
+      await loadData()
+    } catch (error) {
+      setMutationError(error.message)
+    } finally {
+      setBusyAction("")
+    }
+  }
+
+  async function archiveStaff(member) {
+    if (
+      !window.confirm(
+        `Deactivate ${member.name}? Existing appointment records will remain.`,
+      )
+    ) {
+      return
+    }
+
+    clearMessages()
+    setBusyAction(`archive-${member.staff_id}`)
+
+    try {
+      const result = await request(`/staff/${member.staff_id}`, {
+        method: "DELETE",
+      })
+
+      setSuccessMessage(
+        result.message || "Staff member deactivated.",
+      )
+
+      await loadData()
+    } catch (error) {
+      setMutationError(error.message)
+    } finally {
+      setBusyAction("")
+    }
+  }
+
+  function openLeaveForm(member = null) {
+    clearMessages()
+
+    setLeaveForm({
+      staff_id: member ? String(member.staff_id) : "",
+      start_at: "",
+      end_at: "",
+      reason: "",
+    })
+
+    setShowLeaveForm(true)
+
+    // The form is rendered above the staff directory. When this action is
+    // opened from a staff card, move the page to the form so the click does
+    // not appear to do nothing.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        leaveFormRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        })
+      })
+    })
+  }
+
+  async function submitLeave(event) {
+    event.preventDefault()
+    clearMessages()
+
+    if (
+      !leaveForm.staff_id ||
+      !leaveForm.start_at ||
+      !leaveForm.end_at
+    ) {
+      setMutationError(
+        "Select a staff member and enter the unavailable period.",
+      )
+      return
+    }
+
+    if (leaveForm.end_at <= leaveForm.start_at) {
+      setMutationError(
+        "The unavailable end time must be after the start time.",
+      )
+      return
+    }
+
+    setBusyAction("adding-leave")
+
+    try {
+      const result = await request(
+        `/staff/${leaveForm.staff_id}/unavailability`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            start_at: leaveForm.start_at,
+            end_at: leaveForm.end_at,
+            reason:
+              leaveForm.reason.trim() ||
+              "Unavailable",
+          }),
+        },
+      )
+
+      setSuccessMessage(
+        result.message || "Unavailability recorded.",
+      )
+
+      setShowLeaveForm(false)
+      setLeaveForm(blankLeaveForm())
+      await loadData()
+    } catch (error) {
+      setMutationError(error.message)
+    } finally {
+      setBusyAction("")
+    }
+  }
+
+  async function removeLeave(unavailability) {
+    if (
+      !window.confirm(
+        "Remove this unavailable period from the staff schedule?",
+      )
+    ) {
+      return
+    }
+
+    clearMessages()
+    setBusyAction(
+      `remove-leave-${unavailability.unavailability_id}`,
+    )
+
+    try {
+      const result = await request(
+        `/staff/unavailability/${unavailability.unavailability_id}`,
+        {
+          method: "DELETE",
+        },
+      )
+
+      setSuccessMessage(
+        result.message || "Unavailability removed.",
+      )
+
+      await loadData()
+    } catch (error) {
+      setMutationError(error.message)
+    } finally {
+      setBusyAction("")
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-6">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-wider text-purple-600">
+              Team management
+            </p>
+
+            <h1 className="mt-1 text-2xl font-bold text-gray-900 md:text-3xl">
+              Staff
+            </h1>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600">
+              Manage staff qualifications, weekly shifts, break
+              times, and date-specific unavailable periods.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={secondaryButton}
+              onClick={() => openLeaveForm()}
+              disabled={Boolean(busyAction)}
+            >
+              Add time away
+            </button>
+
+            <button
+              type="button"
+              className={primaryButton}
+              onClick={openNewStaffForm}
+              disabled={Boolean(busyAction)}
+            >
+              + Add staff member
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {loadError && <Notice>{loadError}</Notice>}
+
+      {mutationError && <Notice>{mutationError}</Notice>}
+
+      {successMessage && (
+        <Notice type="success">{successMessage}</Notice>
+      )}
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          {
+            label: "Staff records",
+            value: metrics.total,
+            description: "Active and inactive records",
+            color: "text-purple-700",
+          },
+          {
+            label: "Active staff",
+            value: metrics.active,
+            description: "Can be scheduled",
+            color: "text-blue-700",
+          },
+          {
+            label: "Available today",
+            value: metrics.available,
+            description: "Marked available",
+            color: "text-green-700",
+          },
+          {
+            label: "Unavailable today",
+            value: metrics.unavailable,
+            description: "Temporarily unavailable",
+            color: "text-orange-700",
+          },
+        ].map((metric) => (
+          <article
+            key={metric.label}
+            className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+          >
+            <p className="text-sm text-gray-500">
+              {metric.label}
+            </p>
+
+            <p className={`mt-2 text-3xl font-bold ${metric.color}`}>
+              {metric.value}
+            </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              {metric.description}
+            </p>
+          </article>
+        ))}
+      </section>
+
+      {showStaffForm && (
+        <form
+          onSubmit={submitStaff}
+          className="space-y-6 rounded-2xl border border-purple-200 bg-white p-5 shadow-sm md:p-6"
+        >
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingStaffId
+                  ? "Edit staff member"
+                  : "Add staff member"}
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Break times are optional but must stay inside the
+                working shift.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className={secondaryButton}
+              onClick={closeStaffForm}
+              disabled={Boolean(busyAction)}
+            >
+              Cancel
+            </button>
+          </div>
+
+          <fieldset
+            disabled={Boolean(busyAction)}
+            className="space-y-6 disabled:opacity-70"
+          >
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <Field label="Staff name">
+                <input
+                  className={inputClass}
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="Example: Maria Santos"
+                  maxLength={120}
+                  required
+                />
+              </Field>
+
+              <Field label="Role or specialization">
+                <input
+                  className={inputClass}
+                  value={form.role}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      role: event.target.value,
+                    }))
+                  }
+                  placeholder="Example: Hair stylist"
+                  maxLength={120}
+                  required
+                />
+              </Field>
+
+              <Field label="Account status">
+                <select
+                  className={inputClass}
+                  value={form.active_status}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      active_status: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </Field>
+
+              <Field label="Daily availability">
+                <select
+                  className={inputClass}
+                  value={form.daily_status}
+                  onChange={(event) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      daily_status: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="Available">Available</option>
+                  <option value="Unavailable">
+                    Unavailable
+                  </option>
+                </select>
+              </Field>
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-gray-900">
+                Qualified services
+              </h3>
+
+              <p className="mt-1 text-sm text-gray-500">
+                The staff member can only be assigned to selected
+                services.
+              </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {selectableServices.map((service) => {
+                  const serviceId = Number(service.service_id)
+                  const checked =
+                    form.service_ids.includes(serviceId)
+
+                  return (
+                    <label
+                      key={serviceId}
+                      className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                        checked
+                          ? "border-purple-400 bg-purple-50"
+                          : "border-gray-200 hover:border-purple-200"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 accent-purple-600"
+                        checked={checked}
+                        onChange={() => toggleService(serviceId)}
+                      />
+
+                      <span>
+                        <span className="block text-sm font-semibold text-gray-800">
+                          {service.service}
+                        </span>
+
+                        <span className="mt-1 block text-xs text-gray-500">
+                          {service.category || "Uncategorized"}
+                          {service.status !== "Available"
+                            ? " · Currently unavailable"
+                            : ""}
+                        </span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {!selectableServices.length && (
+                <p className="mt-3 text-sm text-orange-700">
+                  No services are available. Add or activate a
+                  service first.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    Weekly schedule and breaks
+                  </h3>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Add the regular shifts. Leave both break fields
+                    empty when the shift has no break.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className={secondaryButton}
+                  onClick={addSchedule}
+                >
+                  + Add shift
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {form.schedules.map((schedule, index) => (
+                  <div
+                    key={`${index}-${schedule.day_of_week}`}
+                    className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 md:grid-cols-2 xl:grid-cols-6"
+                  >
+                    <Field label="Working day">
+                      <select
+                        className={inputClass}
+                        value={schedule.day_of_week}
+                        onChange={(event) =>
+                          updateSchedule(
+                            index,
+                            "day_of_week",
+                            Number(event.target.value),
+                          )
+                        }
+                      >
+                        {DAYS.map((day) => (
+                          <option
+                            key={day.value}
+                            value={day.value}
+                          >
+                            {day.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+
+                    <Field label="Shift start">
+                      <input
+                        type="time"
+                        className={inputClass}
+                        value={schedule.shift_start}
+                        onChange={(event) =>
+                          updateSchedule(
+                            index,
+                            "shift_start",
+                            event.target.value,
+                          )
+                        }
+                        required
+                      />
+                    </Field>
+
+                    <Field label="Shift end">
+                      <input
+                        type="time"
+                        className={inputClass}
+                        value={schedule.shift_end}
+                        onChange={(event) =>
+                          updateSchedule(
+                            index,
+                            "shift_end",
+                            event.target.value,
+                          )
+                        }
+                        required
+                      />
+                    </Field>
+
+                    <Field label="Break start (optional)">
+                      <input
+                        type="time"
+                        className={inputClass}
+                        value={schedule.break_start || ""}
+                        onChange={(event) =>
+                          updateSchedule(
+                            index,
+                            "break_start",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </Field>
+
+                    <Field label="Break end (optional)">
+                      <input
+                        type="time"
+                        className={inputClass}
+                        value={schedule.break_end || ""}
+                        onChange={(event) =>
+                          updateSchedule(
+                            index,
+                            "break_end",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </Field>
+
+                    <div className="flex items-end">
+                      <button
+                        type="button"
+                        className={`${dangerButton} w-full`}
+                        onClick={() => removeSchedule(index)}
+                        disabled={form.schedules.length === 1}
+                      >
+                        Remove shift
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-3 border-t border-gray-200 pt-5">
+              <button
+                type="button"
+                className={secondaryButton}
+                onClick={closeStaffForm}
+              >
+                Cancel
+              </button>
+
+              <button type="submit" className={primaryButton}>
+                {busyAction === "creating-staff"
+                  ? "Creating…"
+                  : busyAction === "updating-staff"
+                    ? "Saving…"
+                    : editingStaffId
+                      ? "Save changes"
+                      : "Create staff member"}
+              </button>
+            </div>
+          </fieldset>
+        </form>
+      )}
+
+      {showLeaveForm && (
+        <form
+          ref={leaveFormRef}
+          onSubmit={submitLeave}
+          className="space-y-5 rounded-2xl border border-orange-200 bg-white p-5 shadow-sm md:p-6"
+        >
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                Record staff time away
+              </h2>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Use this for leave, appointments, training, or
+                temporary unavailability.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className={secondaryButton}
+              onClick={() => {
+                if (!busyAction) {
+                  setShowLeaveForm(false)
+                  setLeaveForm(blankLeaveForm())
+                }
+              }}
+              disabled={Boolean(busyAction)}
+            >
+              Cancel
+            </button>
+          </div>
+
+          <fieldset
+            disabled={Boolean(busyAction)}
+            className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 disabled:opacity-70"
+          >
+            <Field label="Staff member">
+              <select
+                className={inputClass}
+                value={leaveForm.staff_id}
+                onChange={(event) =>
+                  setLeaveForm((previous) => ({
+                    ...previous,
+                    staff_id: event.target.value,
+                  }))
+                }
+                required
+              >
+                <option value="">Select staff</option>
+
+                {staff
+                  .filter(
+                    (member) =>
+                      member.active_status === "Active",
+                  )
+                  .map((member) => (
+                    <option
+                      key={member.staff_id}
+                      value={member.staff_id}
+                    >
+                      {member.name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+
+            <Field label="Unavailable from">
+              <input
+                type="datetime-local"
+                className={inputClass}
+                value={leaveForm.start_at}
+                onChange={(event) =>
+                  setLeaveForm((previous) => ({
+                    ...previous,
+                    start_at: event.target.value,
+                  }))
+                }
+                required
+              />
+            </Field>
+
+            <Field label="Unavailable until">
+              <input
+                type="datetime-local"
+                className={inputClass}
+                value={leaveForm.end_at}
+                onChange={(event) =>
+                  setLeaveForm((previous) => ({
+                    ...previous,
+                    end_at: event.target.value,
+                  }))
+                }
+                required
+              />
+            </Field>
+
+            <Field label="Reason">
+              <input
+                className={inputClass}
+                value={leaveForm.reason}
+                onChange={(event) =>
+                  setLeaveForm((previous) => ({
+                    ...previous,
+                    reason: event.target.value,
+                  }))
+                }
+                placeholder="Example: Personal leave"
+                maxLength={255}
+              />
+            </Field>
+          </fieldset>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              className={primaryButton}
+              disabled={Boolean(busyAction)}
+            >
+              {busyAction === "adding-leave"
+                ? "Saving…"
+                : "Save time away"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="flex flex-col justify-between gap-4 border-b border-gray-200 p-5 md:p-6 lg:flex-row lg:items-end">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              Staff directory
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-500">
+              {filteredStaff.length} of {staff.length} staff records
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Search">
+              <input
+                className={inputClass}
+                value={search}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
+                placeholder="Name, role, or service..."
+              />
+            </Field>
+
+            <Field label="Status">
+              <select
+                className={inputClass}
+                value={statusFilter}
+                onChange={(event) =>
+                  setStatusFilter(event.target.value)
+                }
+              >
+                <option value="All">All statuses</option>
+                <option value="Active">Active records</option>
+                <option value="Available">Available today</option>
+                <option value="Unavailable">
+                  Unavailable today
+                </option>
+                <option value="Inactive">Inactive records</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-sm text-gray-500">
+            Loading staff records…
+          </div>
+        ) : !filteredStaff.length ? (
+          <div className="p-10 text-center">
+            <p className="font-semibold text-gray-800">
+              No staff records found
+            </p>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Try another filter or add a staff member.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 p-4 md:p-6 xl:grid-cols-2">
+            {filteredStaff.map((member) => {
+              const status = statusLabel(member)
+              const schedules = activeSchedules(member)
+              const upcomingLeave = Array.isArray(
+                member.unavailability,
+              )
+                ? member.unavailability
+                : []
+
+              return (
+                <article
+                  key={member.staff_id}
+                  className="rounded-2xl border border-gray-200 p-5 transition hover:border-purple-200 hover:shadow-sm"
+                >
+                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                    <div className="flex min-w-0 gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-purple-100 font-bold text-purple-700">
+                        {initials(member.name)}
+                      </div>
+
+                      <div className="min-w-0">
+                        <h3 className="truncate text-lg font-bold text-gray-900">
+                          {member.name}
+                        </h3>
+
+                        <p className="text-sm text-gray-500">
+                          {member.role}
                         </p>
 
-                        <h2 className="mt-3 text-3xl font-bold tracking-tight md:text-4xl">
-                            Your salon team
-                        </h2>
-
-                        <p className="mt-3 max-w-xl text-sm leading-relaxed text-purple-100">
-                            Manage service qualifications, working shifts, availability settings,
-                            and time away.
-                        </p>
+                        <span
+                          className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${status.className}`}
+                        >
+                          {status.label}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                        <button
-                            type="button"
-                            disabled={busy || loading}
-                            onClick={() => loadData()}
-                            className="rounded-xl border border-white px-4 py-2.5 text-sm font-semibold hover:bg-white hover:text-purple-900 disabled:opacity-40"
-                        >
-                            Refresh
-                        </button>
-
-                        <button
-                            type="button"
-                            disabled={blocked}
-                            onClick={openNewStaff}
-                            className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-purple-900 hover:bg-purple-100 disabled:opacity-40"
-                        >
-                            + Add staff
-                        </button>
-                    </div>
-                </div>
-            </header>
-
-            {error && <Notice error>{error}</Notice>}
-
-            {loadError && (
-                <Notice error>
-                    {loadError}
-
-                    <button
+                      <button
                         type="button"
-                        disabled={busy || loading}
-                        onClick={() => loadData()}
-                        className="ml-3 font-semibold underline"
-                    >
-                        Retry
-                    </button>
-                </Notice>
-            )}
+                        className={secondaryButton}
+                        onClick={() => editStaff(member)}
+                        disabled={Boolean(busyAction)}
+                      >
+                        Edit
+                      </button>
 
-            {message && <Notice>{message}</Notice>}
-
-            {loading && (
-                <p role="status" className="text-sm text-purple-700">
-                    Loading staff and services…
-                </p>
-            )}
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {[
-                    ["Active staff", activeStaff.length],
-                    ["Marked available", availableCount],
-                    ["Marked unavailable", unavailableCount],
-                    ["Inactive staff", staff.length - activeStaff.length],
-                ].map(([title, count]) => (
-                    <div
-                        key={title}
-                        className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm"
-                    >
-                        <p className="text-sm text-gray-500">{title}</p>
-
-                        <p className="mt-3 text-3xl font-bold text-purple-900">
-                            {loading || loadError ? "—" : count}
-                        </p>
+                      {member.active_status === "Active" && (
+                        <button
+                          type="button"
+                          className={secondaryButton}
+                          onClick={() =>
+                            toggleDailyStatus(member)
+                          }
+                          disabled={Boolean(busyAction)}
+                        >
+                          {busyAction ===
+                          `status-${member.staff_id}`
+                            ? "Updating…"
+                            : member.daily_status === "Available"
+                              ? "Mark unavailable"
+                              : "Mark available"}
+                        </button>
+                      )}
                     </div>
-                ))}
-            </div>
+                  </div>
 
-            <p className="text-sm leading-relaxed text-gray-500">
-                “Marked available” is a manual setting. It does not mean the person is on shift or
-                free for a specific booking. Booking checks also consider qualifications, shifts,
-                leave, and existing appointments. The manual setting remains until changed.
-            </p>
+                  <div className="mt-5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                      Qualified services
+                    </h4>
 
-            {showForm && (
-                <section
-                    ref={editorRef}
-                    tabIndex={-1}
-                    aria-labelledby="staff-editor-title"
-                    className="scroll-mt-24 rounded-2xl border border-purple-200 bg-white p-5 shadow-sm outline-none md:p-6"
-                >
-                    <h3 id="staff-editor-title" className="text-xl font-bold text-purple-950">
-                        {editingId ? "Edit staff member" : "Add staff member"}
-                    </h3>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {member.services?.length ? (
+                        member.services.map((service) => (
+                          <span
+                            key={service.service_id}
+                            className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700"
+                          >
+                            {service.service}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-sm text-orange-700">
+                          No qualified services assigned
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                    <p className="mt-1 text-sm text-gray-500">
-                        Set qualifications and the regular weekly schedule.
-                    </p>
+                  <div className="mt-5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                      Weekly shifts and breaks
+                    </h4>
 
-                    <form onSubmit={submitStaff} className="mt-6">
-                        <fieldset disabled={blocked} className="min-w-0 space-y-6">
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <Field label="Staff name">
-                                    <input
-                                        required
-                                        value={form.name}
-                                        onChange={(event) =>
-                                            setForm({
-                                                ...form,
-                                                name: event.target.value,
-                                            })
-                                        }
-                                        className={inputClass}
-                                        placeholder="Enter staff name"
-                                    />
-                                </Field>
+                    <div className="mt-2 space-y-2">
+                      {schedules.length ? (
+                        schedules.map((schedule) => {
+                          const day = DAYS.find(
+                            (item) =>
+                              item.value ===
+                              Number(schedule.day_of_week),
+                          )
 
-                                <Field label="Role">
-                                    <input
-                                        required
-                                        value={form.role}
-                                        onChange={(event) =>
-                                            setForm({
-                                                ...form,
-                                                role: event.target.value,
-                                            })
-                                        }
-                                        className={inputClass}
-                                        placeholder="For example, Stylist"
-                                    />
-                                </Field>
+                          const hasBreak =
+                            schedule.break_start &&
+                            schedule.break_end
 
-                                <Field label="Staff record status">
-                                    <select
-                                        value={form.active_status}
-                                        onChange={(event) =>
-                                            setForm({
-                                                ...form,
-                                                active_status: event.target.value,
-                                            })
-                                        }
-                                        className={inputClass}
-                                    >
-                                        <option>Active</option>
-                                        <option>Inactive</option>
-                                    </select>
-                                </Field>
+                          return (
+                            <div
+                              key={
+                                schedule.schedule_id ||
+                                `${schedule.day_of_week}-${schedule.shift_start}-${schedule.shift_end}`
+                              }
+                              className="flex flex-col justify-between gap-1 rounded-xl bg-gray-50 px-3 py-2 text-sm sm:flex-row sm:items-center"
+                            >
+                              <span className="font-semibold text-gray-700">
+                                {day?.label || "Unknown day"}
+                              </span>
 
-                                <Field label="Manual availability setting">
-                                    <select
-                                        value={form.daily_status}
-                                        onChange={(event) =>
-                                            setForm({
-                                                ...form,
-                                                daily_status: event.target.value,
-                                            })
-                                        }
-                                        className={inputClass}
-                                    >
-                                        <option>Available</option>
-                                        <option>Unavailable</option>
-                                    </select>
-                                </Field>
-                            </div>
-
-                            <fieldset>
-                                <legend className="mb-3 text-sm font-semibold text-gray-700">
-                                    Qualified services
-                                </legend>
-
-                                {!selectableServices.length && (
-                                    <p className="text-sm text-gray-500">
-                                        Add an available service in Services first.
-                                    </p>
-                                )}
-
-                                <div className="grid max-h-60 gap-2 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
-                                    {selectableServices.map((service) => {
-                                        const id = Number(service.service_id)
-                                        const selected = form.service_ids.includes(id)
-
-                                        return (
-                                            <label
-                                                key={id}
-                                                className={`flex items-start gap-3 rounded-xl border p-3 text-sm ${
-                                                    selected
-                                                        ? "border-purple-300 bg-purple-50"
-                                                        : "border-gray-200"
-                                                }`}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selected}
-                                                    onChange={() => toggleService(id)}
-                                                    className="mt-1 accent-purple-700"
-                                                />
-
-                                                <span>
-                                                    {service.service}
-
-                                                    {service.status !== "Available" && (
-                                                        <span className="ml-1 text-xs text-gray-500">
-                                                            ({service.status || "Unavailable"})
-                                                        </span>
-                                                    )}
-                                                </span>
-                                            </label>
-                                        )
-                                    })}
-                                </div>
-                            </fieldset>
-
-                            <div>
-                                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                                    <h4 className="text-sm font-semibold text-gray-700">
-                                        Weekly shifts
-                                    </h4>
-
-                                    <button
-                                        type="button"
-                                        className={secondaryButton}
-                                        onClick={() =>
-                                            setForm((previous) => ({
-                                                ...previous,
-                                                schedules: [
-                                                    ...previous.schedules,
-                                                    {
-                                                        day_of_week: 1,
-                                                        shift_start: "09:00",
-                                                        shift_end: "18:00",
-                                                    },
-                                                ],
-                                            }))
-                                        }
-                                    >
-                                        + Add shift
-                                    </button>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {form.schedules.map((schedule, index) => (
-                                        <div
-                                            key={index}
-                                            className="grid items-end gap-3 rounded-xl bg-gray-50 p-3 sm:grid-cols-2 xl:grid-cols-4"
-                                        >
-                                            <Field label="Day">
-                                                <select
-                                                    value={schedule.day_of_week}
-                                                    onChange={(event) =>
-                                                        updateSchedule(
-                                                            index,
-                                                            "day_of_week",
-                                                            Number(event.target.value),
-                                                        )
-                                                    }
-                                                    className={inputClass}
-                                                >
-                                                    {DAYS.map((day, dayIndex) => (
-                                                        <option key={day} value={dayIndex}>
-                                                            {day}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </Field>
-
-                                            <Field label="Start">
-                                                <input
-                                                    required
-                                                    type="time"
-                                                    value={schedule.shift_start}
-                                                    onChange={(event) =>
-                                                        updateSchedule(
-                                                            index,
-                                                            "shift_start",
-                                                            event.target.value,
-                                                        )
-                                                    }
-                                                    className={inputClass}
-                                                />
-                                            </Field>
-
-                                            <Field label="End">
-                                                <input
-                                                    required
-                                                    type="time"
-                                                    value={schedule.shift_end}
-                                                    onChange={(event) =>
-                                                        updateSchedule(
-                                                            index,
-                                                            "shift_end",
-                                                            event.target.value,
-                                                        )
-                                                    }
-                                                    className={inputClass}
-                                                />
-                                            </Field>
-                                            <button
-                                                type="button"
-                                                className="rounded-xl px-3 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50"
-                                                aria-label={`Remove ${
-                                                    DAYS[schedule.day_of_week]
-                                                } shift ${index + 1}`}
-                                                onClick={() =>
-                                                    setForm((previous) => ({
-                                                        ...previous,
-                                                        schedules: previous.schedules.filter(
-                                                            (_, position) => position !== index,
-                                                        ),
-                                                    }))
-                                                }
-                                            >
-                                                Remove shift
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-5">
-                                <button type="submit" className={primaryButton}>
-                                    {busy ? "Saving…" : "Save staff"}
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowForm(false)
-                                        setError("")
-                                    }}
-                                    className={secondaryButton}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </fieldset>
-                    </form>
-                </section>
-            )}
-
-            {leaveStaff && (
-                <section
-                    ref={leaveRef}
-                    tabIndex={-1}
-                    aria-labelledby="leave-title"
-                    className="scroll-mt-24 rounded-2xl border border-purple-200 bg-white p-5 shadow-sm outline-none md:p-6"
-                >
-                    <h3 id="leave-title" className="text-xl font-bold text-purple-950">
-                        Add leave or break · {leaveStaff.name}
-                    </h3>
-
-                    <p className="mt-2 text-sm text-gray-500">
-                        Enter salon-local dates and times. Review existing appointments before
-                        recording time away.
-                    </p>
-
-                    <form onSubmit={submitLeave} className="mt-5">
-                        <fieldset disabled={blocked} className="min-w-0 space-y-4">
-                            <div className="grid gap-4 md:grid-cols-2">
-                                <Field label="Start date and time">
-                                    <input
-                                        required
-                                        type="datetime-local"
-                                        value={leave.start_at}
-                                        onChange={(event) =>
-                                            setLeave({
-                                                ...leave,
-                                                start_at: event.target.value,
-                                            })
-                                        }
-                                        className={inputClass}
-                                    />
-                                </Field>
-
-                                <Field label="End date and time">
-                                    <input
-                                        required
-                                        type="datetime-local"
-                                        value={leave.end_at}
-                                        onChange={(event) =>
-                                            setLeave({
-                                                ...leave,
-                                                end_at: event.target.value,
-                                            })
-                                        }
-                                        className={inputClass}
-                                    />
-                                </Field>
-                            </div>
-
-                            <Field label="Reason">
-                                <input
-                                    value={leave.reason}
-                                    onChange={(event) =>
-                                        setLeave({
-                                            ...leave,
-                                            reason: event.target.value,
-                                        })
-                                    }
-                                    placeholder="Leave, lunch break, appointment…"
-                                    className={inputClass}
-                                />
-                            </Field>
-
-                            <div className="flex flex-wrap gap-2">
-                                <button type="submit" className={primaryButton}>
-                                    {busy ? "Saving…" : "Save unavailable period"}
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setLeaveStaff(null)
-                                        setError("")
-                                    }}
-                                    className={secondaryButton}
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </fieldset>
-                    </form>
-                </section>
-            )}
-
-            <section className="rounded-2xl border border-purple-100 bg-white p-4 shadow-sm">
-                <div className="flex flex-col gap-3 md:flex-row">
-                    <label className="flex-1">
-                        <span className="sr-only">Search staff</span>
-
-                        <input
-                            type="search"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search name, role, or service…"
-                            className={inputClass}
-                        />
-                    </label>
-
-                    <label>
-                        <span className="sr-only">Filter staff</span>
-
-                        <select
-                            value={filter}
-                            onChange={(event) => setFilter(event.target.value)}
-                            className={inputClass}
-                        >
-                            <option value="All">All staff</option>
-                            <option value="Active">Active staff</option>
-                            <option value="Available">Marked available</option>
-                            <option value="Unavailable">Marked unavailable</option>
-                            <option value="Inactive">Inactive staff</option>
-                        </select>
-                    </label>
-                </div>
-            </section>
-
-            {!loading && !loadError && (
-                <p className="text-sm text-gray-500">
-                    Showing {filteredStaff.length} of {staff.length} staff records
-                </p>
-            )}
-
-            {!loading && !loadError && !filteredStaff.length && (
-                <div className="rounded-2xl bg-white p-8 text-center text-gray-500">
-                    No staff match your search or filter.
-                </div>
-            )}
-
-            <div className="grid gap-5 xl:grid-cols-2">
-                {filteredStaff.map((item) => {
-                    const active = item.active_status === "Active"
-
-                    const available = active && item.daily_status === "Available"
-
-                    const schedules = activeSchedules(item)
-
-                    const workingDays = new Set(
-                        schedules.map((schedule) => Number(schedule.day_of_week)),
-                    )
-
-                    const shiftLabels = [
-                        ...new Set(
-                            schedules.map(
-                                (schedule) =>
-                                    `${String(schedule.shift_start).slice(0, 5)}–${String(
-                                        schedule.shift_end,
-                                    ).slice(0, 5)}`,
-                            ),
-                        ),
-                    ]
-
-                    return (
-                        <article
-                            key={item.staff_id}
-                            className="flex min-w-0 flex-col rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6"
-                        >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="flex min-w-0 items-center gap-3">
-                                    <div
-                                        aria-hidden="true"
-                                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-purple-100 text-lg font-bold text-purple-800"
-                                    >
-                                        {initials(item.name)}
-                                    </div>
-
-                                    <div className="min-w-0">
-                                        <h3 className="break-words text-lg font-bold text-purple-950">
-                                            {item.name}
-                                        </h3>
-
-                                        <p className="text-sm text-gray-500">{item.role}</p>
-                                    </div>
-                                </div>
-
-                                <span
-                                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
-                                        !active
-                                            ? "bg-gray-100 text-gray-600"
-                                            : available
-                                              ? "bg-green-100 text-green-800"
-                                              : "bg-amber-100 text-amber-900"
-                                    }`}
-                                >
-                                    {statusLabel(item)}
-                                </span>
-                            </div>
-
-                            <div className="mt-5">
-                                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                    Qualified services
+                              <div className="text-gray-600 sm:text-right">
+                                <p>
+                                  {formatTime(
+                                    schedule.shift_start,
+                                  )}{" "}
+                                  –{" "}
+                                  {formatTime(schedule.shift_end)}
                                 </p>
 
-                                <div className="flex flex-wrap gap-2">
-                                    {(item.services || []).map((service) => (
-                                        <span
-                                            key={service.service_id}
-                                            className="rounded-lg bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-800"
-                                        >
-                                            {service.service}
-                                        </span>
-                                    ))}
-
-                                    {!item.services?.length && (
-                                        <span className="text-sm text-gray-500">
-                                            No services assigned
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="mt-5 rounded-xl bg-gray-50 p-4">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                        Weekly schedule
-                                    </p>
-
-                                    <p className="text-xs font-semibold text-purple-800">
-                                        {shiftLabels.length === 1
-                                            ? shiftLabels[0]
-                                            : shiftLabels.length > 1
-                                              ? "Varied shifts"
-                                              : "No active shifts"}
-                                    </p>
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap gap-1.5">
-                                    {DAYS.map((day, index) => (
-                                        <span
-                                            key={day}
-                                            title={`${day}: ${
-                                                workingDays.has(index)
-                                                    ? "Scheduled"
-                                                    : "No regular shift"
-                                            }`}
-                                            className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
-                                                workingDays.has(index)
-                                                    ? "bg-purple-700 text-white"
-                                                    : "bg-white text-gray-400"
-                                            }`}
-                                        >
-                                            {day.slice(0, 3)}
-                                        </span>
-                                    ))}
-                                </div>
-
-                                {schedules.length > 0 && (
-                                    <details className="mt-3">
-                                        <summary className="cursor-pointer text-xs font-semibold text-purple-700">
-                                            View shift details
-                                        </summary>
-
-                                        <ul className="mt-2 space-y-1 text-xs text-gray-600">
-                                            {schedules.map((schedule, index) => (
-                                                <li key={schedule.schedule_id || index}>
-                                                    {DAYS[Number(schedule.day_of_week)]}:{" "}
-                                                    {String(schedule.shift_start).slice(0, 5)}–
-                                                    {String(schedule.shift_end).slice(0, 5)}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </details>
-                                )}
-                            </div>
-
-                            {item.unavailability?.length > 0 && (
-                                <details className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-4">
-                                    <summary className="cursor-pointer text-sm font-semibold text-amber-900">
-                                        Current / upcoming time away ({item.unavailability.length})
-                                    </summary>
-
-                                    <div className="mt-3 space-y-3">
-                                        {item.unavailability.map((entry) => (
-                                            <div
-                                                key={entry.unavailability_id}
-                                                className="rounded-lg bg-white p-3"
-                                            >
-                                                <p className="text-sm font-semibold text-gray-800">
-                                                    {entry.reason || "Unavailable"}
-                                                </p>
-
-                                                <p className="mt-1 text-xs leading-relaxed text-gray-500">
-                                                    {formatPeriod(entry.start_at)}
-                                                    {" → "}
-                                                    {formatPeriod(entry.end_at)}
-                                                </p>
-
-                                                <button
-                                                    type="button"
-                                                    disabled={blocked}
-                                                    onClick={() =>
-                                                        removeLeave(entry.unavailability_id)
-                                                    }
-                                                    className="mt-2 text-xs font-semibold text-red-700 hover:underline disabled:opacity-40"
-                                                >
-                                                    Remove period
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </details>
-                            )}
-
-                            <div className="mt-auto flex flex-wrap gap-2 pt-5">
-                                <button
-                                    type="button"
-                                    disabled={blocked}
-                                    onClick={() => editStaff(item)}
-                                    className={primaryButton}
+                                <p
+                                  className={
+                                    hasBreak
+                                      ? "text-xs text-orange-700"
+                                      : "text-xs text-gray-400"
+                                  }
                                 >
-                                    Edit staff
-                                </button>
-
-                                <button
-                                    type="button"
-                                    disabled={blocked || !active}
-                                    onClick={() => toggleAvailability(item)}
-                                    className={secondaryButton}
-                                >
-                                    Mark{" "}
-                                    {item.daily_status === "Available"
-                                        ? "unavailable"
-                                        : "available"}
-                                </button>
-
-                                <button
-                                    type="button"
-                                    disabled={blocked || !active}
-                                    onClick={() => openLeave(item)}
-                                    className={secondaryButton}
-                                >
-                                    + Leave / break
-                                </button>
-
-                                {active && (
-                                    <button
-                                        type="button"
-                                        disabled={blocked}
-                                        onClick={() => archiveStaff(item)}
-                                        className="rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                        Archive staff
-                                    </button>
-                                )}
+                                  {hasBreak
+                                    ? `Break: ${formatTime(
+                                        schedule.break_start,
+                                      )} – ${formatTime(
+                                        schedule.break_end,
+                                      )}`
+                                    : "No break recorded"}
+                                </p>
+                              </div>
                             </div>
-                        </article>
-                    )
-                })}
-            </div>
-        </div>
-    )
+                          )
+                        })
+                      ) : (
+                        <p className="text-sm text-orange-700">
+                          No active working schedule
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                        Upcoming time away
+                      </h4>
+
+                      {member.active_status === "Active" && (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-purple-700 hover:underline"
+                          onClick={() => openLeaveForm(member)}
+                          disabled={Boolean(busyAction)}
+                        >
+                          + Add
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-2 space-y-2">
+                      {upcomingLeave.length ? (
+                        upcomingLeave.map((leave) => (
+                          <div
+                            key={leave.unavailability_id}
+                            className="rounded-xl border border-orange-100 bg-orange-50 p-3"
+                          >
+                            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-start">
+                              <div>
+                                <p className="text-sm font-semibold text-orange-900">
+                                  {leave.reason ||
+                                    "Unavailable"}
+                                </p>
+
+                                <p className="mt-1 text-xs leading-5 text-orange-700">
+                                  {formatDateTime(
+                                    leave.start_at,
+                                  )}{" "}
+                                  to{" "}
+                                  {formatDateTime(leave.end_at)}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+                                onClick={() =>
+                                  removeLeave(leave)
+                                }
+                                disabled={Boolean(busyAction)}
+                              >
+                                {busyAction ===
+                                `remove-leave-${leave.unavailability_id}`
+                                  ? "Removing…"
+                                  : "Remove"}
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-500">
+                          No upcoming unavailable period recorded.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {member.active_status === "Active" && (
+                    <div className="mt-5 flex justify-end border-t border-gray-100 pt-4">
+                      <button
+                        type="button"
+                        className={dangerButton}
+                        onClick={() => archiveStaff(member)}
+                        disabled={Boolean(busyAction)}
+                      >
+                        {busyAction ===
+                        `archive-${member.staff_id}`
+                          ? "Deactivating…"
+                          : "Deactivate staff"}
+                      </button>
+                    </div>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  )
 }
 
 export default AdminStaff

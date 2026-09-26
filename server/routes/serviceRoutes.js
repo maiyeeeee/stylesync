@@ -282,72 +282,107 @@ router.get("/", async (req, res) => {
             `),
 
             promiseDb.query(`
-                SELECT
-                    sv.service_id,
-                    sch.day_of_week,
+    SELECT
+        sv.service_id,
+        sch.day_of_week,
 
-                    COUNT(
-                        DISTINCT s.staff_id
-                    ) AS scheduled_staff,
+        COUNT(
+            DISTINCT s.staff_id
+        ) AS scheduled_staff,
 
-                    COALESCE(
-                        SUM(
-                            FLOOR(
-                                TIME_TO_SEC(
-                                    TIMEDIFF(
-                                        sch.shift_end,
-                                        sch.shift_start
-                                    )
-                                ) /
-                                (
-                                    60 *
-                                    COALESCE(
-                                        NULLIF(
-                                            sv.duration_minutes,
-                                            0
-                                        ),
-                                        60
-                                    )
+        COALESCE(
+            SUM(
+                CASE
+                    WHEN
+                        sch.break_start IS NOT NULL
+                        AND sch.break_end IS NOT NULL
+                    THEN
+                        FLOOR(
+                            TIME_TO_SEC(
+                                TIMEDIFF(
+                                    sch.break_start,
+                                    sch.shift_start
+                                )
+                            ) /
+                            (
+                                60 *
+                                COALESCE(
+                                    NULLIF(
+                                        sv.duration_minutes,
+                                        0
+                                    ),
+                                    60
                                 )
                             )
-                        ),
-                        0
-                    ) AS client_capacity
+                        )
+                        +
+                        FLOOR(
+                            TIME_TO_SEC(
+                                TIMEDIFF(
+                                    sch.shift_end,
+                                    sch.break_end
+                                )
+                            ) /
+                            (
+                                60 *
+                                COALESCE(
+                                    NULLIF(
+                                        sv.duration_minutes,
+                                        0
+                                    ),
+                                    60
+                                )
+                            )
+                        )
 
-                FROM services sv
+                    ELSE
+                        FLOOR(
+                            TIME_TO_SEC(
+                                TIMEDIFF(
+                                    sch.shift_end,
+                                    sch.shift_start
+                                )
+                            ) /
+                            (
+                                60 *
+                                COALESCE(
+                                    NULLIF(
+                                        sv.duration_minutes,
+                                        0
+                                    ),
+                                    60
+                                )
+                            )
+                        )
+                END
+            ),
+            0
+        ) AS client_capacity
 
-                INNER JOIN staff_services ss
-                    ON ss.service_id =
-                        sv.service_id
+    FROM services sv
 
-                INNER JOIN staff s
-                    ON s.staff_id =
-                        ss.staff_id
+    INNER JOIN staff_services ss
+        ON ss.service_id = sv.service_id
 
-                INNER JOIN staff_schedule sch
-                    ON sch.staff_id =
-                        s.staff_id
+    INNER JOIN staff s
+        ON s.staff_id = ss.staff_id
 
-                WHERE
-                    s.active_status =
-                        'Active'
+    INNER JOIN staff_schedule sch
+        ON sch.staff_id = s.staff_id
 
-                    AND s.daily_status =
-                        'Available'
+    WHERE s.active_status = 'Active'
+      AND s.daily_status = 'Available'
+      AND sch.active = 1
+      AND sch.shift_end > sch.shift_start
 
-                    AND sch.active = 1
+    GROUP BY
+        sv.service_id,
+        sch.day_of_week
 
-                    AND sch.shift_end >
-                        sch.shift_start
-
-                GROUP BY
-                    sv.service_id,
-                    sch.day_of_week
-
-                ORDER BY
-                    sv.service_id,
-                    sch.day_of_week
-            `),
+    ORDER BY
+        sv.service_id,
+        sch.day_of_week
+`),
 
             promiseDb.query(`
                 SELECT

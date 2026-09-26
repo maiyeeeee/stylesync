@@ -28,16 +28,14 @@ async function resolveService(
 
     const [rows] = await connection.query(
         `SELECT
-             service_id,
-             service,
-             price,
-             status,
-
-             COALESCE(
-                 NULLIF(duration_minutes, 0),
-                 60
-             ) AS duration_minutes
-
+            service_id,
+            service,
+            price,
+            status,
+            COALESCE(
+                NULLIF(duration_minutes, 0),
+                60
+            ) AS duration_minutes
          FROM services
          WHERE ${where}
          LIMIT 1`,
@@ -67,25 +65,20 @@ async function getDailyLimitStatus(
         excludeAppointmentId,
     },
 ) {
-    const [limitRows] =
-        await connection.query(
-            `SELECT client_limit
+    const [limitRows] = await connection.query(
+        `SELECT client_limit
+         FROM service_daily_limits
+         WHERE service_id = ?
+           AND day_of_week = DAYOFWEEK(?) - 1
+         LIMIT 1`,
+        [
+            serviceId,
+            appointmentDate,
+        ],
+    )
 
-             FROM service_daily_limits
-
-             WHERE service_id = ?
-               AND day_of_week =
-                   DAYOFWEEK(?) - 1
-
-             LIMIT 1`,
-            [
-                serviceId,
-                appointmentDate,
-            ],
-        )
-
-    // Services without owner limits continue
-    // using their existing staff-based behavior.
+    // Services without an owner-set limit continue
+    // using the existing staff-based availability.
     if (!limitRows.length) {
         return {
             configured: false,
@@ -111,44 +104,32 @@ async function getDailyLimitStatus(
         )
     }
 
-    const [countRows] =
-        await connection.query(
-            `SELECT COUNT(*) AS booked
-
-             FROM appointments a
-
-             LEFT JOIN booking_deposits bd
-               ON bd.appointment_id = a.id
-
-             WHERE a.service_id = ?
-               AND a.appointment_date = ?
-
-               AND a.status NOT IN (
-                   'Declined',
-                   'Cancelled',
-                   'Rejected'
-               )
-
-               AND (
-                   bd.deposit_id IS NULL
-
-                   OR bd.payment_status IN (
-                       'Awaiting Verification',
-                       'Verified'
-                   )
-
-                   OR (
-                       bd.payment_status =
-                           'Awaiting Payment'
-
-                       AND bd.expires_at >
-                           UTC_TIMESTAMP()
-                   )
-               )
-
-               ${exclude}`,
-            params,
-        )
+    const [countRows] = await connection.query(
+        `SELECT COUNT(*) AS booked
+         FROM appointments a
+         LEFT JOIN booking_deposits bd
+            ON bd.appointment_id = a.id
+         WHERE a.service_id = ?
+           AND a.appointment_date = ?
+           AND a.status NOT IN (
+                'Declined',
+                'Cancelled',
+                'Rejected'
+           )
+           AND (
+                bd.deposit_id IS NULL
+                OR bd.payment_status IN (
+                    'Awaiting Verification',
+                    'Verified'
+                )
+                OR (
+                    bd.payment_status = 'Awaiting Payment'
+                    AND bd.expires_at > UTC_TIMESTAMP()
+                )
+           )
+           ${exclude}`,
+        params,
+    )
 
     const limit = Number(
         limitRows[0].client_limit,
@@ -182,9 +163,20 @@ async function listQualifiedScheduledStaff(
         preferredStaffId,
     },
 ) {
+    /*
+     * Parameter order:
+     * 1. Service ID
+     * 2. Appointment date
+     * 3. Appointment start for shift start check
+     * 4. Appointment end for shift end check
+     * 5. Appointment start for break overlap check
+     * 6. Appointment end for break overlap check
+     */
     const params = [
         serviceId,
         appointmentDate,
+        startTime,
+        endTime,
         startTime,
         endTime,
     ]
@@ -192,8 +184,7 @@ async function listQualifiedScheduledStaff(
     let staffFilter = ""
 
     if (preferredStaffId) {
-        staffFilter =
-            "AND s.staff_id = ?"
+        staffFilter = "AND s.staff_id = ?"
 
         params.push(
             Number(preferredStaffId),
@@ -202,38 +193,42 @@ async function listQualifiedScheduledStaff(
 
     const [rows] = await connection.query(
         `SELECT DISTINCT
-             s.staff_id,
-             s.name,
-             s.role
-
+            s.staff_id,
+            s.name,
+            s.role,
+            sch.shift_start,
+            sch.shift_end,
+            sch.break_start,
+            sch.break_end
          FROM staff s
-
          INNER JOIN staff_services ss
-             ON ss.staff_id = s.staff_id
-
+            ON ss.staff_id = s.staff_id
          INNER JOIN staff_schedule sch
-             ON sch.staff_id = s.staff_id
-
+            ON sch.staff_id = s.staff_id
          WHERE ss.service_id = ?
-
-           AND sch.day_of_week =
-               DAYOFWEEK(?) - 1
-
+           AND sch.day_of_week = DAYOFWEEK(?) - 1
            AND sch.active = 1
 
+           -- The complete service must fit inside the shift.
            AND sch.shift_start <= ?
-
            AND sch.shift_end >= ?
 
-           AND s.active_status = 'Active'
+           -- The appointment must not overlap the regular break.
+           AND NOT (
+                sch.break_start IS NOT NULL
+                AND sch.break_end IS NOT NULL
+                AND ? < sch.break_end
+                AND ? > sch.break_start
+           )
 
+           AND s.active_status = 'Active'
            AND s.daily_status = 'Available'
 
            ${staffFilter}
 
          ORDER BY
-             s.name,
-             s.staff_id`,
+            s.name,
+            s.staff_id`,
         params,
     )
 
@@ -257,26 +252,24 @@ async function staffHasConflict(
     const requestedEnd =
         `${appointmentDate} ${endTime}:00`
 
-    const [unavailable] =
-        await connection.query(
-            `SELECT unavailability_id
-
-             FROM staff_unavailability
-
-             WHERE staff_id = ?
-               AND start_at < ?
-               AND end_at > ?
-
-             LIMIT 1
-             ${lockRows
-                 ? "FOR UPDATE"
-                 : ""}`,
-            [
-                staffId,
-                requestedEnd,
-                requestedStart,
-            ],
-        )
+    /*
+     * This handles one-time leave, temporary breaks,
+     * training, and other date-specific unavailable periods.
+     */
+    const [unavailable] = await connection.query(
+        `SELECT unavailability_id
+         FROM staff_unavailability
+         WHERE staff_id = ?
+           AND start_at < ?
+           AND end_at > ?
+         LIMIT 1
+         ${lockRows ? "FOR UPDATE" : ""}`,
+        [
+            staffId,
+            requestedEnd,
+            requestedStart,
+        ],
+    )
 
     if (unavailable.length) {
         return true
@@ -299,59 +292,52 @@ async function staffHasConflict(
         )
     }
 
-    const [appointments] =
-        await connection.query(
-            `SELECT a.id
-
-             FROM appointments a
-
-             LEFT JOIN booking_deposits bd
-               ON bd.appointment_id = a.id
-
-             WHERE a.staff_id = ?
-               AND a.appointment_date = ?
-
-               AND a.status NOT IN (
-                   'Declined',
-                   'Cancelled',
-                   'Rejected'
-               )
-
-               AND a.appointment_time < ?
-
-               AND COALESCE(
-                   a.appointment_end_time,
-                   ADDTIME(
-                       a.appointment_time,
-                       '01:00:00'
-                   )
-               ) > ?
-
-               AND (
-                   bd.deposit_id IS NULL
-
-                   OR bd.payment_status IN (
-                       'Awaiting Verification',
-                       'Verified'
-                   )
-
-                   OR (
-                       bd.payment_status =
-                           'Awaiting Payment'
-
-                       AND bd.expires_at >
-                           UTC_TIMESTAMP()
-                   )
-               )
-
-               ${exclude}
-
-             LIMIT 1
-             ${lockRows
-                 ? "FOR UPDATE"
-                 : ""}`,
-            params,
-        )
+    /*
+     * A booking blocks the staff member while:
+     * - it has no deposit requirement;
+     * - payment is awaiting verification;
+     * - payment is verified; or
+     * - its payment window is still open.
+     *
+     * Declined, cancelled, rejected, and expired
+     * unpaid bookings do not block the staff member.
+     */
+    const [appointments] = await connection.query(
+        `SELECT a.id
+         FROM appointments a
+         LEFT JOIN booking_deposits bd
+            ON bd.appointment_id = a.id
+         WHERE a.staff_id = ?
+           AND a.appointment_date = ?
+           AND a.status NOT IN (
+                'Declined',
+                'Cancelled',
+                'Rejected'
+           )
+           AND a.appointment_time < ?
+           AND COALESCE(
+                a.appointment_end_time,
+                ADDTIME(
+                    a.appointment_time,
+                    '01:00:00'
+                )
+           ) > ?
+           AND (
+                bd.deposit_id IS NULL
+                OR bd.payment_status IN (
+                    'Awaiting Verification',
+                    'Verified'
+                )
+                OR (
+                    bd.payment_status = 'Awaiting Payment'
+                    AND bd.expires_at > UTC_TIMESTAMP()
+                )
+           )
+           ${exclude}
+         LIMIT 1
+         ${lockRows ? "FOR UPDATE" : ""}`,
+        params,
+    )
 
     return appointments.length > 0
 }
@@ -376,8 +362,9 @@ async function getAvailableStaff(
         throw error
     }
 
-    const duration =
-        Number(durationMinutes)
+    const duration = Number(
+        durationMinutes,
+    )
 
     if (
         !Number.isInteger(duration) ||
@@ -468,15 +455,19 @@ async function reserveAvailableStaff(
     connection,
     options,
 ) {
-    // Lock the service before checking the
-    // owner-set daily limit. This prevents two
-    // simultaneous bookings from both passing.
+    /*
+     * Lock the service before checking its daily limit.
+     * This prevents two simultaneous bookings from both
+     * passing the same remaining-capacity check.
+     */
     await connection.query(
         `SELECT service_id
          FROM services
          WHERE service_id = ?
          FOR UPDATE`,
-        [Number(options.serviceId)],
+        [
+            Number(options.serviceId),
+        ],
     )
 
     const availability =
@@ -494,7 +485,9 @@ async function reserveAvailableStaff(
              FROM staff
              WHERE staff_id = ?
              FOR UPDATE`,
-            [candidate.staff_id],
+            [
+                candidate.staff_id,
+            ],
         )
 
         const conflict =
