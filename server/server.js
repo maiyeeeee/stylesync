@@ -53,7 +53,7 @@ const allowedOrigins = (
 const cookieOptions = {
     httpOnly: true,
     secure: IS_PRODUCTION,
-    sameSite: "lax",
+    sameSite: IS_PRODUCTION ? "none" : "lax",
     path: "/",
 }
 
