@@ -10,8 +10,8 @@ router.use((req, res, next) => {
         return res.status(401).json({ error: "Please sign in again." })
     }
 
-    if (!["owner", "admin"].includes(req.user.role)) {
-        return res.status(403).json({ error: "Administrator access is required." })
+    if (!["owner", "admin", "user"].includes(req.user.role)) {
+        return res.status(403).json({ error: "Team member access is required." })
     }
 
     next()
@@ -43,6 +43,42 @@ function cents(value, label, allowZero = false) {
 
 function decimal(value) {
     return (value / 100).toFixed(2)
+}
+
+function historicalEpoch(value) {
+    if (value == null || value === "") return null
+
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        throw problem("Choose a valid historical sale date.")
+    }
+
+    const [year, month, day] = value.split("-").map(Number)
+    const check = new Date(Date.UTC(year, month - 1, day))
+
+    if (
+        check.getUTCFullYear() !== year ||
+        check.getUTCMonth() !== month - 1 ||
+        check.getUTCDate() !== day
+    ) {
+        throw problem("Choose a valid historical sale date.")
+    }
+
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(new Date())
+
+    const part = (type) => parts.find((item) => item.type === type)?.value
+    const today = part("year") + "-" + part("month") + "-" + part("day")
+
+    if (value < "2000-01-01" || value >= today) {
+        throw problem("Historical sale date must be before today in Philippine time.")
+    }
+
+    // A neutral time stands in for the unknown time on paper records.
+    return Date.parse(value + "T12:00:00+08:00") / 1000
 }
 
 function positiveId(value, label) {
@@ -139,16 +175,28 @@ router.post("/", async (req, res) => {
                 : positiveId(body.appointment_id, "Appointment")
 
         const saleType = body.sale_type || "Service"
+
         if (!["Service", "Product"].includes(saleType)) {
             throw problem("Select Service or Product.")
         }
 
+        const saleEpoch = historicalEpoch(body.historical_date)
+
+        if (saleEpoch != null && (appointmentId || saleType !== "Service")) {
+            throw problem("Historical dates are available for walk-in service sales only.")
+        }
+
         const payment = String(body.payment || "")
-        if (!["Cash", "GCash"].includes(payment)) {
-            throw problem("Select Cash or GCash.")
+
+        if (
+            !["Cash", "GCash"].includes(payment) &&
+            !(saleEpoch != null && payment === "Not recorded")
+        ) {
+            throw problem("Select Cash or GCash, or use Not recorded for a historical sale.")
         }
 
         const status = body.status || "Paid"
+
         if (!["Paid", "Pending"].includes(status)) {
             throw problem("Invalid payment status.")
         }
@@ -158,6 +206,7 @@ router.post("/", async (req, res) => {
         }
 
         const quantity = Number(body.quantity ?? 1)
+
         if (!Number.isSafeInteger(quantity) || quantity < 1) {
             throw problem("Quantity must be a positive whole number.")
         }
@@ -193,6 +242,7 @@ router.post("/", async (req, res) => {
             if (duplicates.length) {
                 await connection.rollback()
                 inTransaction = false
+
                 return res.json({
                     message: "Transaction already saved.",
                     id: duplicates[0].transaction_id,
@@ -287,6 +337,7 @@ router.post("/", async (req, res) => {
             if (!products.length) throw problem("Product not found.", 404)
 
             const product = products[0]
+
             if (Number(product.stock) < quantity) {
                 throw problem("Not enough stock available.", 409)
             }
@@ -309,8 +360,8 @@ router.post("/", async (req, res) => {
         const [result] = await connection.query(
             `INSERT INTO transactions
        (appointment_id, customer, service, amount, payment, status,
-        sale_type, item_id, quantity, offline_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sale_type, item_id, quantity, offline_id, transaction_date, historical_date_only)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${saleEpoch == null ? "CURRENT_TIMESTAMP" : "FROM_UNIXTIME(?)"}, ?)`,
             [
                 appointmentId,
                 customer,
@@ -322,6 +373,8 @@ router.post("/", async (req, res) => {
                 itemId,
                 quantity,
                 offlineId,
+                ...(saleEpoch == null ? [] : [saleEpoch]),
+                saleEpoch == null ? 0 : 1,
             ],
         )
 

@@ -431,6 +431,10 @@ function AdminServices() {
     const isOwner =
         currentRole === "owner"
 
+    const canManageServices =
+        currentRole === "owner" ||
+        currentRole === "admin"
+
     function openForm(
         item = null,
     ) {
@@ -943,18 +947,20 @@ function AdminServices() {
                         Refresh
                     </button>
 
-                    <button
-                        type="button"
-                        disabled={
-                            blocked
-                        }
-                        onClick={() =>
-                            openForm()
-                        }
-                        className="rounded-xl bg-purple-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-40"
-                    >
-                        + Add service
-                    </button>
+                    {canManageServices && (
+                        <button
+                            type="button"
+                            disabled={
+                                blocked
+                            }
+                            onClick={() =>
+                                openForm()
+                            }
+                            className="rounded-xl bg-purple-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-40"
+                        >
+                            + Add service
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -1921,37 +1927,41 @@ function AdminServices() {
                                                         </button>
                                                     )}
 
-                                                    <button
-                                                        type="button"
-                                                        disabled={
-                                                            blocked
-                                                        }
-                                                        onClick={() =>
-                                                            openForm(
-                                                                item,
-                                                            )
-                                                        }
-                                                        className={
-                                                            buttonClass
-                                                        }
-                                                    >
-                                                        Edit
-                                                    </button>
+                                                    {canManageServices && (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                disabled={
+                                                                    blocked
+                                                                }
+                                                                onClick={() =>
+                                                                    openForm(
+                                                                        item,
+                                                                    )
+                                                                }
+                                                                className={
+                                                                    buttonClass
+                                                                }
+                                                            >
+                                                                Edit
+                                                            </button>
 
-                                                    <button
-                                                        type="button"
-                                                        disabled={
-                                                            blocked
-                                                        }
-                                                        onClick={() =>
-                                                            deleteService(
-                                                                item,
-                                                            )
-                                                        }
-                                                        className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40"
-                                                    >
-                                                        Delete
-                                                    </button>
+                                                            <button
+                                                                type="button"
+                                                                disabled={
+                                                                    blocked
+                                                                }
+                                                                onClick={() =>
+                                                                    deleteService(
+                                                                        item,
+                                                                    )
+                                                                }
+                                                                className="rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>

@@ -15,15 +15,27 @@ const money = (value) =>
 
 const toCents = (value) => Math.round(Number(value || 0) * 100)
 
-function dateLabel(value) {
+function dateLabel(value, dateOnly = false) {
     const date = new Date(value)
     if (!value || Number.isNaN(date.getTime())) return "Date unavailable"
 
     return date.toLocaleString("en-PH", {
         timeZone: "Asia/Manila",
         dateStyle: "medium",
-        timeStyle: "short",
+        ...(dateOnly ? {} : { timeStyle: "short" }),
     })
+}
+
+function philippineDate() {
+    const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Manila",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(new Date())
+
+    const part = (type) => parts.find((item) => item.type === type)?.value
+    return `${part("year")}-${part("month")}-${part("day")}`
 }
 
 function dayKey(value) {
@@ -61,8 +73,8 @@ function SearchSelect({ label, options, value, onChange, disabled }) {
     const [query, setQuery] = useState("")
     const [open, setOpen] = useState(false)
     const [active, setActive] = useState(0)
-    const selected = options.find((option) => option.value === value)
 
+    const selected = options.find((option) => option.value === value)
     const matches = options.filter((option) =>
         option.label.toLowerCase().includes(query.trim().toLowerCase()),
     )
@@ -175,6 +187,7 @@ function freshForm() {
         quantity: "1",
         amount: "",
         payment: "Cash",
+        historicalDate: "",
     }
 }
 
@@ -219,6 +232,7 @@ function AdminTransactions() {
             setServices(data[1])
             setProducts(data[2])
             setAppointments(data[3])
+
             return data[0]
         } catch (err) {
             if (!signal?.aborted && current === version.current) {
@@ -233,6 +247,7 @@ function AdminTransactions() {
     useEffect(() => {
         const controller = new AbortController()
         load(controller.signal)
+
         const timer = setInterval(() => setClock(new Date()), 60000)
 
         return () => {
@@ -247,6 +262,7 @@ function AdminTransactions() {
 
     const appointment = appointments.find((row) => String(row.id) === form.appointmentId)
     const items = productSale ? products : services
+
     const selectedItem = items.find(
         (row) => String(productSale ? row.id : row.service_id) === form.selectedId,
     )
@@ -257,6 +273,7 @@ function AdminTransactions() {
             : 0
 
     const balanceCents = toCents(form.amount) - toCents(deposit)
+
     const unresolved =
         booked &&
         appointment &&
@@ -338,6 +355,16 @@ function AdminTransactions() {
             return
         }
 
+        if (form.historicalDate && form.historicalDate >= philippineDate()) {
+            setError("Choose a past Philippine date for a historical sale.")
+            return
+        }
+
+        if (form.payment === "Not recorded" && (!form.historicalDate || booked || productSale)) {
+            setError("An unrecorded payment method is allowed only for a historical service sale.")
+            return
+        }
+
         const payload = {
             appointment_id: booked ? appointment.id : null,
             customer: form.customer.trim(),
@@ -351,6 +378,7 @@ function AdminTransactions() {
             quantity,
             amount: Number(form.amount).toFixed(2),
             payment: form.payment,
+            historical_date: !booked && !productSale ? form.historicalDate || null : null,
             status: "Paid",
             expected_deposit_amount: deposit.toFixed(2),
         }
@@ -399,6 +427,7 @@ function AdminTransactions() {
         if (!receipt || receipt.status !== "Paid") return
 
         const popup = window.open("", "_blank", "width=460,height=700")
+
         if (!popup) {
             setError("Allow pop-ups to print the receipt.")
             return
@@ -426,20 +455,25 @@ function AdminTransactions() {
 
         line("h1", "Dahling’s Salon & Spa")
         line("p", `Receipt #${receipt.transaction_id}`)
-        line("p", dateLabel(receipt.transaction_date))
+        line("p", dateLabel(receipt.transaction_date, receipt.historical_date_only))
         line("p", `Customer: ${receipt.customer}`)
+
         if (receipt.appointment_id) line("p", `Booking: #${receipt.appointment_id}`)
+
         line("p", `Item / service: ${receipt.service}`)
         line("p", `Quantity: ${receipt.quantity ?? 1}`)
         line("p", `Final sale total: ${money(receipt.amount)}`)
         line("p", `Deposit previously paid: ${money(receipt.deposit_applied)}`)
         line("p", `Balance collected: ${money(receipt.balance_collected)}`)
+
         if (Number(receipt.deposit_applied) > 0) {
             line("p", `Deposit method: ${receipt.deposit_payment_method}`)
         }
+
         if (Number(receipt.balance_collected) > 0) {
             line("p", `Balance payment method: ${receipt.payment}`)
         }
+
         line("p", `Status: ${receipt.status}`)
         line("p", "Thank you for visiting!")
 
@@ -475,6 +509,7 @@ function AdminTransactions() {
                 String(value ?? "").toLowerCase().includes(searchTerm),
             ),
         )
+
         const grouped = new Map()
 
         for (const row of matches) {
@@ -494,15 +529,18 @@ function AdminTransactions() {
                     depositPaid: 0,
                     services: new Set(),
                     latestVisit: row.transaction_date,
+                    latestVisitDateOnly: row.historical_date_only,
                 })
             }
 
             const record = grouped.get(key)
             record.transactions += 1
+
             if (row.status === "Paid") {
                 record.totalPaid += Number(row.amount || 0)
                 record.depositPaid += Number(row.deposit_applied || 0)
             }
+
             if (row.service) record.services.add(row.service)
 
             if (
@@ -510,6 +548,7 @@ function AdminTransactions() {
                 new Date(record.latestVisit).getTime()
             ) {
                 record.latestVisit = row.transaction_date
+                record.latestVisitDateOnly = row.historical_date_only
             }
         }
 
@@ -528,6 +567,7 @@ function AdminTransactions() {
                         Record a sale or check out an existing appointment.
                     </p>
                 </div>
+
                 <button disabled={loading || busy} onClick={() => load()} className={button}>
                     {loading ? "Refreshing…" : "Refresh"}
                 </button>
@@ -538,11 +578,13 @@ function AdminTransactions() {
                     {loadError} Use Refresh to try again.
                 </p>
             )}
+
             {error && (
                 <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
                     {error}
                 </p>
             )}
+
             {message && (
                 <p role="status" className="rounded-xl bg-green-50 p-4 text-green-800">
                     {message}
@@ -566,7 +608,9 @@ function AdminTransactions() {
 
             <div className="grid items-start gap-6 xl:grid-cols-2">
                 <section className={panel}>
-                    <h2 className="mb-5 text-lg font-bold text-purple-950">Record a transaction</h2>
+                    <h2 className="mb-5 text-lg font-bold text-purple-950">
+                        Record a transaction
+                    </h2>
 
                     <form onSubmit={save}>
                         <fieldset disabled={disabled} className="space-y-4">
@@ -594,6 +638,7 @@ function AdminTransactions() {
                                         onChange={selectAppointment}
                                         disabled={disabled}
                                     />
+
                                     <p className="text-xs text-gray-500">
                                         Search by name, contact, booking number, or service. Only
                                         approved/completed bookings without a transaction appear.
@@ -639,6 +684,8 @@ function AdminTransactions() {
                                                 setForm((previous) => ({
                                                     ...previous,
                                                     sale_type: event.target.value,
+                                                    historicalDate: "",
+                                                    payment: "Cash",
                                                     selectedId: "",
                                                     quantity: "1",
                                                     amount: "",
@@ -662,6 +709,32 @@ function AdminTransactions() {
                                         onChange={selectItem}
                                         disabled={disabled}
                                     />
+
+                                    {!productSale && (
+                                        <Field label="Historical sale date (optional)">
+                                            <input
+                                                type="date"
+                                                className={input}
+                                                max={philippineDate()}
+                                                value={form.historicalDate}
+                                                onChange={(event) =>
+                                                    setForm((previous) => ({
+                                                        ...previous,
+                                                        historicalDate: event.target.value,
+                                                        payment: event.target.value
+                                                            ? "Not recorded"
+                                                            : "Cash",
+                                                    }))
+                                                }
+                                            />
+                                            <span className="mt-1 block text-xs text-gray-500">
+                                                Leave blank for a sale made now. For an older
+                                                walk-in service, choose its original Philippine
+                                                date. The paper sheet has no exact time, so
+                                                history will display the date only.
+                                            </span>
+                                        </Field>
+                                    )}
 
                                     {productSale && (
                                         <Field label="Quantity">
@@ -709,10 +782,12 @@ function AdminTransactions() {
                                     <span>Final sale total</span>
                                     <strong>{money(form.amount)}</strong>
                                 </div>
+
                                 <div className="flex justify-between gap-3 text-emerald-700">
                                     <span>Verified deposit</span>
                                     <strong>− {money(deposit)}</strong>
                                 </div>
+
                                 <div className="flex justify-between gap-3 border-t border-gray-200 pt-3 text-lg font-bold text-purple-900">
                                     <span>Balance to collect</span>
                                     <span>{money(balanceCents / 100)}</span>
@@ -724,6 +799,7 @@ function AdminTransactions() {
                                     This deposit needs payment review before checkout.
                                 </p>
                             )}
+
                             {balanceCents < 0 && (
                                 <p className="text-sm text-red-700">
                                     The deposit exceeds the final bill. Resolve the excess before
@@ -740,6 +816,9 @@ function AdminTransactions() {
                                     >
                                         <option>Cash</option>
                                         <option>GCash</option>
+                                        {!booked && !productSale && form.historicalDate && (
+                                            <option>Not recorded</option>
+                                        )}
                                     </select>
                                 </Field>
                             )}
@@ -771,9 +850,10 @@ function AdminTransactions() {
                     ) : (
                         <div className="mt-5 space-y-4 text-sm">
                             <p className="font-bold text-purple-800">Dahling’s Salon & Spa</p>
+
                             <p className="text-gray-500">
                                 Receipt #{receipt.transaction_id} ·{" "}
-                                {dateLabel(receipt.transaction_date)}
+                                {dateLabel(receipt.transaction_date, receipt.historical_date_only)}
                             </p>
 
                             {[
@@ -820,6 +900,7 @@ function AdminTransactions() {
             <section className={panel}>
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
                     <h2 className="text-lg font-bold text-purple-950">Transaction history</h2>
+
                     <input
                         type="search"
                         aria-label="Search transaction history"
@@ -842,6 +923,7 @@ function AdminTransactions() {
                                     search.
                                 </p>
                             </div>
+
                             <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
                                 {customerRecords.length} customer match
                                 {customerRecords.length > 1 ? "es" : ""}
@@ -866,10 +948,14 @@ function AdminTransactions() {
                                                 Email: {record.email}
                                             </p>
                                         </div>
+
                                         <p className="text-right text-xs text-gray-500">
                                             Latest visit
                                             <span className="mt-1 block font-semibold text-gray-700">
-                                                {dateLabel(record.latestVisit)}
+                                                {dateLabel(
+                                                    record.latestVisit,
+                                                    record.latestVisitDateOnly,
+                                                )}
                                             </span>
                                         </p>
                                     </div>
@@ -881,12 +967,14 @@ function AdminTransactions() {
                                                 {record.transactions}
                                             </p>
                                         </div>
+
                                         <div>
                                             <p className="text-xs text-gray-500">Total paid</p>
                                             <p className="mt-1 font-bold text-purple-900">
                                                 {money(record.totalPaid)}
                                             </p>
                                         </div>
+
                                         <div>
                                             <p className="text-xs text-gray-500">Deposits</p>
                                             <p className="mt-1 font-bold text-emerald-700">
@@ -899,6 +987,7 @@ function AdminTransactions() {
                                         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                                             Services / items
                                         </p>
+
                                         <div className="mt-2 flex flex-wrap gap-2">
                                             {record.services.map((service) => (
                                                 <span
@@ -936,60 +1025,83 @@ function AdminTransactions() {
                                 ))}
                             </tr>
                         </thead>
+
                         <tbody className="divide-y divide-gray-100">
                             {filtered.map((row) => (
                                 <tr key={row.transaction_id} className="hover:bg-purple-50/40">
                                     <td className="px-3 py-4">
                                         <p className="font-semibold">{row.customer}</p>
+
                                         <p className="mt-1 text-xs text-gray-500">
-                                            {dateLabel(row.transaction_date)}
+                                            {dateLabel(
+                                                row.transaction_date,
+                                                row.historical_date_only,
+                                            )}
                                         </p>
+
                                         {row.appointment_id && (
                                             <p className="mt-1 text-xs text-purple-600">
                                                 Booking #{row.appointment_id}
                                             </p>
                                         )}
+
                                         {row.customer_contact && (
                                             <p className="mt-1 text-xs text-gray-500">
                                                 {row.customer_contact}
                                             </p>
                                         )}
+
                                         {row.customer_email && (
                                             <p className="mt-1 text-xs text-gray-500">
                                                 {row.customer_email}
                                             </p>
                                         )}
                                     </td>
+
                                     <td className="px-3 py-4">{row.service}</td>
+
                                     <td className="whitespace-nowrap px-3 py-4">
                                         {money(row.amount)}
                                     </td>
+
                                     <td className="whitespace-nowrap px-3 py-4 text-emerald-700">
                                         {money(row.deposit_applied)}
                                     </td>
+
                                     <td className="whitespace-nowrap px-3 py-4">
                                         {money(row.balance_collected)}
                                     </td>
+
                                     <td className="px-3 py-4 text-xs text-gray-600">
                                         {Number(row.deposit_applied) > 0 && (
                                             <p>
                                                 Deposit: {row.deposit_payment_method || "Recorded"}
                                             </p>
                                         )}
+
                                         {Number(row.balance_collected) > 0 ? (
-                                            <p className={Number(row.deposit_applied) > 0 ? "mt-1" : ""}>
+                                            <p
+                                                className={
+                                                    Number(row.deposit_applied) > 0 ? "mt-1" : ""
+                                                }
+                                            >
                                                 Balance: {row.payment}
                                             </p>
                                         ) : (
                                             <p>No additional payment</p>
                                         )}
                                     </td>
+
                                     <td className="px-3 py-4">{row.status}</td>
+
                                     <td className="px-3 py-4">
                                         <button
                                             onClick={() => {
                                                 setReceipt(row)
-                                                window.scrollTo({ top: 0, behavior: "smooth" })
+                                                window.scrollTo({
+                                                    top: 0,
+                                                    behavior: "smooth",
+                                                })
                                             }}
                                             className="rounded-lg bg-purple-50 px-3 py-2 font-semibold text-purple-700"
                                         >
@@ -998,6 +1110,7 @@ function AdminTransactions() {
                                     </td>
                                 </tr>
                             ))}
+
                             {!filtered.length && (
                                 <tr>
                                     <td colSpan={8} className="p-8 text-center text-gray-500">

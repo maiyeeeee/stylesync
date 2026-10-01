@@ -121,7 +121,10 @@ function validateQR(data) {
     if (!valid) throw fail("Invalid image file.")
     return data
 }
-module.exports = function installBookingPayments(api, { requireAdmin, requireOwner }) {
+module.exports = function installBookingPayments(
+    api,
+    { requireAdmin, requireTeamMember = requireAdmin, requireOwner },
+) {
     // This module is installed AFTER the existing session, authentication and CSRF checks.
     let sweeping = false
     const sweep = async () => {
@@ -365,7 +368,7 @@ module.exports = function installBookingPayments(api, { requireAdmin, requireOwn
 
     api.get(
         "/booking-payments/review",
-        requireAdmin,
+        requireTeamMember,
         wrap(async (req, res) => {
             await expireReservations()
             const [rows] =
@@ -381,7 +384,7 @@ module.exports = function installBookingPayments(api, { requireAdmin, requireOwn
     )
     api.post(
         "/booking-payments/review/:id",
-        requireAdmin,
+        requireTeamMember,
         wrap(async (req, res) => {
             const action = req.body?.action
             if (!["verify", "reject"].includes(action)) throw fail("Invalid review action.")
@@ -470,7 +473,7 @@ module.exports = function installBookingPayments(api, { requireAdmin, requireOwn
     // Keep unpaid holds out of the ordinary owner/staff appointment list.
     api.get(
         "/appointments",
-        requireAdmin,
+        requireTeamMember,
         wrap(async (req, res) => {
             await expireReservations()
             const [rows] =
@@ -483,7 +486,7 @@ module.exports = function installBookingPayments(api, { requireAdmin, requireOwn
             res.json(rows)
         }),
     )
-    api.put("/appointments/:id/status", requireAdmin, async (req, res, next) => {
+    api.put("/appointments/:id/status", requireTeamMember, async (req, res, next) => {
         try {
             const [rows] = await pool.query(
                 "SELECT payment_status FROM booking_deposits WHERE appointment_id = ?",

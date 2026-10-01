@@ -238,7 +238,7 @@ function AdminInventory() {
 
     const availableProductCount = products.filter((product) => Number(product.stock) > 0).length
 
-    const totalUnitsAvailable = products.reduce(
+    const totalQuantityAvailable = products.reduce(
         (total, product) => total + Math.max(0, Number(product.stock) || 0),
         0,
     )
@@ -265,8 +265,8 @@ function AdminInventory() {
             color: "text-emerald-700",
         },
         {
-            label: "Total units available",
-            value: totalUnitsAvailable.toLocaleString("en-PH"),
+            label: "Total quantity available",
+            value: totalQuantityAvailable.toLocaleString("en-PH"),
             note: "Combined remaining quantity of all products",
             color: "text-purple-800",
         },
@@ -552,7 +552,7 @@ function AdminInventory() {
                                                 </p>
                                             </td>
                                             <td className="px-4 py-4 text-right font-semibold tabular-nums text-gray-800">
-                                                {Number(product.stock).toLocaleString("en-PH")} units
+                                                {Number(product.stock).toLocaleString("en-PH")}
                                             </td>
                                             <td className="px-4 py-4 text-right tabular-nums text-gray-500">
                                                 {Number(product.alertLevel).toLocaleString("en-PH")}

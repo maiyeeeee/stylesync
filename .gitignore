@@ -1,47 +1,35 @@
+# Dependencies
 node_modules/
 client/node_modules/
+
+# Environment files
 .env
 client/.env
-backups/
-server/uploads/
-client/dist/
-*.log
-# Environment files; allow placeholder examples
 .env.*
-.env
 !.env.example
 !.env.*.example
 
-# Uploads and payment assets
-uploads/
-server/payment-assets/
+# Build output
+dist/
+client/dist/
 
-# Old update packages and backups
+# Backups
+backups/
 payment-update/
 payment-backups/
+
+# Uploads and generated assets
+uploads/
+server/uploads/
+server/payment-assets/
+
+# Logs
+*.log
 
 # Compressed backups
 *.zip
 *.7z
 *.rar
 
-# SQL files: review before sharing
-*.sql
-# Environment files; keep placeholder examples
-.env.*
-!.env.example
-!.env.*.example
-
-# Uploads and payment assets
-uploads/
-server/payment-assets/
-
-# Update packages and backups
-payment-update/
-payment-backups/
-*.zip
-*.7z
-*.rar
-
-# Review database scripts before sharing
+# SQL dumps
 *.sql

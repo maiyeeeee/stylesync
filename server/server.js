@@ -160,6 +160,18 @@ function requireAdmin(req, res, next) {
     })
 }
 
+function requireTeamMember(req, res, next) {
+    return requireUser(req, res, () => {
+        if (!["owner", "admin", "user"].includes(req.user.role)) {
+            return res.status(403).json({
+                error: "Team member access is required.",
+            })
+        }
+
+        next()
+    })
+}
+
 function requireOwner(req, res, next) {
     return requireUser(req, res, () => {
         if (req.user.role !== "owner") {
@@ -179,6 +191,7 @@ app.locals.auth = {
     getSessionPayload,
     requireUser,
     requireAdmin,
+    requireTeamMember,
     requireOwner,
 }
 
@@ -353,11 +366,14 @@ api.use("/auth/register", requireOwner)
 api.use("/auth/users", requireOwner)
 api.use("/auth", require("./routes/passwordResetRoutes"))
 api.use("/auth", authRoutes)
-api.use("/auth", authRoutes)
 
 // Visitors can browse services without logging in.
 // Only administrators can add, edit, or delete them.
-require("./routes/bookingPaymentRoutes")(api, { requireAdmin, requireOwner })
+require("./routes/bookingPaymentRoutes")(api, {
+    requireAdmin,
+    requireTeamMember,
+    requireOwner,
+})
 
 api.use(
     "/services",
@@ -390,14 +406,14 @@ api.use(
             return next()
         }
 
-        return requireAdmin(req, res, next)
+        return requireTeamMember(req, res, next)
     },
     appointmentRoutes,
 )
 
 api.use("/staff", requireAdmin, staffRoutes)
-api.use("/inventory", requireAdmin, inventoryRoutes)
-api.use("/transactions", requireAdmin, transactionRoutes)
+api.use("/inventory", requireTeamMember, inventoryRoutes)
+api.use("/transactions", requireTeamMember, transactionRoutes)
 api.use("/recommendations", requireAdmin, recommendationRoutes)
 api.use("/dashboard", requireAdmin, dashboardRoutes)
 api.use("/reports", requireAdmin, reportRoutes)

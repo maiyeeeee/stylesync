@@ -79,7 +79,7 @@ router.post("/login", loginLimiter, async (req, res, next) => {
 
         const passwordMatches = await bcrypt.compare(password, user?.password || dummyPasswordHash)
 
-        if (!user || !passwordMatches || !["owner", "admin"].includes(user.role)) {
+        if (!user || !passwordMatches || !["owner", "admin", "user"].includes(user.role)) {
             return res.status(401).json({
                 error: "Incorrect username/email or password.",
             })
@@ -121,7 +121,7 @@ router.post("/login", loginLimiter, async (req, res, next) => {
         return res.json({
             ...payload,
             message: "Login successful.",
-            redirectTo: "/admin",
+            redirectTo: user.role === "user" ? "/admin/appointments" : "/admin",
         })
     } catch (error) {
         next(error)
@@ -140,7 +140,7 @@ async function createAccount(req, res, next, managedByOwner) {
         const password = typeof body.password === "string" ? body.password : ""
 
         // Public registration cannot grant owner privileges or Active status.
-        const role = managedByOwner ? body.role : "admin"
+        const role = managedByOwner ? body.role : "user"
         const accountStatus = managedByOwner ? "Active" : "Pending"
 
         if (!/^[A-Za-z0-9_.-]{3,50}$/.test(username)) {
@@ -303,7 +303,7 @@ router.patch("/users/:id/approval", requireOwner, async (req, res, next) => {
             `UPDATE users
          SET account_status = ?
          WHERE user_id = ?
-           AND role = 'admin'
+           AND role = 'user'
            AND account_status = 'Pending'`,
             [decision === "approve" ? "Active" : "Rejected", id],
         )
