@@ -189,7 +189,7 @@ module.exports = function installBookingPayments(
             try {
                 await tx(async (conn) => {
                     const [settings] = await conn.query(
-                        "SELECT * FROM booking_payment_settings WHERE id = 1 FOR SHARE",
+                        "SELECT * FROM booking_payment_settings WHERE id = 1",
                     )
                     const setting = settings[0]
                     if (!setting || !setting.enabled || !setting.qr_data)
