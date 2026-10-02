@@ -824,4 +824,31 @@ router.put("/:id/assign", async (req, res) => {
     }
 })
 
+router.delete("/:id", async (req, res) => {
+    try {
+        const [result] =
+            await promiseDb.query(
+                `DELETE FROM appointments
+                 WHERE id = ?`,
+                [
+                    Number(
+                        req.params.id,
+                    ),
+                ],
+            )
+
+        res.json({
+            message:
+                "Appointment deleted successfully",
+
+            affectedRows:
+                result.affectedRows,
+        })
+    } catch (error) {
+        res.status(500).json({
+            error: error.message,
+        })
+    }
+})
+
 module.exports = router
