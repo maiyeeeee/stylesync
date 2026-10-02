@@ -30,6 +30,7 @@ import {
     LuChevronRight,
     LuChevronsUpDown,
     LuArrowUpRight,
+    LuBell,
 } from "react-icons/lu"
 
 import Brand from "./Brand"
@@ -53,17 +54,20 @@ import {
 const menuGroups = [
     {
         title: "Workspace",
+
         items: [
             [
                 "Dashboard",
                 "/admin",
                 LuLayoutDashboard,
             ],
+
             [
                 "Appointments",
                 "/admin/appointments",
                 LuCalendarDays,
             ],
+
             [
                 "Payment review",
                 "/admin/payment-review",
@@ -71,24 +75,29 @@ const menuGroups = [
             ],
         ],
     },
+
     {
         title: "Salon management",
+
         items: [
             [
                 "Staff",
                 "/admin/staff",
                 LuUsers,
             ],
+
             [
                 "Services",
                 "/admin/services",
                 LuScissors,
             ],
+
             [
                 "Transactions",
                 "/admin/transactions",
                 LuCreditCard,
             ],
+
             [
                 "Inventory",
                 "/admin/inventory",
@@ -96,19 +105,23 @@ const menuGroups = [
             ],
         ],
     },
+
     {
         title: "Insights",
+
         items: [
             [
                 "Reports",
                 "/admin/reports",
                 LuChartNoAxesCombined,
             ],
+
             [
                 "GAD",
                 "/admin/gad",
                 LuHeartHandshake,
             ],
+
             [
                 "Recommendations",
                 "/admin/recommendations",
@@ -116,8 +129,10 @@ const menuGroups = [
             ],
         ],
     },
+
     {
         title: "Tools",
+
         items: [
             [
                 "Emergency mode",
@@ -133,6 +148,11 @@ const allItems =
         (group) => group.items,
     )
 
+/*
+ * Staff can still VIEW Inventory.
+ * We will enforce add/edit/delete permissions
+ * separately in AdminInventory.jsx and server.js.
+ */
 const staffPaths = new Set([
     "/admin/appointments",
     "/admin/payment-review",
@@ -142,8 +162,17 @@ const staffPaths = new Set([
     "/admin/emergency",
 ])
 
+function notificationLabel(count) {
+    if (count > 99) {
+        return "99+"
+    }
+
+    return String(count)
+}
+
 function Sidebar({
     user,
+    appointmentCount,
     onNavigate,
     handleLogout,
     loggingOut,
@@ -159,33 +188,34 @@ function Sidebar({
             ? "/admin/appointments"
             : "/admin"
 
-    const visibleMenuGroups = user
-        ? menuGroups
-              .map((group) => ({
-                  ...group,
+    const visibleMenuGroups =
+        user
+            ? menuGroups
+                  .map((group) => ({
+                      ...group,
 
-                  items:
-                      user.role ===
-                      "user"
-                          ? group.items.filter(
-                                (
-                                    [
-                                        ,
-                                        path,
-                                    ],
-                                ) =>
-                                    staffPaths.has(
-                                        path,
-                                    ),
-                            )
-                          : group.items,
-              }))
-              .filter(
-                  (group) =>
-                      group.items
-                          .length > 0,
-              )
-        : []
+                      items:
+                          user.role ===
+                          "user"
+                              ? group.items.filter(
+                                    (
+                                        [
+                                            ,
+                                            path,
+                                        ],
+                                    ) =>
+                                        staffPaths.has(
+                                            path,
+                                        ),
+                                )
+                              : group.items,
+                  }))
+                  .filter(
+                      (group) =>
+                          group.items
+                              .length > 0,
+                  )
+            : []
 
     return (
         <>
@@ -231,46 +261,65 @@ function Sidebar({
                                             path,
                                             Icon,
                                         ],
-                                    ) => (
-                                        <li
-                                            key={
-                                                path
-                                            }
-                                        >
-                                            <NavLink
-                                                to={
+                                    ) => {
+                                        const showAppointmentBadge =
+                                            path ===
+                                                "/admin/appointments" &&
+                                            appointmentCount >
+                                                0
+
+                                        return (
+                                            <li
+                                                key={
                                                     path
                                                 }
-                                                end={
-                                                    path ===
-                                                    "/admin"
-                                                }
-                                                onClick={
-                                                    onNavigate
-                                                }
-                                                className={({
-                                                    isActive,
-                                                }) =>
-                                                    `admin-nav-link ${
-                                                        isActive
-                                                            ? "active"
-                                                            : ""
-                                                    }`
-                                                }
                                             >
-                                                <Icon
-                                                    className="size-[17px] shrink-0"
-                                                    aria-hidden="true"
-                                                />
-
-                                                <span>
-                                                    {
-                                                        label
+                                                <NavLink
+                                                    to={
+                                                        path
                                                     }
-                                                </span>
-                                            </NavLink>
-                                        </li>
-                                    ),
+                                                    end={
+                                                        path ===
+                                                        "/admin"
+                                                    }
+                                                    onClick={
+                                                        onNavigate
+                                                    }
+                                                    className={({
+                                                        isActive,
+                                                    }) =>
+                                                        `admin-nav-link ${
+                                                            isActive
+                                                                ? "active"
+                                                                : ""
+                                                        }`
+                                                    }
+                                                >
+                                                    <Icon
+                                                        className="size-[17px] shrink-0"
+                                                        aria-hidden="true"
+                                                    />
+
+                                                    <span className="min-w-0 flex-1">
+                                                        {
+                                                            label
+                                                        }
+                                                    </span>
+
+                                                    {showAppointmentBadge && (
+                                                        <span
+                                                            className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+                                                            aria-label={`${appointmentCount} pending appointment requests`}
+                                                        >
+                                                            {notificationLabel(
+                                                                appointmentCount,
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                </NavLink>
+                                            </li>
+                                        )
+                                    },
                                 )}
                             </ul>
                         </section>
@@ -392,11 +441,20 @@ function Sidebar({
 export default function AdminLayout({
     children,
 }) {
-    const [isOpen, setIsOpen] =
-        useState(false)
+    const [
+        isOpen,
+        setIsOpen,
+    ] = useState(false)
 
-    const [user, setUser] =
-        useState(null)
+    const [
+        user,
+        setUser,
+    ] = useState(null)
+
+    const [
+        appointmentCount,
+        setAppointmentCount,
+    ] = useState(0)
 
     const [
         loggingOut,
@@ -435,6 +493,10 @@ export default function AdminLayout({
         }[location.pathname] ||
         "Workspace"
 
+    /*
+     * Load the currently authenticated
+     * team member.
+     */
     useEffect(() => {
         const controller =
             new AbortController()
@@ -469,13 +531,245 @@ export default function AdminLayout({
                 }
             })
             .catch(() => {
-                // ProtectedRoutes
-                // verifies the session.
+                /*
+                 * ProtectedRoutes already
+                 * verifies the session.
+                 */
             })
 
         return () =>
             controller.abort()
     }, [])
+
+    /*
+     * Appointment notification.
+     *
+     * Counts appointments that still require
+     * payment verification or appointment review.
+     *
+     * Refreshes every 15 seconds while the
+     * admin workspace is open.
+     */
+    useEffect(() => {
+        if (!user) {
+            return
+        }
+
+        let active = true
+        let running = false
+
+        const controller =
+            new AbortController()
+
+        async function refreshAppointmentCount() {
+            if (
+                running ||
+                !active
+            ) {
+                return
+            }
+
+            running = true
+
+            try {
+                const response =
+                    await fetch(
+                        `${API_URL}/appointments`,
+                        {
+                            credentials:
+                                "include",
+
+                            cache:
+                                "no-store",
+
+                            signal:
+                                controller.signal,
+                        },
+                    )
+
+                if (!response.ok) {
+                    return
+                }
+
+                const rows =
+                    await response
+                        .json()
+                        .catch(
+                            () =>
+                                null,
+                        )
+
+                if (
+                    !active ||
+                    !Array.isArray(
+                        rows,
+                    )
+                ) {
+                    return
+                }
+
+                const pending =
+                    rows.filter(
+                        (
+                            appointment,
+                        ) =>
+                            [
+                                "Pending",
+                                "Pending Validation",
+                            ].includes(
+                                appointment.status,
+                            ),
+                    ).length
+
+                setAppointmentCount(
+                    pending,
+                )
+            } catch (error) {
+                if (
+                    error?.name !==
+                    "AbortError"
+                ) {
+                    /*
+                     * Notification polling should
+                     * never interrupt the workspace.
+                     */
+                }
+            } finally {
+                running = false
+            }
+        }
+
+        refreshAppointmentCount()
+
+        const timer =
+            window.setInterval(
+                refreshAppointmentCount,
+                15000,
+            )
+
+        /*
+         * Also refresh when the browser/tab
+         * becomes active again.
+         */
+        function handleFocus() {
+            refreshAppointmentCount()
+        }
+
+        window.addEventListener(
+            "focus",
+            handleFocus,
+        )
+
+        return () => {
+            active = false
+
+            controller.abort()
+
+            window.clearInterval(
+                timer,
+            )
+
+            window.removeEventListener(
+                "focus",
+                handleFocus,
+            )
+        }
+    }, [user])
+
+    /*
+     * Immediately refresh the notification
+     * after navigating around the admin app.
+     *
+     * This is useful after approving,
+     * declining or reviewing an appointment.
+     */
+    useEffect(() => {
+        if (!user) {
+            return
+        }
+
+        const controller =
+            new AbortController()
+
+        const timer =
+            window.setTimeout(
+                async () => {
+                    try {
+                        const response =
+                            await fetch(
+                                `${API_URL}/appointments`,
+                                {
+                                    credentials:
+                                        "include",
+
+                                    cache:
+                                        "no-store",
+
+                                    signal:
+                                        controller.signal,
+                                },
+                            )
+
+                        if (
+                            !response.ok
+                        ) {
+                            return
+                        }
+
+                        const rows =
+                            await response
+                                .json()
+                                .catch(
+                                    () =>
+                                        null,
+                                )
+
+                        if (
+                            !Array.isArray(
+                                rows,
+                            )
+                        ) {
+                            return
+                        }
+
+                        setAppointmentCount(
+                            rows.filter(
+                                (
+                                    appointment,
+                                ) =>
+                                    [
+                                        "Pending",
+                                        "Pending Validation",
+                                    ].includes(
+                                        appointment.status,
+                                    ),
+                            ).length,
+                        )
+                    } catch (
+                        error
+                    ) {
+                        if (
+                            error?.name !==
+                            "AbortError"
+                        ) {
+                            // Silent notification refresh.
+                        }
+                    }
+                },
+                400,
+            )
+
+        return () => {
+            controller.abort()
+
+            window.clearTimeout(
+                timer,
+            )
+        }
+    }, [
+        location.pathname,
+        user,
+    ])
 
     function finishLogout() {
         try {
@@ -488,8 +782,10 @@ export default function AdminLayout({
                 String(Date.now()),
             )
         } catch {
-            // Navigation does not
-            // depend on browser storage.
+            /*
+             * Navigation does not depend
+             * on browser storage.
+             */
         }
 
         window.dispatchEvent(
@@ -509,11 +805,14 @@ export default function AdminLayout({
     }
 
     async function handleLogout() {
-        if (logoutLock.current) {
+        if (
+            logoutLock.current
+        ) {
             return
         }
 
-        logoutLock.current = true
+        logoutLock.current =
+            true
 
         setLoggingOut(true)
         setLogoutError("")
@@ -526,7 +825,8 @@ export default function AdminLayout({
                         credentials:
                             "include",
 
-                        cache: "no-store",
+                        cache:
+                            "no-store",
                     },
                 )
 
@@ -558,12 +858,14 @@ export default function AdminLayout({
                 await fetch(
                     `${API_URL}/auth/logout`,
                     {
-                        method: "POST",
+                        method:
+                            "POST",
 
                         credentials:
                             "include",
 
-                        cache: "no-store",
+                        cache:
+                            "no-store",
 
                         headers: {
                             "X-CSRF-Token":
@@ -600,8 +902,13 @@ export default function AdminLayout({
 
     const sidebarProps = {
         user,
+
+        appointmentCount,
+
         handleLogout,
+
         loggingOut,
+
         logoutError,
 
         onNavigate: () =>
@@ -686,14 +993,48 @@ export default function AdminLayout({
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4">
+                        <Link
+                            to="/admin/appointments"
+                            className="relative inline-flex size-9 items-center justify-center rounded-lg border border-border bg-white text-gray-600 transition hover:bg-purple-50 hover:text-purple-800"
+                            aria-label={
+                                appointmentCount >
+                                0
+                                    ? `${appointmentCount} pending appointment requests`
+                                    : "No pending appointment requests"
+                            }
+                            title={
+                                appointmentCount >
+                                0
+                                    ? `${appointmentCount} pending appointment requests`
+                                    : "No pending appointment requests"
+                            }
+                        >
+                            <LuBell className="size-4" />
+
+                            {appointmentCount >
+                                0 && (
+                                <span className="absolute -right-2 -top-2 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-1 text-[9px] font-bold leading-none text-white">
+                                    {notificationLabel(
+                                        appointmentCount,
+                                    )}
+                                </span>
+                            )}
+                        </Link>
+
                         <span className="admin-topbar-date">
                             {new Date().toLocaleDateString(
                                 "en-PH",
                                 {
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
+                                    month:
+                                        "short",
+
+                                    day:
+                                        "numeric",
+
+                                    year:
+                                        "numeric",
+
                                     timeZone:
                                         "Asia/Manila",
                                 },

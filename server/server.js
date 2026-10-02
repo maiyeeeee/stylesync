@@ -412,7 +412,39 @@ api.use(
 )
 
 api.use("/staff", requireAdmin, staffRoutes)
-api.use("/inventory", requireTeamMember, inventoryRoutes)
+api.use(
+    "/inventory",
+    (req, res, next) => {
+        /*
+         * Staff/admin/owner can view inventory.
+         */
+        if (
+            ["GET", "HEAD"].includes(
+                req.method,
+            )
+        ) {
+            return requireTeamMember(
+                req,
+                res,
+                next,
+            )
+        }
+
+        /*
+         * Only admin/owner can:
+         * - add products
+         * - edit products
+         * - delete products
+         * - adjust stock manually
+         */
+        return requireAdmin(
+            req,
+            res,
+            next,
+        )
+    },
+    inventoryRoutes,
+)
 api.use("/transactions", requireTeamMember, transactionRoutes)
 api.use("/recommendations", requireAdmin, recommendationRoutes)
 api.use("/dashboard", requireAdmin, dashboardRoutes)

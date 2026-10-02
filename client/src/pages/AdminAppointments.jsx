@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+
 import { API_URL, apiFetch } from "../lib/sessionApi"
 
 const controlClass =
@@ -62,6 +63,7 @@ function AdminAppointments() {
     const [error, setError] = useState("")
     const [message, setMessage] = useState("")
     const [busy, setBusy] = useState(false)
+
     const [declineTarget, setDeclineTarget] = useState(null)
     const [declineForm, setDeclineForm] = useState({
         reason: "",
@@ -79,7 +81,9 @@ function AdminAppointments() {
         setLoadError("")
 
         try {
-            const response = await apiFetch(`${API_URL}/appointments`, { signal })
+            const response = await apiFetch(`${API_URL}/appointments`, {
+                signal,
+            })
 
             const data = await response.json().catch(() => null)
 
@@ -95,7 +99,8 @@ function AdminAppointments() {
         } catch (requestError) {
             if (!signal?.aborted && sequence === loadSequence.current) {
                 setLoadError(
-                    requestError.message || "Unable to load appointments. Please try again.",
+                    requestError.message ||
+                        "Unable to load appointments. Please try again.",
                 )
             }
         } finally {
@@ -107,6 +112,7 @@ function AdminAppointments() {
 
     useEffect(() => {
         const controller = new AbortController()
+
         fetchAppointments(controller.signal)
 
         return () => controller.abort()
@@ -118,12 +124,14 @@ function AdminAppointments() {
         if (mutationLock.current || blocked) return
 
         mutationLock.current = true
+
         setBusy(true)
         setError("")
         setMessage("")
 
         try {
             const response = await apiFetch(url, options)
+
             const data = await response.json().catch(() => null)
 
             if (!response.ok) {
@@ -131,10 +139,16 @@ function AdminAppointments() {
             }
 
             setMessage(successMessage)
+
             await fetchAppointments()
+
             return true
         } catch (requestError) {
-            setError(requestError.message || "Unable to save this change. Please try again.")
+            setError(
+                requestError.message ||
+                    "Unable to save this change. Please try again.",
+            )
+
             return false
         } finally {
             mutationLock.current = false
@@ -147,8 +161,13 @@ function AdminAppointments() {
             `${API_URL}/appointments/${id}/status`,
             {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status, ...details }),
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    status,
+                    ...details,
+                }),
             },
             "Appointment status updated.",
         )
@@ -157,12 +176,18 @@ function AdminAppointments() {
     function openDecline(appointment) {
         setError("")
         setMessage("")
+
         setDeclineTarget(appointment)
+
         setDeclineForm({
-            reason: appointment.decline_reason || "Selected schedule is unavailable.",
+            reason:
+                appointment.decline_reason ||
+                "Selected schedule is unavailable.",
+
             suggestedDate: appointment.suggested_date
                 ? String(appointment.suggested_date).slice(0, 10)
                 : "",
+
             suggestedTime: appointment.suggested_time
                 ? String(appointment.suggested_time).slice(0, 5)
                 : "",
@@ -171,42 +196,44 @@ function AdminAppointments() {
 
     async function submitDecline(event) {
         event.preventDefault()
-        if (!declineTarget || blocked || mutationLock.current) return
 
-        const reason = declineForm.reason.trim()
-        if (!reason || !declineForm.suggestedDate || !declineForm.suggestedTime) {
-            setError("Enter a decline reason and a suggested alternative date and time.")
+        if (!declineTarget || blocked || mutationLock.current) {
             return
         }
 
-        const saved = await updateStatus(getAppointmentId(declineTarget), "Declined", {
-            decline_reason: reason,
-            suggested_date: declineForm.suggestedDate,
-            suggested_time: declineForm.suggestedTime,
-        })
+        const reason = declineForm.reason.trim()
+
+        if (
+            !reason ||
+            !declineForm.suggestedDate ||
+            !declineForm.suggestedTime
+        ) {
+            setError(
+                "Enter a decline reason and a suggested alternative date and time.",
+            )
+
+            return
+        }
+
+        const saved = await updateStatus(
+            getAppointmentId(declineTarget),
+            "Declined",
+            {
+                decline_reason: reason,
+                suggested_date: declineForm.suggestedDate,
+                suggested_time: declineForm.suggestedTime,
+            },
+        )
 
         if (saved) {
             setDeclineTarget(null)
-            setDeclineForm({ reason: "", suggestedDate: "", suggestedTime: "" })
+
+            setDeclineForm({
+                reason: "",
+                suggestedDate: "",
+                suggestedTime: "",
+            })
         }
-    }
-
-    function deleteAppointment(appointment) {
-        if (blocked || mutationLock.current) return
-
-        const confirmed = window.confirm(
-            `Delete the appointment for ${
-                appointment.customer_name || "this customer"
-            }? This cannot be undone.`,
-        )
-
-        if (!confirmed) return
-
-        return mutate(
-            `${API_URL}/appointments/${getAppointmentId(appointment)}`,
-            { method: "DELETE" },
-            "Appointment deleted.",
-        )
     }
 
     const filteredAppointments = appointments.filter((item) => {
@@ -239,9 +266,14 @@ function AdminAppointments() {
             "Declined",
             "Cancelled",
             "Completed",
+
             ...appointments
                 .map((item) => item.status)
-                .filter((status) => Boolean(status) && status !== "Pending Validation"),
+                .filter(
+                    (status) =>
+                        Boolean(status) &&
+                        status !== "Pending Validation",
+                ),
         ]),
     ]
 
@@ -251,6 +283,7 @@ function AdminAppointments() {
             value: appointments.length,
             color: "text-purple-800",
         },
+
         {
             title: "Pending review",
             value: appointments.filter((item) =>
@@ -258,14 +291,20 @@ function AdminAppointments() {
             ).length,
             color: "text-amber-700",
         },
+
         {
             title: "Approved",
-            value: appointments.filter((item) => item.status === "Approved").length,
+            value: appointments.filter(
+                (item) => item.status === "Approved",
+            ).length,
             color: "text-green-700",
         },
+
         {
             title: "Declined",
-            value: appointments.filter((item) => item.status === "Declined").length,
+            value: appointments.filter(
+                (item) => item.status === "Declined",
+            ).length,
             color: "text-red-700",
         },
     ]
@@ -283,7 +322,8 @@ function AdminAppointments() {
                     </h2>
 
                     <p className="mt-2 text-sm leading-relaxed text-gray-500">
-                        Review assigned staff and the complete service interval before approval.
+                        Review assigned staff and the complete service interval
+                        before approval.
                     </p>
                 </div>
 
@@ -298,7 +338,10 @@ function AdminAppointments() {
             </header>
 
             {loadError && (
-                <div role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800">
+                <div
+                    role="alert"
+                    className="rounded-xl bg-red-50 p-4 text-sm text-red-800"
+                >
                     {loadError}
 
                     <button
@@ -313,13 +356,19 @@ function AdminAppointments() {
             )}
 
             {error && (
-                <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-800">
+                <p
+                    role="alert"
+                    className="rounded-xl bg-red-50 p-4 text-sm text-red-800"
+                >
                     {error}
                 </p>
             )}
 
             {message && (
-                <p role="status" className="rounded-xl bg-green-50 p-4 text-sm text-green-800">
+                <p
+                    role="status"
+                    className="rounded-xl bg-green-50 p-4 text-sm text-green-800"
+                >
                     {message}
                 </p>
             )}
@@ -334,17 +383,21 @@ function AdminAppointments() {
                             <p className="text-xs font-semibold uppercase tracking-widest text-red-600">
                                 Decline appointment
                             </p>
+
                             <h3
                                 id="decline-appointment-title"
                                 className="mt-2 text-xl font-bold text-purple-950"
                             >
-                                {declineTarget.customer_name} — {declineTarget.service}
+                                {declineTarget.customer_name} —{" "}
+                                {declineTarget.service}
                             </h3>
+
                             <p className="mt-1 text-sm text-gray-500">
-                                Explain why the request cannot be accepted and provide another
-                                schedule the client may book.
+                                Explain why the request cannot be accepted and
+                                provide another schedule the client may book.
                             </p>
                         </div>
+
                         <button
                             type="button"
                             disabled={busy}
@@ -355,9 +408,13 @@ function AdminAppointments() {
                         </button>
                     </div>
 
-                    <form onSubmit={submitDecline} className="mt-5 grid gap-4 md:grid-cols-2">
+                    <form
+                        onSubmit={submitDecline}
+                        className="mt-5 grid gap-4 md:grid-cols-2"
+                    >
                         <label className="text-sm font-medium text-purple-950 md:col-span-2">
                             Reason for declining
+
                             <textarea
                                 required
                                 maxLength={500}
@@ -375,6 +432,7 @@ function AdminAppointments() {
 
                         <label className="text-sm font-medium text-purple-950">
                             Suggested alternative date
+
                             <input
                                 required
                                 type="date"
@@ -392,6 +450,7 @@ function AdminAppointments() {
 
                         <label className="text-sm font-medium text-purple-950">
                             Suggested alternative time
+
                             <input
                                 required
                                 type="time"
@@ -412,8 +471,11 @@ function AdminAppointments() {
                                 disabled={busy}
                                 className={`${actionClass} border-red-600 bg-red-600 px-4 text-white hover:bg-red-700`}
                             >
-                                {busy ? "Saving…" : "Decline and send suggestion"}
+                                {busy
+                                    ? "Saving…"
+                                    : "Decline and send suggestion"}
                             </button>
+
                             <button
                                 type="button"
                                 disabled={busy}
@@ -433,13 +495,19 @@ function AdminAppointments() {
                         key={card.title}
                         className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm"
                     >
-                        <p className="text-sm text-gray-500">{card.title}</p>
+                        <p className="text-sm text-gray-500">
+                            {card.title}
+                        </p>
 
-                        <p className={`mt-2 text-3xl font-bold ${card.color}`}>
+                        <p
+                            className={`mt-2 text-3xl font-bold ${card.color}`}
+                        >
                             {loading || loadError ? "—" : card.value}
                         </p>
 
-                        <p className="mt-2 text-xs text-gray-400">All dates</p>
+                        <p className="mt-2 text-xs text-gray-400">
+                            All dates
+                        </p>
                     </div>
                 ))}
             </div>
@@ -447,7 +515,9 @@ function AdminAppointments() {
             <section className="min-w-0 overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-4 p-5 md:p-6">
                     <div>
-                        <h3 className="text-lg font-bold text-purple-950">Appointment requests</h3>
+                        <h3 className="text-lg font-bold text-purple-950">
+                            Appointment requests
+                        </h3>
 
                         <p className="mt-1 text-xs text-gray-500">
                             {loading
@@ -460,29 +530,42 @@ function AdminAppointments() {
 
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                         <label>
-                            <span className="sr-only">Search appointments</span>
+                            <span className="sr-only">
+                                Search appointments
+                            </span>
 
                             <input
                                 type="search"
                                 value={search}
-                                onChange={(event) => setSearch(event.target.value)}
+                                onChange={(event) =>
+                                    setSearch(event.target.value)
+                                }
                                 placeholder="Customer, service, or staff…"
                                 className={`${controlClass} w-full sm:w-64`}
                             />
                         </label>
 
                         <label>
-                            <span className="sr-only">Filter by status</span>
+                            <span className="sr-only">
+                                Filter by status
+                            </span>
 
                             <select
                                 value={statusFilter}
-                                onChange={(event) => setStatusFilter(event.target.value)}
+                                onChange={(event) =>
+                                    setStatusFilter(event.target.value)
+                                }
                                 className={`${controlClass} w-full`}
                             >
-                                <option value="All">All statuses</option>
+                                <option value="All">
+                                    All statuses
+                                </option>
 
                                 {statuses.map((status) => (
-                                    <option key={status} value={status}>
+                                    <option
+                                        key={status}
+                                        value={status}
+                                    >
                                         {status}
                                     </option>
                                 ))}
@@ -536,12 +619,12 @@ function AdminAppointments() {
                                 </tr>
                             ) : (
                                 filteredAppointments.map((appointment) => {
-                                    const id = getAppointmentId(appointment)
+                                    const id =
+                                        getAppointmentId(appointment)
 
-                                    const start = String(appointment.appointment_time || "").slice(
-                                        0,
-                                        5,
-                                    )
+                                    const start = String(
+                                        appointment.appointment_time || "",
+                                    ).slice(0, 5)
 
                                     const end = String(
                                         appointment.appointment_end_time || "",
@@ -558,7 +641,8 @@ function AdminAppointments() {
                                                 </p>
 
                                                 <p className="mt-1 whitespace-nowrap text-xs text-gray-500">
-                                                    {appointment.contact_number || "No contact"}
+                                                    {appointment.contact_number ||
+                                                        "No contact"}
                                                 </p>
                                             </td>
 
@@ -568,16 +652,20 @@ function AdminAppointments() {
 
                                             <td className="whitespace-nowrap px-5 py-4 align-middle">
                                                 <p className="font-medium text-gray-800">
-                                                    {formatDate(appointment.appointment_date)}
+                                                    {formatDate(
+                                                        appointment.appointment_date,
+                                                    )}
                                                 </p>
 
                                                 <p className="mt-1 text-xs text-gray-500">
-                                                    {start || "N/A"}–{end || "N/A"}
+                                                    {start || "N/A"}–
+                                                    {end || "N/A"}
                                                 </p>
                                             </td>
 
                                             <td className="px-5 py-4 align-middle text-gray-700">
-                                                {appointment.staff_name || "Unassigned / legacy"}
+                                                {appointment.staff_name ||
+                                                    "Unassigned / legacy"}
                                             </td>
 
                                             <td className="px-5 py-4 align-middle">
@@ -586,21 +674,34 @@ function AdminAppointments() {
                                                         appointment.status,
                                                     )}`}
                                                 >
-                                                    {appointment.status || "Unspecified"}
+                                                    {appointment.status ||
+                                                        "Unspecified"}
                                                 </span>
-                                                {appointment.status === "Declined" &&
+
+                                                {appointment.status ===
+                                                    "Declined" &&
                                                     appointment.decline_reason && (
                                                         <div className="mt-2 max-w-[240px] text-xs leading-relaxed text-gray-500">
-                                                            <p>{appointment.decline_reason}</p>
+                                                            <p>
+                                                                {
+                                                                    appointment.decline_reason
+                                                                }
+                                                            </p>
+
                                                             {appointment.suggested_date &&
                                                                 appointment.suggested_time && (
                                                                     <p className="mt-1 font-medium text-purple-700">
-                                                                        Suggested: {formatDate(
+                                                                        Suggested:{" "}
+                                                                        {formatDate(
                                                                             appointment.suggested_date,
                                                                         )}{" "}
-                                                                        at {String(
+                                                                        at{" "}
+                                                                        {String(
                                                                             appointment.suggested_time,
-                                                                        ).slice(0, 5)}
+                                                                        ).slice(
+                                                                            0,
+                                                                            5,
+                                                                        )}
                                                                     </p>
                                                                 )}
                                                         </div>
@@ -627,9 +728,15 @@ function AdminAppointments() {
                                                         type="button"
                                                         disabled={
                                                             blocked ||
-                                                            appointment.status === "Approved"
+                                                            appointment.status ===
+                                                                "Approved"
                                                         }
-                                                        onClick={() => updateStatus(id, "Approved")}
+                                                        onClick={() =>
+                                                            updateStatus(
+                                                                id,
+                                                                "Approved",
+                                                            )
+                                                        }
                                                         aria-label={`Approve appointment for ${appointment.customer_name}`}
                                                         className={`${actionClass} border-green-200 bg-green-50 text-green-800 hover:bg-green-100`}
                                                     >
@@ -640,25 +747,18 @@ function AdminAppointments() {
                                                         type="button"
                                                         disabled={
                                                             blocked ||
-                                                            appointment.status === "Declined"
+                                                            appointment.status ===
+                                                                "Declined"
                                                         }
-                                                        onClick={() => openDecline(appointment)}
+                                                        onClick={() =>
+                                                            openDecline(
+                                                                appointment,
+                                                            )
+                                                        }
                                                         aria-label={`Decline appointment for ${appointment.customer_name}`}
                                                         className={`${actionClass} border-red-200 bg-red-50 text-red-700 hover:bg-red-100`}
                                                     >
                                                         Decline
-                                                    </button>
-
-                                                    <button
-                                                        type="button"
-                                                        disabled={blocked}
-                                                        onClick={() =>
-                                                            deleteAppointment(appointment)
-                                                        }
-                                                        aria-label={`Delete appointment for ${appointment.customer_name}`}
-                                                        className={`${actionClass} border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-gray-800`}
-                                                    >
-                                                        Delete
                                                     </button>
                                                 </div>
                                             </td>
@@ -671,8 +771,9 @@ function AdminAppointments() {
                 </div>
 
                 <p className="px-5 py-4 text-xs text-gray-500">
-                    Search and status filters apply to the table. Summary cards show all loaded
-                    appointments.
+                    Search and status filters apply to the table. Summary cards
+                    show all loaded appointments. Appointment records are kept
+                    as history and are not permanently deleted.
                 </p>
             </section>
         </div>
