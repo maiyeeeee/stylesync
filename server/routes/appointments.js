@@ -1,5 +1,5 @@
 const express = require("express")
-const nodemailer = require("nodemailer")
+const { Resend } = require("resend")
 
 const router = express.Router()
 const db = require("../db")
@@ -12,48 +12,25 @@ const {
 
 const promiseDb = db.promise()
 
-function getMailTransport() {
-    const port = Number(
-        process.env.SMTP_PORT || 587,
-    )
+function getResendClient() {
+    const apiKey = String(
+        process.env.RESEND_API_KEY || "",
+    ).trim()
 
-    if (
-        !process.env.SMTP_HOST ||
-        !process.env.SMTP_USER ||
-        !process.env.SMTP_PASS ||
-        !process.env.MAIL_FROM
-    ) {
+    if (!apiKey) {
         return null
     }
 
-    return nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port,
-        secure: port === 465,
-        requireTLS: port === 587,
-
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-        },
-
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 20000,
-    })
+    return new Resend(apiKey)
 }
 
 function validEmail(value) {
-    const email = String(
-        value || "",
-    ).trim()
+    const email = String(value || "").trim()
 
     return (
         email.length > 0 &&
         email.length <= 100 &&
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-            email,
-        )
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     )
 }
 
@@ -64,47 +41,33 @@ function formatDateForEmail(value) {
 
     if (
         value instanceof Date &&
-        !Number.isNaN(
-            value.getTime(),
-        )
+        !Number.isNaN(value.getTime())
     ) {
-        text =
-            new Intl.DateTimeFormat(
-                "en-CA",
-                {
-                    timeZone:
-                        "Asia/Manila",
-
-                    year: "numeric",
-                    month: "2-digit",
-                    day: "2-digit",
-                },
-            ).format(value)
+        text = new Intl.DateTimeFormat(
+            "en-CA",
+            {
+                timeZone: "Asia/Manila",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+            },
+        ).format(value)
     } else {
-        text = String(value).slice(
-            0,
-            10,
-        )
+        text = String(value).slice(0, 10)
     }
 
     const date = new Date(
         `${text}T00:00:00+08:00`,
     )
 
-    if (
-        Number.isNaN(
-            date.getTime(),
-        )
-    ) {
+    if (Number.isNaN(date.getTime())) {
         return text
     }
 
     return date.toLocaleDateString(
         "en-PH",
         {
-            timeZone:
-                "Asia/Manila",
-
+            timeZone: "Asia/Manila",
             month: "long",
             day: "numeric",
             year: "numeric",
@@ -115,10 +78,7 @@ function formatDateForEmail(value) {
 function formatTimeForEmail(value) {
     if (!value) return ""
 
-    return String(value).slice(
-        0,
-        5,
-    )
+    return String(value).slice(0, 5)
 }
 
 async function sendAppointmentStatusEmail({
@@ -135,50 +95,42 @@ async function sendAppointmentStatusEmail({
     if (!validEmail(recipient)) {
         return {
             sent: false,
-            reason:
-                "No valid customer email.",
+            reason: "No valid customer email.",
         }
     }
 
-    if (
-        ![
-            "Approved",
-            "Declined",
-        ].includes(status)
-    ) {
+    if (!["Approved", "Declined"].includes(status)) {
         return {
             sent: false,
-            reason:
-                "No email required for this status.",
+            reason: "No email required for this status.",
         }
     }
 
-    const transport =
-        getMailTransport()
+    const resend = getResendClient()
 
-    if (!transport) {
+    if (!resend) {
         console.error(
-            "Appointment email skipped: mail configuration unavailable.",
+            "Appointment email skipped: RESEND_API_KEY is missing.",
         )
 
         return {
             sent: false,
-            reason:
-                "Mail configuration unavailable.",
+            reason: "Email provider is not configured.",
         }
     }
 
-    const customerName =
-        String(
-            appointment.customer_name ||
-                "Customer",
-        ).trim()
+    const from = String(
+        process.env.RESEND_FROM ||
+            "StyleSync <onboarding@resend.dev>",
+    ).trim()
 
-    const service =
-        String(
-            appointment.service ||
-                "Salon service",
-        ).trim()
+    const customerName = String(
+        appointment.customer_name || "Customer",
+    ).trim()
+
+    const service = String(
+        appointment.service || "Salon service",
+    ).trim()
 
     const appointmentDate =
         formatDateForEmail(
@@ -265,72 +217,78 @@ async function sendAppointmentStatusEmail({
     }
 
     try {
-        await transport.sendMail({
-            from:
-                process.env.MAIL_FROM,
+        const result =
+            await resend.emails.send({
+                from,
+                to: [recipient],
+                subject,
+                text,
+            })
 
-            to: recipient,
+        if (result?.error) {
+            console.error(
+                "Appointment email failed:",
+                result.error.name ||
+                    result.error.message ||
+                    "RESEND_ERROR",
+            )
 
-            subject,
+            return {
+                sent: false,
+                reason: "Email delivery failed.",
+            }
+        }
 
-            text,
-        })
+        console.log(
+            "Appointment email sent:",
+            status,
+        )
 
         return {
             sent: true,
+            id: result?.data?.id || null,
         }
     } catch (error) {
         console.error(
             "Appointment email failed:",
-            error.code ||
-                error.name ||
-                "MAIL_FAILED",
+            error?.name ||
+                error?.message ||
+                "RESEND_FAILED",
         )
 
         return {
             sent: false,
-            reason:
-                "Email delivery failed.",
+            reason: "Email delivery failed.",
         }
     }
 }
 
-router.get(
-    "/",
-    async (req, res) => {
-        try {
-            const [rows] =
-                await promiseDb.query(
-                    `SELECT
-                        a.*,
-                        s.name AS staff_name,
-                        s.role AS staff_role,
-                        sv.duration_minutes
+router.get("/", async (req, res) => {
+    try {
+        const [rows] =
+            await promiseDb.query(
+                `SELECT
+                    a.*,
+                    s.name AS staff_name,
+                    s.role AS staff_role,
+                    sv.duration_minutes
+                 FROM appointments a
+                 LEFT JOIN staff s
+                    ON s.staff_id = a.staff_id
+                 LEFT JOIN services sv
+                    ON sv.service_id = a.service_id
+                 ORDER BY
+                    a.appointment_date DESC,
+                    a.appointment_time DESC`,
+            )
 
-                     FROM appointments a
-
-                     LEFT JOIN staff s
-                        ON s.staff_id =
-                           a.staff_id
-
-                     LEFT JOIN services sv
-                        ON sv.service_id =
-                           a.service_id
-
-                     ORDER BY
-                        a.appointment_date DESC,
-                        a.appointment_time DESC`,
-                )
-
-            res.json(rows)
-        } catch (error) {
-            res.status(500).json({
-                error:
-                    error.message,
-            })
-        }
-    },
-)
+        res.json(rows)
+    } catch (error) {
+        res.status(500).json({
+            error: error.message,
+        })
+    }
+})
 
 router.get(
     "/availability",
@@ -426,8 +384,7 @@ router.get(
                 daily_client_limit:
                     dailyLimitConfigured
                         ? Number(
-                              result
-                                  .dailyLimit
+                              result.dailyLimit
                                   .limit,
                           )
                         : null,
@@ -435,8 +392,7 @@ router.get(
                 daily_booked:
                     dailyLimitConfigured
                         ? Number(
-                              result
-                                  .dailyLimit
+                              result.dailyLimit
                                   .booked,
                           )
                         : null,
@@ -448,8 +404,7 @@ router.get(
             res.status(
                 error.status || 500,
             ).json({
-                error:
-                    error.message,
+                error: error.message,
             })
         }
     },
@@ -498,11 +453,8 @@ router.post(
                             id,
                             status,
                             staff_id
-
                          FROM appointments
-
                          WHERE offline_id = ?
-
                          LIMIT 1`,
                         [
                             String(
@@ -566,9 +518,7 @@ router.post(
                     },
                 )
 
-            if (
-                !reservation.staff
-            ) {
+            if (!reservation.staff) {
                 const error =
                     new Error(
                         offline_id
@@ -600,7 +550,6 @@ router.post(
                         offline_id,
                         sync_status
                     )
-
                     VALUES
                     (
                         ?, ?, ?, ?, ?, ?,
@@ -653,11 +602,8 @@ router.post(
             const [customers] =
                 await connection.query(
                     `SELECT customer_id
-
                      FROM customers
-
                      WHERE contact_number = ?
-
                      LIMIT 1`,
                     [
                         String(
@@ -666,9 +612,7 @@ router.post(
                     ],
                 )
 
-            if (
-                !customers.length
-            ) {
+            if (!customers.length) {
                 await connection.query(
                     `INSERT INTO customers
                     (
@@ -678,7 +622,6 @@ router.post(
                         gender,
                         customer_type
                     )
-
                     VALUES (?, ?, ?, ?, ?)`,
                     [
                         String(
@@ -744,11 +687,8 @@ router.post(
                         `SELECT
                             id,
                             status
-
                          FROM appointments
-
                          WHERE offline_id = ?
-
                          LIMIT 1`,
                         [
                             String(
@@ -782,8 +722,7 @@ router.post(
             res.status(
                 error.status || 500,
             ).json({
-                error:
-                    error.message,
+                error: error.message,
             })
         } finally {
             connection.release()
@@ -873,20 +812,15 @@ router.put(
                 await connection.query(
                     `SELECT
                         a.*,
-
                         COALESCE(
                             sv.duration_minutes,
                             60
                         ) AS duration_minutes
-
                      FROM appointments a
-
                      LEFT JOIN services sv
                         ON sv.service_id =
                            a.service_id
-
                      WHERE a.id = ?
-
                      FOR UPDATE`,
                     [
                         appointmentId,
@@ -1098,7 +1032,6 @@ router.put(
                     decline_reason = ?,
                     suggested_date = ?,
                     suggested_time = ?
-
                  WHERE id = ?`,
                 [
                     status,
@@ -1129,13 +1062,9 @@ router.put(
                     await sendAppointmentStatusEmail(
                         {
                             appointment,
-
                             status,
-
                             declineReason,
-
                             suggestedDate,
-
                             suggestedTime,
                         },
                     )
@@ -1179,15 +1108,12 @@ router.put(
             if (!committed) {
                 await connection
                     .rollback()
-                    .catch(
-                        () => {},
-                    )
+                    .catch(() => {})
             }
 
             return res
                 .status(
-                    error.status ||
-                        500,
+                    error.status || 500,
                 )
                 .json({
                     error:
@@ -1222,20 +1148,15 @@ router.put(
                 await connection.query(
                     `SELECT
                         a.*,
-
                         COALESCE(
                             s.duration_minutes,
                             60
                         ) AS duration_minutes
-
                      FROM appointments a
-
                      LEFT JOIN services s
                         ON s.service_id =
                            a.service_id
-
                      WHERE a.id = ?
-
                      FOR UPDATE`,
                     [
                         appointmentId,
@@ -1298,7 +1219,6 @@ router.put(
                  SET
                     staff_id = ?,
                     appointment_end_time = ?
-
                  WHERE id = ?`,
                 [
                     reservation.staff
