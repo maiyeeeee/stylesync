@@ -1,8 +1,9 @@
 const express = require("express")
 const crypto = require("node:crypto")
 const bcrypt = require("bcrypt")
-const nodemailer = require("nodemailer")
+const { Resend } = require("resend")
 const { rateLimit } = require("express-rate-limit")
+
 const database = require("../db").promise()
 
 const router = express.Router()
@@ -24,6 +25,7 @@ const requestLimit = rateLimit({
     limit: 5,
     standardHeaders: true,
     legacyHeaders: false,
+
     message: {
         error:
             "Too many requests. Please try again in 15 minutes.",
@@ -35,6 +37,7 @@ const resetLimit = rateLimit({
     limit: 20,
     standardHeaders: true,
     legacyHeaders: false,
+
     message: {
         error:
             "Too many attempts. Please try again in 15 minutes.",
@@ -43,9 +46,6 @@ const resetLimit = rateLimit({
 
 function mailSettings() {
     const env = process.env
-    const port = Number(
-        env.SMTP_PORT || 587,
-    )
 
     const url = new URL(
         String(env.APP_URL || ""),
@@ -58,11 +58,8 @@ function mailSettings() {
     ].includes(url.hostname)
 
     if (
-        !env.SMTP_HOST ||
-        !env.SMTP_USER ||
-        !env.SMTP_PASS ||
-        !env.MAIL_FROM ||
-        ![465, 587].includes(port) ||
+        !env.RESEND_API_KEY ||
+        !env.RESEND_FROM ||
         url.username ||
         url.password ||
         !(
@@ -80,28 +77,23 @@ function mailSettings() {
 
     return {
         origin: url.origin,
-        from: env.MAIL_FROM,
 
-        transport:
-            nodemailer.createTransport({
-                host: env.SMTP_HOST,
-                port,
-                secure: port === 465,
-                requireTLS: port === 587,
+        from: String(
+            env.RESEND_FROM,
+        ).trim(),
 
-                auth: {
-                    user: env.SMTP_USER,
-                    pass: env.SMTP_PASS,
-                },
-
-                connectionTimeout: 10000,
-                greetingTimeout: 10000,
-                socketTimeout: 20000,
-            }),
+        resend: new Resend(
+            String(
+                env.RESEND_API_KEY,
+            ).trim(),
+        ),
     }
 }
 
-async function issueReset(email, mail) {
+async function issueReset(
+    email,
+    mail,
+) {
     const connection =
         await database.getConnection()
 
@@ -127,7 +119,8 @@ async function issueReset(email, mail) {
                 [email],
             )
 
-        const user = users[0]
+        const user =
+            users[0]
 
         if (
             users.length !== 1 ||
@@ -136,9 +129,12 @@ async function issueReset(email, mail) {
             ![
                 "owner",
                 "admin",
-            ].includes(user.role)
+            ].includes(
+                user.role,
+            )
         ) {
             await connection.rollback()
+
             return
         }
 
@@ -155,13 +151,19 @@ async function issueReset(email, mail) {
                            UTC_TIMESTAMP(),
                            INTERVAL 1 HOUR
                        )`,
-                [user.user_id],
+                [
+                    user.user_id,
+                ],
             )
 
         if (
-            Number(counts[0].total) >= 3
+            Number(
+                counts[0]
+                    .total,
+            ) >= 3
         ) {
             await connection.rollback()
+
             return
         }
 
@@ -170,7 +172,8 @@ async function issueReset(email, mail) {
                 .randomBytes(32)
                 .toString("hex")
 
-        const hash = digest(token)
+        const hash =
+            digest(token)
 
         await connection.query(
             `INSERT INTO password_resets
@@ -182,12 +185,12 @@ async function issueReset(email, mail) {
                  expires_at
              )
 
-             VALUES (
+             VALUES
+             (
                  ?,
                  ?,
                  ?,
                  UTC_TIMESTAMP(),
-
                  DATE_ADD(
                      UTC_TIMESTAMP(),
                      INTERVAL 30 MINUTE
@@ -196,15 +199,20 @@ async function issueReset(email, mail) {
             [
                 hash,
                 user.user_id,
-                digest(user.password),
+                digest(
+                    user.password,
+                ),
             ],
         )
 
         await connection.commit()
 
         delivery = {
-            to: user.email.trim(),
+            to:
+                user.email.trim(),
+
             hash,
+
             token,
         }
     } catch (error) {
@@ -217,33 +225,71 @@ async function issueReset(email, mail) {
         connection.release()
     }
 
+    if (!delivery) {
+        return
+    }
+
     const link =
         `${mail.origin}/forgot-password#token=${delivery.token}`
 
     try {
-        await mail.transport.sendMail({
-            from: mail.from,
-            to: delivery.to,
+        const result =
+            await mail.resend.emails.send({
+                from:
+                    mail.from,
 
-            subject:
-                "Reset your StyleSync password",
+                to: [
+                    delivery.to,
+                ],
 
-            text:
-                "A password reset was requested for your StyleSync account.\n\n" +
+                subject:
+                    "Reset your StyleSync password",
 
-                `Open this private link:\n${link}\n\n` +
+                text:
+                    "A password reset was requested for your StyleSync account.\n\n" +
 
-                "The link expires in 30 minutes and works once. " +
+                    `Open this private link:\n${link}\n\n` +
 
-                "If you did not request this, ignore this email. " +
+                    "The link expires in 30 minutes and works once. " +
 
-                "Your password has not changed.",
-        })
+                    "If you did not request this, ignore this email. " +
+
+                    "Your password has not changed.",
+            })
+
+        if (
+            result?.error
+        ) {
+            const error =
+                new Error(
+                    result.error
+                        .message ||
+                        "Unable to send reset email.",
+                )
+
+            error.code =
+                result.error
+                    .name ||
+                "RESEND_ERROR"
+
+            throw error
+        }
+
+        console.log(
+            "Password reset email sent.",
+        )
     } catch (error) {
+        /*
+         * If email delivery fails, remove
+         * the token so an unsent reset link
+         * is not left active in the database.
+         */
         await database.query(
             `DELETE FROM password_resets
              WHERE token_hash = ?`,
-            [delivery.hash],
+            [
+                delivery.hash,
+            ],
         )
 
         throw error
@@ -255,7 +301,8 @@ router.post(
     requestLimit,
     (req, res) => {
         const email =
-            typeof req.body?.email ===
+            typeof req.body
+                ?.email ===
             "string"
                 ? req.body.email
                       .trim()
@@ -266,8 +313,11 @@ router.post(
             /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
         if (
-            email.length > 254 ||
-            !validEmail.test(email)
+            email.length >
+                254 ||
+            !validEmail.test(
+                email,
+            )
         ) {
             return res
                 .status(400)
@@ -280,7 +330,8 @@ router.post(
         let mail
 
         try {
-            mail = mailSettings()
+            mail =
+                mailSettings()
         } catch {
             return res
                 .status(503)
@@ -290,57 +341,76 @@ router.post(
                 })
         }
 
-        // Respond before checking the database
-        // so email addresses cannot be used
-        // to discover existing accounts.
+        /*
+         * Respond before checking the
+         * database so email addresses
+         * cannot be used to discover
+         * existing accounts.
+         */
         res.json({
-            message: genericMessage,
+            message:
+                genericMessage,
         })
 
         void issueReset(
             email,
             mail,
-        ).catch((error) => {
-            console.error(
-                "Password reset email failed:",
-                {
-                    code: error.code,
-                    message:
-                        error.message,
-                    command:
-                        error.command,
-                },
-            )
-        })
+        ).catch(
+            (error) => {
+                console.error(
+                    "Password reset email failed:",
+                    {
+                        code:
+                            error.code ||
+                            error.name ||
+                            "RESEND_FAILED",
+
+                        message:
+                            error.message,
+                    },
+                )
+            },
+        )
     },
 )
 
 router.post(
     "/reset-password",
     resetLimit,
-    async (req, res) => {
+    async (
+        req,
+        res,
+    ) => {
         const {
             token,
             password,
             confirmPassword,
-        } = req.body || {}
+        } =
+            req.body || {}
 
         if (
-            typeof token !== "string" ||
-            !/^[a-f0-9]{64}$/.test(token)
+            typeof token !==
+                "string" ||
+            !/^[a-f0-9]{64}$/.test(
+                token,
+            )
         ) {
             return res
                 .status(400)
                 .json({
-                    error: invalidMessage,
+                    error:
+                        invalidMessage,
                 })
         }
 
         if (
-            typeof password !== "string" ||
-            password.length < 8 ||
-            Buffer.byteLength(password) >
-                72
+            typeof password !==
+                "string" ||
+            password.length <
+                8 ||
+            Buffer.byteLength(
+                password,
+            ) > 72
         ) {
             return res
                 .status(400)
@@ -351,7 +421,8 @@ router.post(
         }
 
         if (
-            password !== confirmPassword
+            password !==
+            confirmPassword
         ) {
             return res
                 .status(400)
@@ -364,7 +435,8 @@ router.post(
         let connection
 
         try {
-            const hash = digest(token)
+            const hash =
+                digest(token)
 
             const [matches] =
                 await database.query(
@@ -373,10 +445,14 @@ router.post(
                      FROM password_resets
 
                      WHERE token_hash = ?`,
-                    [hash],
+                    [
+                        hash,
+                    ],
                 )
 
-            if (!matches.length) {
+            if (
+                !matches.length
+            ) {
                 return res
                     .status(400)
                     .json({
@@ -418,20 +494,25 @@ router.post(
                      FROM password_resets
 
                      WHERE token_hash = ?
+
                        AND user_id = ?
+
                        AND used_at IS NULL
+
                        AND expires_at >
                            UTC_TIMESTAMP()
 
                      FOR UPDATE`,
                     [
                         hash,
+
                         matches[0]
                             .user_id,
                     ],
                 )
 
-            const user = users[0]
+            const user =
+                users[0]
 
             if (
                 !user ||
@@ -441,10 +522,14 @@ router.post(
                 ![
                     "owner",
                     "admin",
-                ].includes(user.role) ||
+                ].includes(
+                    user.role,
+                ) ||
                 resets[0]
                     .credential_hash !==
-                    digest(user.password)
+                    digest(
+                        user.password,
+                    )
             ) {
                 await connection
                     .rollback()
@@ -463,7 +548,9 @@ router.post(
                     user.password,
                 )
 
-            if (samePassword) {
+            if (
+                samePassword
+            ) {
                 await connection
                     .rollback()
 
@@ -500,8 +587,11 @@ router.post(
                      UTC_TIMESTAMP()
 
                  WHERE user_id = ?
+
                    AND used_at IS NULL`,
-                [user.user_id],
+                [
+                    user.user_id,
+                ],
             )
 
             await connection.commit()
@@ -511,20 +601,26 @@ router.post(
                     "Password updated. Log in with your new password.",
             })
         } catch (error) {
-            if (connection) {
+            if (
+                connection
+            ) {
                 await connection
                     .rollback()
-                    .catch(() => {})
+                    .catch(
+                        () => {},
+                    )
             }
 
             console.error(
                 "Password reset failed:",
                 {
-                    code: error.code,
+                    code:
+                        error.code ||
+                        error.name ||
+                        "RESET_FAILED",
+
                     message:
                         error.message,
-                    command:
-                        error.command,
                 },
             )
 
@@ -535,7 +631,9 @@ router.post(
                         "Unable to reset the password. Please try again.",
                 })
         } finally {
-            if (connection) {
+            if (
+                connection
+            ) {
                 connection.release()
             }
         }
