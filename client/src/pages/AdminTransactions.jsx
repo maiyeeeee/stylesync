@@ -2,8 +2,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { API_URL, apiFetch } from "../lib/sessionApi"
 
 const panel = "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6"
+
 const input =
     "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+
 const button =
     "rounded-xl bg-purple-700 px-4 py-3 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50"
 
@@ -17,6 +19,7 @@ const toCents = (value) => Math.round(Number(value || 0) * 100)
 
 function dateLabel(value, dateOnly = false) {
     const date = new Date(value)
+
     if (!value || Number.isNaN(date.getTime())) return "Date unavailable"
 
     return date.toLocaleString("en-PH", {
@@ -35,11 +38,13 @@ function philippineDate() {
     }).formatToParts(new Date())
 
     const part = (type) => parts.find((item) => item.type === type)?.value
+
     return `${part("year")}-${part("month")}-${part("day")}`
 }
 
 function dayKey(value) {
     const date = new Date(value)
+
     if (Number.isNaN(date.getTime())) return ""
 
     return new Intl.DateTimeFormat("en-CA", {
@@ -52,35 +57,202 @@ function dayKey(value) {
 
 async function request(path, options) {
     const response = await apiFetch(`${API_URL}${path}`, options)
+
     const data = await response.json().catch(() => null)
 
-    if (!response.ok) throw new Error(data?.error || "Request failed.")
+    if (!response.ok) {
+        throw new Error(data?.error || "Request failed.")
+    }
+
     return data
+}
+
+const OFFLINE_CACHE_KEY = "stylesync-pos-cache-v1"
+const OFFLINE_QUEUE_KEY = "stylesync-pos-queue-v1"
+
+function readLocal(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key)
+
+        return raw
+            ? JSON.parse(raw)
+            : fallback
+    } catch {
+        return fallback
+    }
+}
+
+function writeLocal(key, value) {
+    try {
+        localStorage.setItem(
+            key,
+            JSON.stringify(value),
+        )
+    } catch {
+        // Ignore local storage failures.
+    }
+}
+
+function getOfflineQueue() {
+    const queue = readLocal(
+        OFFLINE_QUEUE_KEY,
+        [],
+    )
+
+    return Array.isArray(queue)
+        ? queue
+        : []
+}
+
+function saveOfflineQueue(queue) {
+    writeLocal(
+        OFFLINE_QUEUE_KEY,
+        queue,
+    )
+}
+
+function pendingRow(entry) {
+    const payload = entry.payload
+
+    const amount =
+        Number(payload.amount || 0)
+
+    const deposit =
+        Number(
+            payload.expected_deposit_amount ||
+                0,
+        )
+
+    return {
+        transaction_id: `offline-${entry.offline_id}`,
+        appointment_id:
+            payload.appointment_id,
+        customer: payload.customer,
+        customer_contact: "",
+        customer_email: "",
+        service: payload.service,
+        sale_type: payload.sale_type,
+        item_id: payload.item_id,
+        quantity: payload.quantity,
+        amount: amount.toFixed(2),
+        payment: payload.payment,
+        deposit_applied:
+            deposit.toFixed(2),
+        balance_collected:
+            Math.max(
+                0,
+                amount - deposit,
+            ).toFixed(2),
+        deposit_payment_method: null,
+        status: "Paid",
+        offline_pending: true,
+        historical_date_only:
+            Boolean(
+                payload.historical_date,
+            ),
+        transaction_date:
+            payload.historical_date
+                ? `${payload.historical_date}T12:00:00+08:00`
+                : new Date().toISOString(),
+    }
+}
+
+function applyQueuedProductStock(
+    products,
+    queue,
+) {
+    const reserved = new Map()
+
+    for (const entry of queue) {
+        const payload = entry.payload
+
+        if (
+            payload.sale_type !==
+                "Product" ||
+            !payload.item_id
+        ) {
+            continue
+        }
+
+        const id = String(
+            payload.item_id,
+        )
+
+        reserved.set(
+            id,
+            (reserved.get(id) || 0) +
+                Number(
+                    payload.quantity || 1,
+                ),
+        )
+    }
+
+    return products.map((product) => {
+        const used =
+            reserved.get(
+                String(product.id),
+            ) || 0
+
+        return {
+            ...product,
+            stock: Math.max(
+                0,
+                Number(product.stock || 0) -
+                    used,
+            ),
+        }
+    })
 }
 
 function Field({ label, children }) {
     return (
         <label className="block">
-            <span className="mb-2 block text-sm font-medium text-gray-700">{label}</span>
+            <span className="mb-2 block text-sm font-medium text-gray-700">
+                {label}
+            </span>
+
             {children}
         </label>
     )
 }
 
-// One searchable input with selectable results.
-function SearchSelect({ label, options, value, onChange, disabled }) {
+function SearchSelect({
+    label,
+    options,
+    value,
+    onChange,
+    disabled,
+}) {
     const id = useId()
-    const [query, setQuery] = useState("")
-    const [open, setOpen] = useState(false)
-    const [active, setActive] = useState(0)
 
-    const selected = options.find((option) => option.value === value)
-    const matches = options.filter((option) =>
-        option.label.toLowerCase().includes(query.trim().toLowerCase()),
+    const [query, setQuery] =
+        useState("")
+
+    const [open, setOpen] =
+        useState(false)
+
+    const [active, setActive] =
+        useState(0)
+
+    const selected = options.find(
+        (option) =>
+            option.value === value,
+    )
+
+    const matches = options.filter(
+        (option) =>
+            option.label
+                .toLowerCase()
+                .includes(
+                    query
+                        .trim()
+                        .toLowerCase(),
+                ),
     )
 
     function select(option) {
         onChange(option.value)
+
         setOpen(false)
         setQuery("")
         setActive(0)
@@ -90,12 +262,19 @@ function SearchSelect({ label, options, value, onChange, disabled }) {
         <div
             className="relative"
             onBlur={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget)) {
+                if (
+                    !event.currentTarget.contains(
+                        event.relatedTarget,
+                    )
+                ) {
                     setOpen(false)
                 }
             }}
         >
-            <label htmlFor={id} className="mb-2 block text-sm font-medium text-gray-700">
+            <label
+                htmlFor={id}
+                className="mb-2 block text-sm font-medium text-gray-700"
+            >
                 {label}
             </label>
 
@@ -105,10 +284,20 @@ function SearchSelect({ label, options, value, onChange, disabled }) {
                 aria-autocomplete="list"
                 aria-expanded={open}
                 aria-controls={`${id}-list`}
-                aria-activedescendant={open && matches[active] ? `${id}-${active}` : undefined}
+                aria-activedescendant={
+                    open &&
+                    matches[active]
+                        ? `${id}-${active}`
+                        : undefined
+                }
                 autoComplete="off"
                 disabled={disabled}
-                value={open ? query : selected?.label || ""}
+                value={
+                    open
+                        ? query
+                        : selected?.label ||
+                          ""
+                }
                 placeholder="Type to search, then select…"
                 className={input}
                 onFocus={() => {
@@ -117,28 +306,76 @@ function SearchSelect({ label, options, value, onChange, disabled }) {
                     setOpen(true)
                 }}
                 onChange={(event) => {
-                    setQuery(event.target.value)
+                    setQuery(
+                        event.target.value,
+                    )
+
                     setActive(0)
                     setOpen(true)
-                    if (value) onChange("")
+
+                    if (value) {
+                        onChange("")
+                    }
                 }}
                 onKeyDown={(event) => {
-                    if (event.key === "Escape") setOpen(false)
+                    if (
+                        event.key ===
+                        "Escape"
+                    ) {
+                        setOpen(false)
+                    }
 
-                    if (event.key === "ArrowDown") {
+                    if (
+                        event.key ===
+                        "ArrowDown"
+                    ) {
                         event.preventDefault()
+
                         setOpen(true)
-                        setActive((previous) => Math.min(previous + 1, matches.length - 1))
+
+                        setActive(
+                            (previous) =>
+                                Math.min(
+                                    previous +
+                                        1,
+                                    matches.length -
+                                        1,
+                                ),
+                        )
                     }
 
-                    if (event.key === "ArrowUp") {
+                    if (
+                        event.key ===
+                        "ArrowUp"
+                    ) {
                         event.preventDefault()
-                        setActive((previous) => Math.max(0, previous - 1))
+
+                        setActive(
+                            (previous) =>
+                                Math.max(
+                                    0,
+                                    previous -
+                                        1,
+                                ),
+                        )
                     }
 
-                    if (event.key === "Enter" && open) {
+                    if (
+                        event.key ===
+                            "Enter" &&
+                        open
+                    ) {
                         event.preventDefault()
-                        if (matches[active]) select(matches[active])
+
+                        if (
+                            matches[active]
+                        ) {
+                            select(
+                                matches[
+                                    active
+                                ],
+                            )
+                        }
                     }
                 }}
             />
@@ -149,27 +386,56 @@ function SearchSelect({ label, options, value, onChange, disabled }) {
                     role="listbox"
                     className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-purple-100 bg-white p-1 shadow-lg"
                 >
-                    {matches.length === 0 ? (
-                        <li className="p-3 text-sm text-gray-500">No matches found.</li>
+                    {matches.length ===
+                    0 ? (
+                        <li className="p-3 text-sm text-gray-500">
+                            No matches
+                            found.
+                        </li>
                     ) : (
-                        matches.map((option, index) => (
-                            <li
-                                key={option.value}
-                                id={`${id}-${index}`}
-                                role="option"
-                                aria-selected={option.value === value}
-                                onMouseDown={(event) => event.preventDefault()}
-                                onMouseEnter={() => setActive(index)}
-                                onClick={() => select(option)}
-                                className={`cursor-pointer rounded-lg p-3 text-sm ${
-                                    index === active
-                                        ? "bg-purple-50 text-purple-900"
-                                        : "text-gray-700"
-                                }`}
-                            >
-                                {option.label}
-                            </li>
-                        ))
+                        matches.map(
+                            (
+                                option,
+                                index,
+                            ) => (
+                                <li
+                                    key={
+                                        option.value
+                                    }
+                                    id={`${id}-${index}`}
+                                    role="option"
+                                    aria-selected={
+                                        option.value ===
+                                        value
+                                    }
+                                    onMouseDown={(
+                                        event,
+                                    ) =>
+                                        event.preventDefault()
+                                    }
+                                    onMouseEnter={() =>
+                                        setActive(
+                                            index,
+                                        )
+                                    }
+                                    onClick={() =>
+                                        select(
+                                            option,
+                                        )
+                                    }
+                                    className={`cursor-pointer rounded-lg p-3 text-sm ${
+                                        index ===
+                                        active
+                                            ? "bg-purple-50 text-purple-900"
+                                            : "text-gray-700"
+                                    }`}
+                                >
+                                    {
+                                        option.label
+                                    }
+                                </li>
+                            ),
+                        )
                     )}
                 </ul>
             )}
@@ -192,200 +458,719 @@ function freshForm() {
 }
 
 function AdminTransactions() {
-    const [transactions, setTransactions] = useState([])
-    const [services, setServices] = useState([])
-    const [products, setProducts] = useState([])
-    const [appointments, setAppointments] = useState([])
-    const [form, setForm] = useState(freshForm)
-    const [receipt, setReceipt] = useState(null)
-    const [search, setSearch] = useState("")
-    const [loading, setLoading] = useState(true)
-    const [busy, setBusy] = useState(false)
-    const [loadError, setLoadError] = useState("")
-    const [error, setError] = useState("")
-    const [message, setMessage] = useState("")
-    const [clock, setClock] = useState(() => new Date())
+    const [
+        transactions,
+        setTransactions,
+    ] = useState([])
+
+    const [
+        services,
+        setServices,
+    ] = useState([])
+
+    const [
+        products,
+        setProducts,
+    ] = useState([])
+
+    const [
+        appointments,
+        setAppointments,
+    ] = useState([])
+
+    const [form, setForm] =
+        useState(freshForm)
+
+    const [receipt, setReceipt] =
+        useState(null)
+
+    const [search, setSearch] =
+        useState("")
+
+    const [loading, setLoading] =
+        useState(true)
+
+    const [busy, setBusy] =
+        useState(false)
+
+    const [
+        loadError,
+        setLoadError,
+    ] = useState("")
+
+    const [error, setError] =
+        useState("")
+
+    const [message, setMessage] =
+        useState("")
+
+    const [clock, setClock] =
+        useState(() => new Date())
 
     const lock = useRef(false)
+
     const version = useRef(0)
 
-    // Retain the same identifier when retrying an unchanged failed submission.
     const retry = useRef(null)
 
-    const load = useCallback(async (signal) => {
-        const current = ++version.current
-        setLoading(true)
-        setLoadError("")
+    const load = useCallback(
+        async (signal) => {
+            const current =
+                ++version.current
 
-        try {
-            const data = await Promise.all([
-                request("/transactions", { signal }),
-                request("/services", { signal }),
-                request("/inventory", { signal }),
-                request("/transactions/checkout-appointments", { signal }),
-            ])
+            setLoading(true)
+            setLoadError("")
 
-            if (!data.every(Array.isArray)) throw new Error("Unexpected server response.")
-            if (signal?.aborted || current !== version.current) return null
+            const restoreCache =
+                () => {
+                    const cache =
+                        readLocal(
+                            OFFLINE_CACHE_KEY,
+                            null,
+                        )
 
-            setTransactions(data[0])
-            setServices(data[1])
-            setProducts(data[2])
-            setAppointments(data[3])
+                    if (!cache) {
+                        return false
+                    }
 
-            return data[0]
-        } catch (err) {
-            if (!signal?.aborted && current === version.current) {
-                setLoadError(err.message)
+                    const queue =
+                        getOfflineQueue()
+
+                    const pending =
+                        queue.map(
+                            pendingRow,
+                        )
+
+                    setTransactions([
+                        ...pending,
+                        ...(Array.isArray(
+                            cache.transactions,
+                        )
+                            ? cache.transactions
+                            : []),
+                    ])
+
+                    setServices(
+                        Array.isArray(
+                            cache.services,
+                        )
+                            ? cache.services
+                            : [],
+                    )
+
+                    const cachedProducts =
+                        Array.isArray(
+                            cache.products,
+                        )
+                            ? cache.products
+                            : []
+
+                    setProducts(
+                        applyQueuedProductStock(
+                            cachedProducts,
+                            queue,
+                        ),
+                    )
+
+                    setAppointments(
+                        Array.isArray(
+                            cache.appointments,
+                        )
+                            ? cache.appointments
+                            : [],
+                    )
+
+                    return true
+                }
+
+            if (!navigator.onLine) {
+                const restored =
+                    restoreCache()
+
+                if (!restored) {
+                    setLoadError(
+                        "No offline POS data is cached yet. Connect to the internet once before using Emergency Mode.",
+                    )
+                } else {
+                    setMessage(
+                        "Emergency Mode active. Using the last saved POS data.",
+                    )
+                }
+
+                setLoading(false)
+
+                return null
             }
-            return null
-        } finally {
-            if (!signal?.aborted && current === version.current) setLoading(false)
-        }
-    }, [])
+
+            try {
+                const data =
+                    await Promise.all([
+                        request(
+                            "/transactions",
+                            { signal },
+                        ),
+                        request(
+                            "/services",
+                            { signal },
+                        ),
+                        request(
+                            "/inventory",
+                            { signal },
+                        ),
+                        request(
+                            "/transactions/checkout-appointments",
+                            { signal },
+                        ),
+                    ])
+
+                if (
+                    !data.every(
+                        Array.isArray,
+                    )
+                ) {
+                    throw new Error(
+                        "Unexpected server response.",
+                    )
+                }
+
+                if (
+                    signal?.aborted ||
+                    current !==
+                        version.current
+                ) {
+                    return null
+                }
+
+                writeLocal(
+                    OFFLINE_CACHE_KEY,
+                    {
+                        transactions:
+                            data[0],
+                        services:
+                            data[1],
+                        products:
+                            data[2],
+                        appointments:
+                            data[3],
+                        savedAt:
+                            Date.now(),
+                    },
+                )
+
+                const queue =
+                    getOfflineQueue()
+
+                const pending =
+                    queue.map(
+                        pendingRow,
+                    )
+
+                setTransactions([
+                    ...pending,
+                    ...data[0],
+                ])
+
+                setServices(data[1])
+
+                setProducts(
+                    applyQueuedProductStock(
+                        data[2],
+                        queue,
+                    ),
+                )
+
+                setAppointments(
+                    data[3],
+                )
+
+                return data[0]
+            } catch (err) {
+                if (
+                    !signal?.aborted &&
+                    current ===
+                        version.current
+                ) {
+                    const restored =
+                        restoreCache()
+
+                    if (restored) {
+                        setMessage(
+                            "Emergency Mode active. Using locally cached POS data.",
+                        )
+                    } else {
+                        setLoadError(
+                            err.message,
+                        )
+                    }
+                }
+
+                return null
+            } finally {
+                if (
+                    !signal?.aborted &&
+                    current ===
+                        version.current
+                ) {
+                    setLoading(false)
+                }
+            }
+        },
+        [],
+    )
+
+    const syncOfflineTransactions =
+        useCallback(async () => {
+            if (!navigator.onLine) {
+                return
+            }
+
+            let queue =
+                getOfflineQueue()
+
+            if (!queue.length) {
+                return
+            }
+
+            let synced = 0
+
+            for (const entry of [
+                ...queue,
+            ]) {
+                try {
+                    await request(
+                        "/transactions",
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type":
+                                    "application/json",
+                            },
+                            body: JSON.stringify(
+                                {
+                                    ...entry.payload,
+                                    offline_id:
+                                        entry.offline_id,
+                                },
+                            ),
+                        },
+                    )
+
+                    queue =
+                        queue.filter(
+                            (item) =>
+                                item.offline_id !==
+                                entry.offline_id,
+                        )
+
+                    saveOfflineQueue(
+                        queue,
+                    )
+
+                    synced += 1
+                } catch (err) {
+                    console.error(
+                        "Offline transaction sync failed:",
+                        err,
+                    )
+
+                    break
+                }
+            }
+
+            if (synced > 0) {
+                setMessage(
+                    `${synced} offline transaction${
+                        synced === 1
+                            ? ""
+                            : "s"
+                    } synced successfully.`,
+                )
+
+                await load()
+            }
+        }, [load])
 
     useEffect(() => {
-        const controller = new AbortController()
+        const controller =
+            new AbortController()
+
         load(controller.signal)
 
-        const timer = setInterval(() => setClock(new Date()), 60000)
+        const timer = setInterval(
+            () =>
+                setClock(
+                    new Date(),
+                ),
+            60000,
+        )
 
         return () => {
             controller.abort()
+
             clearInterval(timer)
         }
     }, [load])
 
-    const booked = form.mode === "Appointment"
-    const productSale = form.sale_type === "Product"
-    const disabled = loading || busy || Boolean(loadError)
+    useEffect(() => {
+        const handleOnline = () => {
+            syncOfflineTransactions()
+        }
 
-    const appointment = appointments.find((row) => String(row.id) === form.appointmentId)
-    const items = productSale ? products : services
+        window.addEventListener(
+            "online",
+            handleOnline,
+        )
 
-    const selectedItem = items.find(
-        (row) => String(productSale ? row.id : row.service_id) === form.selectedId,
-    )
+        if (navigator.onLine) {
+            syncOfflineTransactions()
+        }
+
+        return () => {
+            window.removeEventListener(
+                "online",
+                handleOnline,
+            )
+        }
+    }, [syncOfflineTransactions])
+
+    const booked =
+        form.mode === "Appointment"
+
+    const productSale =
+        form.sale_type === "Product"
+
+    const disabled =
+        loading || busy
+
+    const appointment =
+        appointments.find(
+            (row) =>
+                String(row.id) ===
+                form.appointmentId,
+        )
+
+    const items = productSale
+        ? products
+        : services
+
+    const selectedItem =
+        items.find(
+            (row) =>
+                String(
+                    productSale
+                        ? row.id
+                        : row.service_id,
+                ) ===
+                form.selectedId,
+        )
 
     const deposit =
-        booked && appointment?.payment_status === "Verified"
-            ? Number(appointment.verified_deposit || 0)
+        booked &&
+        appointment?.payment_status ===
+            "Verified"
+            ? Number(
+                  appointment.verified_deposit ||
+                      0,
+              )
             : 0
 
-    const balanceCents = toCents(form.amount) - toCents(deposit)
+    const balanceCents =
+        toCents(form.amount) -
+        toCents(deposit)
 
     const unresolved =
         booked &&
         appointment &&
-        (["Awaiting Payment", "Awaiting Verification"].includes(appointment.payment_status) ||
-            (appointment.payment_status === "Verified" && !(deposit > 0)))
+        ([
+            "Awaiting Payment",
+            "Awaiting Verification",
+        ].includes(
+            appointment.payment_status,
+        ) ||
+            (appointment.payment_status ===
+                "Verified" &&
+                !(deposit > 0)))
 
-    const itemOptions = items
-        .filter((row) => (productSale ? Number(row.stock) > 0 : row.status === "Available"))
-        .map((row) => ({
-            value: String(productSale ? row.id : row.service_id),
-            label: `${productSale ? row.name : row.service} — ${money(row.price)}${
-                productSale ? ` · ${row.stock} in stock` : ""
-            }`,
-        }))
+    const itemOptions =
+        items
+            .filter((row) =>
+                productSale
+                    ? Number(
+                          row.stock,
+                      ) > 0
+                    : row.status ===
+                      "Available",
+            )
+            .map((row) => ({
+                value: String(
+                    productSale
+                        ? row.id
+                        : row.service_id,
+                ),
+                label: `${
+                    productSale
+                        ? row.name
+                        : row.service
+                } — ${money(
+                    row.price,
+                )}${
+                    productSale
+                        ? ` · ${row.stock} in stock`
+                        : ""
+                }`,
+            }))
 
-    const appointmentOptions = appointments.map((row) => ({
-        value: String(row.id),
-        label: `#${row.id} · ${row.customer_name} · ${row.contact_number} · ${row.service} · ${row.appointment_date} ${row.appointment_time}`,
-    }))
+    const appointmentOptions =
+        appointments.map(
+            (row) => ({
+                value: String(
+                    row.id,
+                ),
+                label: `#${row.id} · ${row.customer_name} · ${row.contact_number} · ${row.service} · ${row.appointment_date} ${row.appointment_time}`,
+            }),
+        )
 
-    function change(name, value) {
-        setForm((previous) => ({ ...previous, [name]: value }))
+    function change(
+        name,
+        value,
+    ) {
+        setForm(
+            (previous) => ({
+                ...previous,
+                [name]: value,
+            }),
+        )
     }
 
-    function selectAppointment(id) {
-        const row = appointments.find((item) => String(item.id) === id)
+    function selectAppointment(
+        id,
+    ) {
+        const row =
+            appointments.find(
+                (item) =>
+                    String(
+                        item.id,
+                    ) === id,
+            )
 
-        setForm((previous) => ({
-            ...previous,
-            appointmentId: id,
-            customer: row?.customer_name || "",
-            amount: row?.service_total ?? "",
-            quantity: "1",
-            sale_type: "Service",
-        }))
+        setForm(
+            (previous) => ({
+                ...previous,
+                appointmentId:
+                    id,
+                customer:
+                    row?.customer_name ||
+                    "",
+                amount:
+                    row?.service_total ??
+                    "",
+                quantity: "1",
+                sale_type:
+                    "Service",
+            }),
+        )
     }
 
     function selectItem(id) {
-        const row = items.find((item) => String(productSale ? item.id : item.service_id) === id)
+        const row =
+            items.find(
+                (item) =>
+                    String(
+                        productSale
+                            ? item.id
+                            : item.service_id,
+                    ) === id,
+            )
 
-        setForm((previous) => ({
-            ...previous,
-            selectedId: id,
-            quantity: "1",
-            amount: row ? Number(row.price).toFixed(2) : "",
-        }))
+        setForm(
+            (previous) => ({
+                ...previous,
+                selectedId: id,
+                quantity: "1",
+                amount: row
+                    ? Number(
+                          row.price,
+                      ).toFixed(2)
+                    : "",
+            }),
+        )
     }
 
     async function save(event) {
         event.preventDefault()
-        if (lock.current) return
+
+        if (lock.current) {
+            return
+        }
 
         setError("")
         setMessage("")
 
         if (
-            !(Number(form.amount) > 0) ||
-            !Number.isFinite(Number(form.amount)) ||
-            (booked ? !appointment : !selectedItem || !form.customer.trim())
+            !navigator.onLine &&
+            booked
         ) {
-            setError("Select the booking or item and enter a valid final total.")
+            setError(
+                "Existing appointment checkout requires an internet connection. Emergency Mode supports walk-in service and product transactions.",
+            )
+
             return
         }
 
-        if (unresolved || balanceCents < 0) {
-            setError("Resolve the deposit or excess payment before checkout.")
+        if (
+            !(
+                Number(
+                    form.amount,
+                ) > 0
+            ) ||
+            !Number.isFinite(
+                Number(
+                    form.amount,
+                ),
+            ) ||
+            (booked
+                ? !appointment
+                : !selectedItem ||
+                  !form.customer.trim())
+        ) {
+            setError(
+                "Select the booking or item and enter a valid final total.",
+            )
+
             return
         }
 
-        const quantity = productSale && !booked ? Number(form.quantity) : 1
+        if (
+            unresolved ||
+            balanceCents < 0
+        ) {
+            setError(
+                "Resolve the deposit or excess payment before checkout.",
+            )
 
-        if (!Number.isInteger(quantity) || quantity < 1) {
-            setError("Enter a valid whole-number quantity.")
             return
         }
 
-        if (!booked && productSale && quantity > Number(selectedItem.stock)) {
-            setError("The selected quantity exceeds available stock.")
+        const quantity =
+            productSale &&
+            !booked
+                ? Number(
+                      form.quantity,
+                  )
+                : 1
+
+        if (
+            !Number.isInteger(
+                quantity,
+            ) ||
+            quantity < 1
+        ) {
+            setError(
+                "Enter a valid whole-number quantity.",
+            )
+
             return
         }
 
-        if (form.historicalDate && form.historicalDate >= philippineDate()) {
-            setError("Choose a past Philippine date for a historical sale.")
+        if (
+            !booked &&
+            productSale &&
+            quantity >
+                Number(
+                    selectedItem.stock,
+                )
+        ) {
+            setError(
+                "The selected quantity exceeds available stock.",
+            )
+
             return
         }
 
-        if (form.payment === "Not recorded" && (!form.historicalDate || booked || productSale)) {
-            setError("An unrecorded payment method is allowed only for a historical service sale.")
+        if (
+            form.historicalDate &&
+            form.historicalDate >=
+                philippineDate()
+        ) {
+            setError(
+                "Choose a past Philippine date for a historical sale.",
+            )
+
+            return
+        }
+
+        if (
+            form.payment ===
+                "Not recorded" &&
+            (!form.historicalDate ||
+                booked ||
+                productSale)
+        ) {
+            setError(
+                "An unrecorded payment method is allowed only for a historical service sale.",
+            )
+
             return
         }
 
         const payload = {
-            appointment_id: booked ? appointment.id : null,
-            customer: form.customer.trim(),
+            appointment_id:
+                booked
+                    ? appointment.id
+                    : null,
+
+            customer:
+                form.customer.trim(),
+
             service: booked
                 ? appointment.service
                 : productSale
                   ? selectedItem.name
                   : selectedItem.service,
-            sale_type: booked ? "Service" : form.sale_type,
-            item_id: !booked && productSale ? selectedItem.id : null,
+
+            sale_type: booked
+                ? "Service"
+                : form.sale_type,
+
+            item_id:
+                !booked &&
+                productSale
+                    ? selectedItem.id
+                    : null,
+
             quantity,
-            amount: Number(form.amount).toFixed(2),
-            payment: form.payment,
-            historical_date: !booked && !productSale ? form.historicalDate || null : null,
+
+            amount: Number(
+                form.amount,
+            ).toFixed(2),
+
+            payment:
+                form.payment,
+
+            historical_date:
+                !booked &&
+                !productSale
+                    ? form.historicalDate ||
+                      null
+                    : null,
+
             status: "Paid",
-            expected_deposit_amount: deposit.toFixed(2),
+
+            expected_deposit_amount:
+                deposit.toFixed(2),
         }
 
-        const fingerprint = JSON.stringify(payload)
+        const fingerprint =
+            JSON.stringify(
+                payload,
+            )
 
-        if (!retry.current || retry.current.fingerprint !== fingerprint) {
+        if (
+            !retry.current ||
+            retry.current
+                .fingerprint !==
+                fingerprint
+        ) {
             retry.current = {
                 fingerprint,
                 id: crypto.randomUUID(),
@@ -393,50 +1178,303 @@ function AdminTransactions() {
         }
 
         lock.current = true
+
         setBusy(true)
 
         try {
-            const result = await request("/transactions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...payload,
-                    offline_id: retry.current.id,
-                }),
-            })
+            const offlineId =
+                retry.current.id
+
+            if (
+                !navigator.onLine
+            ) {
+                const queue =
+                    getOfflineQueue()
+
+                const exists =
+                    queue.some(
+                        (entry) =>
+                            entry.offline_id ===
+                            offlineId,
+                    )
+
+                if (!exists) {
+                    queue.push({
+                        offline_id:
+                            offlineId,
+                        payload,
+                        queued_at:
+                            new Date().toISOString(),
+                    })
+
+                    saveOfflineQueue(
+                        queue,
+                    )
+                }
+
+                const localReceipt =
+                    pendingRow({
+                        offline_id:
+                            offlineId,
+                        payload,
+                    })
+
+                setTransactions(
+                    (previous) => [
+                        localReceipt,
+                        ...previous.filter(
+                            (row) =>
+                                row.transaction_id !==
+                                localReceipt.transaction_id,
+                        ),
+                    ],
+                )
+
+                if (
+                    productSale &&
+                    payload.item_id
+                ) {
+                    setProducts(
+                        (previous) =>
+                            previous.map(
+                                (
+                                    product,
+                                ) =>
+                                    String(
+                                        product.id,
+                                    ) ===
+                                    String(
+                                        payload.item_id,
+                                    )
+                                        ? {
+                                              ...product,
+                                              stock: Math.max(
+                                                  0,
+                                                  Number(
+                                                      product.stock ||
+                                                          0,
+                                                  ) -
+                                                      quantity,
+                                              ),
+                                          }
+                                        : product,
+                            ),
+                    )
+                }
+
+                setReceipt(
+                    localReceipt,
+                )
+
+                setForm(
+                    freshForm(),
+                )
+
+                retry.current = null
+
+                setMessage(
+                    "Transaction saved in Emergency Mode. It will sync automatically when internet returns.",
+                )
+
+                return
+            }
+
+            const result =
+                await request(
+                    "/transactions",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                        },
+                        body: JSON.stringify(
+                            {
+                                ...payload,
+                                offline_id:
+                                    offlineId,
+                            },
+                        ),
+                    },
+                )
 
             retry.current = null
-            setForm(freshForm())
+
+            setForm(
+                freshForm(),
+            )
+
             setReceipt(null)
-            setMessage("Transaction saved successfully.")
 
-            const rows = await load()
-            const saved = rows?.find((row) => String(row.transaction_id) === String(result.id))
+            setMessage(
+                "Transaction saved successfully.",
+            )
 
-            if (saved) setReceipt(saved)
-            else setMessage("Saved successfully. Refresh the history to view the receipt.")
+            const rows =
+                await load()
+
+            const saved =
+                rows?.find(
+                    (row) =>
+                        String(
+                            row.transaction_id,
+                        ) ===
+                        String(
+                            result.id,
+                        ),
+                )
+
+            if (saved) {
+                setReceipt(saved)
+            } else {
+                setMessage(
+                    "Saved successfully. Refresh the history to view the receipt.",
+                )
+            }
         } catch (err) {
-            setError(err.message)
+            if (
+                !navigator.onLine
+            ) {
+                const offlineId =
+                    retry.current?.id
+
+                if (offlineId) {
+                    const queue =
+                        getOfflineQueue()
+
+                    const exists =
+                        queue.some(
+                            (entry) =>
+                                entry.offline_id ===
+                                offlineId,
+                        )
+
+                    if (!exists) {
+                        queue.push({
+                            offline_id:
+                                offlineId,
+                            payload,
+                            queued_at:
+                                new Date().toISOString(),
+                        })
+
+                        saveOfflineQueue(
+                            queue,
+                        )
+                    }
+
+                    const localReceipt =
+                        pendingRow({
+                            offline_id:
+                                offlineId,
+                            payload,
+                        })
+
+                    setTransactions(
+                        (previous) => [
+                            localReceipt,
+                            ...previous.filter(
+                                (row) =>
+                                    row.transaction_id !==
+                                    localReceipt.transaction_id,
+                            ),
+                        ],
+                    )
+
+                    if (
+                        productSale &&
+                        payload.item_id
+                    ) {
+                        setProducts(
+                            (previous) =>
+                                previous.map(
+                                    (
+                                        product,
+                                    ) =>
+                                        String(
+                                            product.id,
+                                        ) ===
+                                        String(
+                                            payload.item_id,
+                                        )
+                                            ? {
+                                                  ...product,
+                                                  stock: Math.max(
+                                                      0,
+                                                      Number(
+                                                          product.stock ||
+                                                              0,
+                                                      ) -
+                                                          quantity,
+                                                  ),
+                                              }
+                                            : product,
+                                ),
+                        )
+                    }
+
+                    setReceipt(
+                        localReceipt,
+                    )
+
+                    setForm(
+                        freshForm(),
+                    )
+
+                    retry.current = null
+
+                    setMessage(
+                        "Connection was lost. Transaction was saved in Emergency Mode and will sync automatically.",
+                    )
+
+                    return
+                }
+            }
+
+            setError(
+                err.message,
+            )
         } finally {
             lock.current = false
+
             setBusy(false)
         }
     }
 
     function printReceipt() {
-        if (!receipt || receipt.status !== "Paid") return
-
-        const popup = window.open("", "_blank", "width=460,height=700")
-
-        if (!popup) {
-            setError("Allow pop-ups to print the receipt.")
+        if (
+            !receipt ||
+            receipt.status !==
+                "Paid"
+        ) {
             return
         }
 
-        const doc = popup.document
+        const popup =
+            window.open(
+                "",
+                "_blank",
+                "width=460,height=700",
+            )
+
+        if (!popup) {
+            setError(
+                "Allow pop-ups to print the receipt.",
+            )
+
+            return
+        }
+
+        const doc =
+            popup.document
+
         doc.title = `Receipt ${receipt.transaction_id}`
 
-        const style = doc.createElement("style")
+        const style =
+            doc.createElement(
+                "style",
+            )
+
         style.textContent = `
       body { max-width:360px; margin:24px auto; padding:16px; font:14px Arial; }
       h1 { font-size:20px; }
@@ -444,187 +1482,515 @@ function AdminTransactions() {
       button { padding:10px; }
       @media print { button { display:none; } }
     `
-        doc.head.appendChild(style)
 
-        function line(tag, text) {
-            const element = doc.createElement(tag)
-            element.textContent = text
-            doc.body.appendChild(element)
+        doc.head.appendChild(
+            style,
+        )
+
+        function line(
+            tag,
+            text,
+        ) {
+            const element =
+                doc.createElement(
+                    tag,
+                )
+
+            element.textContent =
+                text
+
+            doc.body.appendChild(
+                element,
+            )
+
             return element
         }
 
-        line("h1", "Dahling’s Salon & Spa")
-        line("p", `Receipt #${receipt.transaction_id}`)
-        line("p", dateLabel(receipt.transaction_date, receipt.historical_date_only))
-        line("p", `Customer: ${receipt.customer}`)
+        line(
+            "h1",
+            "Dahling’s Salon & Spa",
+        )
 
-        if (receipt.appointment_id) line("p", `Booking: #${receipt.appointment_id}`)
+        line(
+            "p",
+            `Receipt #${receipt.transaction_id}`,
+        )
 
-        line("p", `Item / service: ${receipt.service}`)
-        line("p", `Quantity: ${receipt.quantity ?? 1}`)
-        line("p", `Final sale total: ${money(receipt.amount)}`)
-        line("p", `Deposit previously paid: ${money(receipt.deposit_applied)}`)
-        line("p", `Balance collected: ${money(receipt.balance_collected)}`)
-
-        if (Number(receipt.deposit_applied) > 0) {
-            line("p", `Deposit method: ${receipt.deposit_payment_method}`)
-        }
-
-        if (Number(receipt.balance_collected) > 0) {
-            line("p", `Balance payment method: ${receipt.payment}`)
-        }
-
-        line("p", `Status: ${receipt.status}`)
-        line("p", "Thank you for visiting!")
-
-        const print = line("button", "Print")
-        print.onclick = () => popup.print()
-        popup.focus()
-    }
-
-    const todayRows = transactions.filter((row) => dayKey(row.transaction_date) === dayKey(clock))
-    const paidToday = todayRows.filter((row) => row.status === "Paid")
-    const salesToday = paidToday.reduce((sum, row) => sum + Number(row.amount), 0)
-
-    const searchTerm = search.trim().toLowerCase()
-
-    const filtered = transactions.filter((row) =>
-        [
-            row.customer,
-            row.customer_contact,
-            row.customer_email,
-            row.service,
-            row.transaction_id,
-            row.appointment_id,
-            row.payment,
-            row.status,
-        ].some((value) => String(value ?? "").toLowerCase().includes(searchTerm)),
-    )
-
-    const customerRecords = useMemo(() => {
-        if (!searchTerm) return []
-
-        const matches = transactions.filter((row) =>
-            [row.customer, row.customer_contact, row.customer_email].some((value) =>
-                String(value ?? "").toLowerCase().includes(searchTerm),
+        line(
+            "p",
+            dateLabel(
+                receipt.transaction_date,
+                receipt.historical_date_only,
             ),
         )
 
-        const grouped = new Map()
+        line(
+            "p",
+            `Customer: ${receipt.customer}`,
+        )
 
-        for (const row of matches) {
-            const key =
-                String(row.customer_contact || "").trim() ||
-                String(row.customer_email || "").trim().toLowerCase() ||
-                String(row.customer || "").trim().toLowerCase()
-
-            if (!grouped.has(key)) {
-                grouped.set(key, {
-                    key,
-                    customer: row.customer,
-                    contact: row.customer_contact || "Not recorded",
-                    email: row.customer_email || "Not recorded",
-                    transactions: 0,
-                    totalPaid: 0,
-                    depositPaid: 0,
-                    services: new Set(),
-                    latestVisit: row.transaction_date,
-                    latestVisitDateOnly: row.historical_date_only,
-                })
-            }
-
-            const record = grouped.get(key)
-            record.transactions += 1
-
-            if (row.status === "Paid") {
-                record.totalPaid += Number(row.amount || 0)
-                record.depositPaid += Number(row.deposit_applied || 0)
-            }
-
-            if (row.service) record.services.add(row.service)
-
-            if (
-                new Date(row.transaction_date).getTime() >
-                new Date(record.latestVisit).getTime()
-            ) {
-                record.latestVisit = row.transaction_date
-                record.latestVisitDateOnly = row.historical_date_only
-            }
+        if (
+            receipt.appointment_id
+        ) {
+            line(
+                "p",
+                `Booking: #${receipt.appointment_id}`,
+            )
         }
 
-        return Array.from(grouped.values()).map((record) => ({
-            ...record,
-            services: Array.from(record.services),
-        }))
-    }, [searchTerm, transactions])
+        line(
+            "p",
+            `Item / service: ${receipt.service}`,
+        )
+
+        line(
+            "p",
+            `Quantity: ${
+                receipt.quantity ??
+                1
+            }`,
+        )
+
+        line(
+            "p",
+            `Final sale total: ${money(
+                receipt.amount,
+            )}`,
+        )
+
+        line(
+            "p",
+            `Deposit previously paid: ${money(
+                receipt.deposit_applied,
+            )}`,
+        )
+
+        line(
+            "p",
+            `Balance collected: ${money(
+                receipt.balance_collected,
+            )}`,
+        )
+
+        if (
+            Number(
+                receipt.deposit_applied,
+            ) > 0
+        ) {
+            line(
+                "p",
+                `Deposit method: ${receipt.deposit_payment_method}`,
+            )
+        }
+
+        if (
+            Number(
+                receipt.balance_collected,
+            ) > 0
+        ) {
+            line(
+                "p",
+                `Balance payment method: ${receipt.payment}`,
+            )
+        }
+
+        line(
+            "p",
+            `Status: ${
+                receipt.offline_pending
+                    ? "Pending sync"
+                    : receipt.status
+            }`,
+        )
+
+        line(
+            "p",
+            "Thank you for visiting!",
+        )
+
+        const print = line(
+            "button",
+            "Print",
+        )
+
+        print.onclick =
+            () => popup.print()
+
+        popup.focus()
+    }
+
+    const todayRows =
+        transactions.filter(
+            (row) =>
+                dayKey(
+                    row.transaction_date,
+                ) ===
+                dayKey(clock),
+        )
+
+    const paidToday =
+        todayRows.filter(
+            (row) =>
+                row.status ===
+                "Paid",
+        )
+
+    const salesToday =
+        paidToday.reduce(
+            (sum, row) =>
+                sum +
+                Number(
+                    row.amount,
+                ),
+            0,
+        )
+
+    const searchTerm =
+        search
+            .trim()
+            .toLowerCase()
+
+    const filtered =
+        transactions.filter(
+            (row) =>
+                [
+                    row.customer,
+                    row.customer_contact,
+                    row.customer_email,
+                    row.service,
+                    row.transaction_id,
+                    row.appointment_id,
+                    row.payment,
+                    row.status,
+                ].some((value) =>
+                    String(
+                        value ?? "",
+                    )
+                        .toLowerCase()
+                        .includes(
+                            searchTerm,
+                        ),
+                ),
+        )
+
+    const customerRecords =
+        useMemo(() => {
+            if (!searchTerm) {
+                return []
+            }
+
+            const matches =
+                transactions.filter(
+                    (row) =>
+                        [
+                            row.customer,
+                            row.customer_contact,
+                            row.customer_email,
+                        ].some(
+                            (
+                                value,
+                            ) =>
+                                String(
+                                    value ??
+                                        "",
+                                )
+                                    .toLowerCase()
+                                    .includes(
+                                        searchTerm,
+                                    ),
+                        ),
+                )
+
+            const grouped =
+                new Map()
+
+            for (const row of matches) {
+                const key =
+                    String(
+                        row.customer_contact ||
+                            "",
+                    ).trim() ||
+                    String(
+                        row.customer_email ||
+                            "",
+                    )
+                        .trim()
+                        .toLowerCase() ||
+                    String(
+                        row.customer ||
+                            "",
+                    )
+                        .trim()
+                        .toLowerCase()
+
+                if (
+                    !grouped.has(
+                        key,
+                    )
+                ) {
+                    grouped.set(
+                        key,
+                        {
+                            key,
+                            customer:
+                                row.customer,
+                            contact:
+                                row.customer_contact ||
+                                "Not recorded",
+                            email:
+                                row.customer_email ||
+                                "Not recorded",
+                            transactions:
+                                0,
+                            totalPaid:
+                                0,
+                            depositPaid:
+                                0,
+                            services:
+                                new Set(),
+                            latestVisit:
+                                row.transaction_date,
+                            latestVisitDateOnly:
+                                row.historical_date_only,
+                        },
+                    )
+                }
+
+                const record =
+                    grouped.get(
+                        key,
+                    )
+
+                record.transactions +=
+                    1
+
+                if (
+                    row.status ===
+                    "Paid"
+                ) {
+                    record.totalPaid +=
+                        Number(
+                            row.amount ||
+                                0,
+                        )
+
+                    record.depositPaid +=
+                        Number(
+                            row.deposit_applied ||
+                                0,
+                        )
+                }
+
+                if (
+                    row.service
+                ) {
+                    record.services.add(
+                        row.service,
+                    )
+                }
+
+                if (
+                    new Date(
+                        row.transaction_date,
+                    ).getTime() >
+                    new Date(
+                        record.latestVisit,
+                    ).getTime()
+                ) {
+                    record.latestVisit =
+                        row.transaction_date
+
+                    record.latestVisitDateOnly =
+                        row.historical_date_only
+                }
+            }
+
+            return Array.from(
+                grouped.values(),
+            ).map((record) => ({
+                ...record,
+                services:
+                    Array.from(
+                        record.services,
+                    ),
+            }))
+        }, [
+            searchTerm,
+            transactions,
+        ])
 
     return (
         <div className="min-w-0 space-y-6">
             <header className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-purple-950">POS / Transactions</h1>
+                    <h1 className="text-3xl font-bold text-purple-950">
+                        POS / Transactions
+                    </h1>
+
                     <p className="mt-2 text-sm text-gray-500">
-                        Record a sale or check out an existing appointment.
+                        Record a sale or
+                        check out an
+                        existing
+                        appointment.
                     </p>
                 </div>
 
-                <button disabled={loading || busy} onClick={() => load()} className={button}>
-                    {loading ? "Refreshing…" : "Refresh"}
+                <button
+                    disabled={
+                        loading ||
+                        busy
+                    }
+                    onClick={() =>
+                        load()
+                    }
+                    className={
+                        button
+                    }
+                >
+                    {loading
+                        ? "Refreshing…"
+                        : "Refresh"}
                 </button>
             </header>
 
             {loadError && (
-                <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
-                    {loadError} Use Refresh to try again.
+                <p
+                    role="alert"
+                    className="rounded-xl bg-red-50 p-4 text-red-700"
+                >
+                    {loadError} Use
+                    Refresh to try
+                    again.
                 </p>
             )}
 
             {error && (
-                <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+                <p
+                    role="alert"
+                    className="rounded-xl bg-red-50 p-4 text-red-700"
+                >
                     {error}
                 </p>
             )}
 
             {message && (
-                <p role="status" className="rounded-xl bg-green-50 p-4 text-green-800">
+                <p
+                    role="status"
+                    className="rounded-xl bg-green-50 p-4 text-green-800"
+                >
                     {message}
                 </p>
             )}
 
             <div className="grid gap-4 md:grid-cols-3">
                 {[
-                    ["Paid sales recorded today", money(salesToday)],
-                    ["Transactions today", todayRows.length],
-                    ["Payment options", "Cash / GCash"],
-                ].map(([label, value], index) => (
-                    <div key={label} className={panel}>
-                        <p className="text-sm text-gray-500">{label}</p>
-                        <p className="mt-3 text-2xl font-bold text-purple-800">
-                            {index < 2 && (loading || loadError) ? "—" : value}
-                        </p>
-                    </div>
-                ))}
+                    [
+                        "Paid sales recorded today",
+                        money(
+                            salesToday,
+                        ),
+                    ],
+                    [
+                        "Transactions today",
+                        todayRows.length,
+                    ],
+                    [
+                        "Payment options",
+                        "Cash / GCash",
+                    ],
+                ].map(
+                    (
+                        [
+                            label,
+                            value,
+                        ],
+                        index,
+                    ) => (
+                        <div
+                            key={
+                                label
+                            }
+                            className={
+                                panel
+                            }
+                        >
+                            <p className="text-sm text-gray-500">
+                                {
+                                    label
+                                }
+                            </p>
+
+                            <p className="mt-3 text-2xl font-bold text-purple-800">
+                                {index <
+                                    2 &&
+                                (loading ||
+                                    loadError)
+                                    ? "—"
+                                    : value}
+                            </p>
+                        </div>
+                    ),
+                )}
             </div>
 
             <div className="grid items-start gap-6 xl:grid-cols-2">
-                <section className={panel}>
+                <section
+                    className={
+                        panel
+                    }
+                >
                     <h2 className="mb-5 text-lg font-bold text-purple-950">
-                        Record a transaction
+                        Record a
+                        transaction
                     </h2>
 
-                    <form onSubmit={save}>
-                        <fieldset disabled={disabled} className="space-y-4">
+                    <form
+                        onSubmit={
+                            save
+                        }
+                    >
+                        <fieldset
+                            disabled={
+                                disabled
+                            }
+                            className="space-y-4"
+                        >
                             <Field label="Transaction source">
                                 <select
-                                    className={input}
-                                    value={form.mode}
-                                    onChange={(event) => {
-                                        setForm({ ...freshForm(), mode: event.target.value })
-                                        setError("")
+                                    className={
+                                        input
+                                    }
+                                    value={
+                                        form.mode
+                                    }
+                                    onChange={(
+                                        event,
+                                    ) => {
+                                        setForm(
+                                            {
+                                                ...freshForm(),
+                                                mode: event
+                                                    .target
+                                                    .value,
+                                            },
+                                        )
+
+                                        setError(
+                                            "",
+                                        )
                                     }}
                                 >
-                                    <option value="Walk-in">Walk-in / Product sale</option>
-                                    <option value="Appointment">Existing appointment</option>
+                                    <option value="Walk-in">
+                                        Walk-in
+                                        /
+                                        Product
+                                        sale
+                                    </option>
+
+                                    <option value="Appointment">
+                                        Existing
+                                        appointment
+                                    </option>
                                 </select>
                             </Field>
 
@@ -633,29 +1999,65 @@ function AdminTransactions() {
                                     <SearchSelect
                                         key="appointment"
                                         label="Find the customer’s appointment"
-                                        options={appointmentOptions}
-                                        value={form.appointmentId}
-                                        onChange={selectAppointment}
-                                        disabled={disabled}
+                                        options={
+                                            appointmentOptions
+                                        }
+                                        value={
+                                            form.appointmentId
+                                        }
+                                        onChange={
+                                            selectAppointment
+                                        }
+                                        disabled={
+                                            disabled
+                                        }
                                     />
 
                                     <p className="text-xs text-gray-500">
-                                        Search by name, contact, booking number, or service. Only
-                                        approved/completed bookings without a transaction appear.
+                                        Search
+                                        by
+                                        name,
+                                        contact,
+                                        booking
+                                        number,
+                                        or
+                                        service.
+                                        Only
+                                        approved/completed
+                                        bookings
+                                        without
+                                        a
+                                        transaction
+                                        appear.
                                     </p>
 
                                     {appointment && (
                                         <div className="rounded-xl bg-purple-50 p-4 text-sm text-purple-900">
                                             <p className="font-semibold">
-                                                {appointment.customer_name}
+                                                {
+                                                    appointment.customer_name
+                                                }
                                             </p>
-                                            <p className="mt-1">{appointment.service}</p>
+
                                             <p className="mt-1">
-                                                {appointment.appointment_date} ·{" "}
-                                                {appointment.appointment_time}
+                                                {
+                                                    appointment.service
+                                                }
                                             </p>
+
+                                            <p className="mt-1">
+                                                {
+                                                    appointment.appointment_date
+                                                }{" "}
+                                                ·{" "}
+                                                {
+                                                    appointment.appointment_time
+                                                }
+                                            </p>
+
                                             <p className="mt-2">
-                                                Deposit status:{" "}
+                                                Deposit
+                                                status:{" "}
                                                 {appointment.payment_status ||
                                                     "No deposit recorded"}
                                             </p>
@@ -667,71 +2069,161 @@ function AdminTransactions() {
                                     <Field label="Customer name">
                                         <input
                                             required
-                                            maxLength={100}
-                                            className={input}
-                                            value={form.customer}
-                                            onChange={(event) =>
-                                                change("customer", event.target.value)
+                                            maxLength={
+                                                100
+                                            }
+                                            className={
+                                                input
+                                            }
+                                            value={
+                                                form.customer
+                                            }
+                                            onChange={(
+                                                event,
+                                            ) =>
+                                                change(
+                                                    "customer",
+                                                    event
+                                                        .target
+                                                        .value,
+                                                )
                                             }
                                         />
                                     </Field>
 
                                     <Field label="Sale type">
                                         <select
-                                            className={input}
-                                            value={form.sale_type}
-                                            onChange={(event) => {
-                                                setForm((previous) => ({
-                                                    ...previous,
-                                                    sale_type: event.target.value,
-                                                    historicalDate: "",
-                                                    payment: "Cash",
-                                                    selectedId: "",
-                                                    quantity: "1",
-                                                    amount: "",
-                                                }))
+                                            className={
+                                                input
+                                            }
+                                            value={
+                                                form.sale_type
+                                            }
+                                            onChange={(
+                                                event,
+                                            ) => {
+                                                setForm(
+                                                    (
+                                                        previous,
+                                                    ) => ({
+                                                        ...previous,
+                                                        sale_type:
+                                                            event
+                                                                .target
+                                                                .value,
+                                                        historicalDate:
+                                                            "",
+                                                        payment:
+                                                            "Cash",
+                                                        selectedId:
+                                                            "",
+                                                        quantity:
+                                                            "1",
+                                                        amount:
+                                                            "",
+                                                    }),
+                                                )
                                             }}
                                         >
-                                            <option>Service</option>
-                                            <option>Product</option>
+                                            <option>
+                                                Service
+                                            </option>
+
+                                            <option>
+                                                Product
+                                            </option>
                                         </select>
                                     </Field>
 
                                     <SearchSelect
-                                        key={form.sale_type}
+                                        key={
+                                            form.sale_type
+                                        }
                                         label={
                                             productSale
                                                 ? "Find and select a product"
                                                 : "Find and select a service"
                                         }
-                                        options={itemOptions}
-                                        value={form.selectedId}
-                                        onChange={selectItem}
-                                        disabled={disabled}
+                                        options={
+                                            itemOptions
+                                        }
+                                        value={
+                                            form.selectedId
+                                        }
+                                        onChange={
+                                            selectItem
+                                        }
+                                        disabled={
+                                            disabled
+                                        }
                                     />
 
                                     {!productSale && (
                                         <Field label="Historical sale date (optional)">
                                             <input
                                                 type="date"
-                                                className={input}
+                                                className={
+                                                    input
+                                                }
                                                 max={philippineDate()}
-                                                value={form.historicalDate}
-                                                onChange={(event) =>
-                                                    setForm((previous) => ({
-                                                        ...previous,
-                                                        historicalDate: event.target.value,
-                                                        payment: event.target.value
-                                                            ? "Not recorded"
-                                                            : "Cash",
-                                                    }))
+                                                value={
+                                                    form.historicalDate
+                                                }
+                                                onChange={(
+                                                    event,
+                                                ) =>
+                                                    setForm(
+                                                        (
+                                                            previous,
+                                                        ) => ({
+                                                            ...previous,
+                                                            historicalDate:
+                                                                event
+                                                                    .target
+                                                                    .value,
+                                                            payment:
+                                                                event
+                                                                    .target
+                                                                    .value
+                                                                    ? "Not recorded"
+                                                                    : "Cash",
+                                                        }),
+                                                    )
                                                 }
                                             />
+
                                             <span className="mt-1 block text-xs text-gray-500">
-                                                Leave blank for a sale made now. For an older
-                                                walk-in service, choose its original Philippine
-                                                date. The paper sheet has no exact time, so
-                                                history will display the date only.
+                                                Leave
+                                                blank
+                                                for
+                                                a
+                                                sale
+                                                made
+                                                now.
+                                                For
+                                                an
+                                                older
+                                                walk-in
+                                                service,
+                                                choose
+                                                its
+                                                original
+                                                Philippine
+                                                date.
+                                                The
+                                                paper
+                                                sheet
+                                                has
+                                                no
+                                                exact
+                                                time,
+                                                so
+                                                history
+                                                will
+                                                display
+                                                the
+                                                date
+                                                only.
                                             </span>
                                         </Field>
                                     )}
@@ -743,21 +2235,44 @@ function AdminTransactions() {
                                                 required
                                                 min="1"
                                                 step="1"
-                                                max={selectedItem?.stock}
-                                                className={input}
-                                                value={form.quantity}
-                                                onChange={(event) => {
-                                                    const quantity = event.target.value
-                                                    setForm((previous) => ({
-                                                        ...previous,
-                                                        quantity,
-                                                        amount: selectedItem
-                                                            ? (
-                                                                  Number(selectedItem.price) *
-                                                                  Number(quantity)
-                                                              ).toFixed(2)
-                                                            : "",
-                                                    }))
+                                                max={
+                                                    selectedItem?.stock
+                                                }
+                                                className={
+                                                    input
+                                                }
+                                                value={
+                                                    form.quantity
+                                                }
+                                                onChange={(
+                                                    event,
+                                                ) => {
+                                                    const quantity =
+                                                        event
+                                                            .target
+                                                            .value
+
+                                                    setForm(
+                                                        (
+                                                            previous,
+                                                        ) => ({
+                                                            ...previous,
+                                                            quantity,
+                                                            amount:
+                                                                selectedItem
+                                                                    ? (
+                                                                          Number(
+                                                                              selectedItem.price,
+                                                                          ) *
+                                                                          Number(
+                                                                              quantity,
+                                                                          )
+                                                                      ).toFixed(
+                                                                          2,
+                                                                      )
+                                                                    : "",
+                                                        }),
+                                                    )
                                                 }}
                                             />
                                         </Field>
@@ -771,239 +2286,495 @@ function AdminTransactions() {
                                     type="number"
                                     min="0.01"
                                     step="0.01"
-                                    className={input}
-                                    value={form.amount}
-                                    onChange={(event) => change("amount", event.target.value)}
+                                    className={
+                                        input
+                                    }
+                                    value={
+                                        form.amount
+                                    }
+                                    onChange={(
+                                        event,
+                                    ) =>
+                                        change(
+                                            "amount",
+                                            event
+                                                .target
+                                                .value,
+                                        )
+                                    }
                                 />
                             </Field>
 
                             <div className="space-y-3 rounded-xl bg-gray-50 p-4 text-sm">
                                 <div className="flex justify-between gap-3">
-                                    <span>Final sale total</span>
-                                    <strong>{money(form.amount)}</strong>
+                                    <span>
+                                        Final
+                                        sale
+                                        total
+                                    </span>
+
+                                    <strong>
+                                        {money(
+                                            form.amount,
+                                        )}
+                                    </strong>
                                 </div>
 
                                 <div className="flex justify-between gap-3 text-emerald-700">
-                                    <span>Verified deposit</span>
-                                    <strong>− {money(deposit)}</strong>
+                                    <span>
+                                        Verified
+                                        deposit
+                                    </span>
+
+                                    <strong>
+                                        −{" "}
+                                        {money(
+                                            deposit,
+                                        )}
+                                    </strong>
                                 </div>
 
                                 <div className="flex justify-between gap-3 border-t border-gray-200 pt-3 text-lg font-bold text-purple-900">
-                                    <span>Balance to collect</span>
-                                    <span>{money(balanceCents / 100)}</span>
+                                    <span>
+                                        Balance
+                                        to
+                                        collect
+                                    </span>
+
+                                    <span>
+                                        {money(
+                                            balanceCents /
+                                                100,
+                                        )}
+                                    </span>
                                 </div>
                             </div>
 
                             {unresolved && (
                                 <p className="text-sm text-amber-700">
-                                    This deposit needs payment review before checkout.
+                                    This
+                                    deposit
+                                    needs
+                                    payment
+                                    review
+                                    before
+                                    checkout.
                                 </p>
                             )}
 
-                            {balanceCents < 0 && (
+                            {balanceCents <
+                                0 && (
                                 <p className="text-sm text-red-700">
-                                    The deposit exceeds the final bill. Resolve the excess before
+                                    The
+                                    deposit
+                                    exceeds
+                                    the
+                                    final
+                                    bill.
+                                    Resolve
+                                    the
+                                    excess
+                                    before
                                     saving.
                                 </p>
                             )}
 
-                            {balanceCents > 0 && (
+                            {balanceCents >
+                                0 && (
                                 <Field label="Payment method for the remaining balance">
                                     <select
-                                        className={input}
-                                        value={form.payment}
-                                        onChange={(event) => change("payment", event.target.value)}
+                                        className={
+                                            input
+                                        }
+                                        value={
+                                            form.payment
+                                        }
+                                        onChange={(
+                                            event,
+                                        ) =>
+                                            change(
+                                                "payment",
+                                                event
+                                                    .target
+                                                    .value,
+                                            )
+                                        }
                                     >
-                                        <option>Cash</option>
-                                        <option>GCash</option>
-                                        {!booked && !productSale && form.historicalDate && (
-                                            <option>Not recorded</option>
-                                        )}
+                                        <option>
+                                            Cash
+                                        </option>
+
+                                        <option>
+                                            GCash
+                                        </option>
+
+                                        {!booked &&
+                                            !productSale &&
+                                            form.historicalDate && (
+                                                <option>
+                                                    Not
+                                                    recorded
+                                                </option>
+                                            )}
                                     </select>
                                 </Field>
                             )}
 
                             <p className="text-xs leading-relaxed text-gray-500">
-                                {balanceCents === 0 && appointment
+                                {balanceCents ===
+                                    0 &&
+                                appointment
                                     ? "The verified deposit covers the final bill. No additional payment is due."
                                     : "Save only after the displayed balance has been received."}
                             </p>
 
                             <button
                                 type="submit"
-                                disabled={disabled || Boolean(unresolved) || balanceCents < 0}
+                                disabled={
+                                    disabled ||
+                                    Boolean(
+                                        unresolved,
+                                    ) ||
+                                    balanceCents <
+                                        0
+                                }
                                 className={`${button} w-full`}
                             >
-                                {busy ? "Saving…" : "Confirm and save transaction"}
+                                {busy
+                                    ? "Saving…"
+                                    : "Confirm and save transaction"}
                             </button>
                         </fieldset>
                     </form>
                 </section>
 
-                <section className={panel}>
-                    <h2 className="text-lg font-bold text-purple-950">Saved receipt</h2>
+                <section
+                    className={
+                        panel
+                    }
+                >
+                    <h2 className="text-lg font-bold text-purple-950">
+                        Saved
+                        receipt
+                    </h2>
 
                     {!receipt ? (
                         <p className="mt-5 rounded-xl border border-dashed border-purple-200 p-10 text-center text-sm text-gray-500">
-                            Save a transaction or select View in the history.
+                            Save
+                            a
+                            transaction
+                            or
+                            select
+                            View
+                            in
+                            the
+                            history.
                         </p>
                     ) : (
                         <div className="mt-5 space-y-4 text-sm">
-                            <p className="font-bold text-purple-800">Dahling’s Salon & Spa</p>
+                            <p className="font-bold text-purple-800">
+                                Dahling’s
+                                Salon
+                                &
+                                Spa
+                            </p>
 
                             <p className="text-gray-500">
-                                Receipt #{receipt.transaction_id} ·{" "}
-                                {dateLabel(receipt.transaction_date, receipt.historical_date_only)}
+                                Receipt
+                                #{
+                                    receipt.transaction_id
+                                }{" "}
+                                ·{" "}
+                                {dateLabel(
+                                    receipt.transaction_date,
+                                    receipt.historical_date_only,
+                                )}
                             </p>
 
                             {[
-                                ["Customer", receipt.customer],
+                                [
+                                    "Customer",
+                                    receipt.customer,
+                                ],
                                 [
                                     "Booking",
                                     receipt.appointment_id
                                         ? `#${receipt.appointment_id}`
                                         : "Walk-in / Product sale",
                                 ],
-                                ["Service / item", receipt.service],
-                                ["Final total", money(receipt.amount)],
-                                ["Deposit applied", money(receipt.deposit_applied)],
-                                ["Balance collected", money(receipt.balance_collected)],
+                                [
+                                    "Service / item",
+                                    receipt.service,
+                                ],
+                                [
+                                    "Final total",
+                                    money(
+                                        receipt.amount,
+                                    ),
+                                ],
+                                [
+                                    "Deposit applied",
+                                    money(
+                                        receipt.deposit_applied,
+                                    ),
+                                ],
+                                [
+                                    "Balance collected",
+                                    money(
+                                        receipt.balance_collected,
+                                    ),
+                                ],
                                 [
                                     "Balance payment",
-                                    Number(receipt.balance_collected) > 0
+                                    Number(
+                                        receipt.balance_collected,
+                                    ) >
+                                    0
                                         ? receipt.payment
                                         : "No additional payment",
                                 ],
-                                ["Status", receipt.status],
-                            ].map(([label, value]) => (
-                                <div
-                                    key={label}
-                                    className="flex justify-between gap-4 border-b border-gray-100 pb-3"
-                                >
-                                    <span className="text-gray-500">{label}</span>
-                                    <span className="text-right font-medium">{value}</span>
-                                </div>
-                            ))}
+                                [
+                                    "Status",
+                                    receipt.offline_pending
+                                        ? "Pending sync"
+                                        : receipt.status,
+                                ],
+                            ].map(
+                                (
+                                    [
+                                        label,
+                                        value,
+                                    ],
+                                ) => (
+                                    <div
+                                        key={
+                                            label
+                                        }
+                                        className="flex justify-between gap-4 border-b border-gray-100 pb-3"
+                                    >
+                                        <span className="text-gray-500">
+                                            {
+                                                label
+                                            }
+                                        </span>
+
+                                        <span className="text-right font-medium">
+                                            {
+                                                value
+                                            }
+                                        </span>
+                                    </div>
+                                ),
+                            )}
 
                             <button
-                                onClick={printReceipt}
-                                disabled={receipt.status !== "Paid"}
-                                className={button}
+                                onClick={
+                                    printReceipt
+                                }
+                                disabled={
+                                    receipt.status !==
+                                    "Paid"
+                                }
+                                className={
+                                    button
+                                }
                             >
-                                Print receipt
+                                Print
+                                receipt
                             </button>
                         </div>
                     )}
                 </section>
             </div>
 
-            <section className={panel}>
+            <section
+                className={panel}
+            >
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-                    <h2 className="text-lg font-bold text-purple-950">Transaction history</h2>
+                    <h2 className="text-lg font-bold text-purple-950">
+                        Transaction
+                        history
+                    </h2>
 
                     <input
                         type="search"
                         aria-label="Search transaction history"
                         placeholder="Search name, contact, email, booking, or service…"
-                        value={search}
-                        onChange={(event) => setSearch(event.target.value)}
+                        value={
+                            search
+                        }
+                        onChange={(
+                            event,
+                        ) =>
+                            setSearch(
+                                event
+                                    .target
+                                    .value,
+                            )
+                        }
                         className={`${input} md:max-w-sm`}
                     />
                 </div>
 
-                {searchTerm && customerRecords.length > 0 && (
-                    <div className="mb-6">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                                <h3 className="font-bold text-purple-950">
-                                    Customer record{customerRecords.length > 1 ? "s" : ""}
-                                </h3>
-                                <p className="mt-1 text-xs text-gray-500">
-                                    Complete recorded transaction and service history matching your
-                                    search.
-                                </p>
+                {searchTerm &&
+                    customerRecords.length >
+                        0 && (
+                        <div className="mb-6">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <h3 className="font-bold text-purple-950">
+                                        Customer
+                                        record
+                                        {customerRecords.length >
+                                        1
+                                            ? "s"
+                                            : ""}
+                                    </h3>
+
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Complete
+                                        recorded
+                                        transaction
+                                        and
+                                        service
+                                        history
+                                        matching
+                                        your
+                                        search.
+                                    </p>
+                                </div>
+
+                                <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
+                                    {
+                                        customerRecords.length
+                                    }{" "}
+                                    customer
+                                    match
+                                    {customerRecords.length >
+                                    1
+                                        ? "es"
+                                        : ""}
+                                </span>
                             </div>
 
-                            <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
-                                {customerRecords.length} customer match
-                                {customerRecords.length > 1 ? "es" : ""}
-                            </span>
+                            <div className="grid gap-3 lg:grid-cols-2">
+                                {customerRecords.map(
+                                    (
+                                        record,
+                                    ) => (
+                                        <article
+                                            key={
+                                                record.key
+                                            }
+                                            className="rounded-xl border border-purple-100 bg-purple-50/40 p-4"
+                                        >
+                                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="font-bold text-purple-950">
+                                                        {
+                                                            record.customer
+                                                        }
+                                                    </p>
+
+                                                    <p className="mt-1 text-xs text-gray-600">
+                                                        Contact:{" "}
+                                                        {
+                                                            record.contact
+                                                        }
+                                                    </p>
+
+                                                    <p className="mt-1 text-xs text-gray-600">
+                                                        Email:{" "}
+                                                        {
+                                                            record.email
+                                                        }
+                                                    </p>
+                                                </div>
+
+                                                <p className="text-right text-xs text-gray-500">
+                                                    Latest
+                                                    visit
+
+                                                    <span className="mt-1 block font-semibold text-gray-700">
+                                                        {dateLabel(
+                                                            record.latestVisit,
+                                                            record.latestVisitDateOnly,
+                                                        )}
+                                                    </span>
+                                                </p>
+                                            </div>
+
+                                            <div className="mt-4 grid grid-cols-3 gap-2 border-y border-purple-100 py-3 text-center">
+                                                <div>
+                                                    <p className="text-xs text-gray-500">
+                                                        Transactions
+                                                    </p>
+
+                                                    <p className="mt-1 font-bold text-purple-900">
+                                                        {
+                                                            record.transactions
+                                                        }
+                                                    </p>
+                                                </div>
+
+                                                <div>
+                                                    <p className="text-xs text-gray-500">
+                                                        Total
+                                                        paid
+                                                    </p>
+
+                                                    <p className="mt-1 font-bold text-purple-900">
+                                                        {money(
+                                                            record.totalPaid,
+                                                        )}
+                                                    </p>
+                                                </div>
+
+                                                <div>
+                                                    <p className="text-xs text-gray-500">
+                                                        Deposits
+                                                    </p>
+
+                                                    <p className="mt-1 font-bold text-emerald-700">
+                                                        {money(
+                                                            record.depositPaid,
+                                                        )}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3">
+                                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                                    Services
+                                                    /
+                                                    items
+                                                </p>
+
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                    {record.services.map(
+                                                        (
+                                                            service,
+                                                        ) => (
+                                                            <span
+                                                                key={
+                                                                    service
+                                                                }
+                                                                className="rounded-full bg-white px-3 py-1 text-xs text-purple-800 shadow-sm"
+                                                            >
+                                                                {
+                                                                    service
+                                                                }
+                                                            </span>
+                                                        ),
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </article>
+                                    ),
+                                )}
+                            </div>
                         </div>
-
-                        <div className="grid gap-3 lg:grid-cols-2">
-                            {customerRecords.map((record) => (
-                                <article
-                                    key={record.key}
-                                    className="rounded-xl border border-purple-100 bg-purple-50/40 p-4"
-                                >
-                                    <div className="flex flex-wrap items-start justify-between gap-3">
-                                        <div>
-                                            <p className="font-bold text-purple-950">
-                                                {record.customer}
-                                            </p>
-                                            <p className="mt-1 text-xs text-gray-600">
-                                                Contact: {record.contact}
-                                            </p>
-                                            <p className="mt-1 text-xs text-gray-600">
-                                                Email: {record.email}
-                                            </p>
-                                        </div>
-
-                                        <p className="text-right text-xs text-gray-500">
-                                            Latest visit
-                                            <span className="mt-1 block font-semibold text-gray-700">
-                                                {dateLabel(
-                                                    record.latestVisit,
-                                                    record.latestVisitDateOnly,
-                                                )}
-                                            </span>
-                                        </p>
-                                    </div>
-
-                                    <div className="mt-4 grid grid-cols-3 gap-2 border-y border-purple-100 py-3 text-center">
-                                        <div>
-                                            <p className="text-xs text-gray-500">Transactions</p>
-                                            <p className="mt-1 font-bold text-purple-900">
-                                                {record.transactions}
-                                            </p>
-                                        </div>
-
-                                        <div>
-                                            <p className="text-xs text-gray-500">Total paid</p>
-                                            <p className="mt-1 font-bold text-purple-900">
-                                                {money(record.totalPaid)}
-                                            </p>
-                                        </div>
-
-                                        <div>
-                                            <p className="text-xs text-gray-500">Deposits</p>
-                                            <p className="mt-1 font-bold text-emerald-700">
-                                                {money(record.depositPaid)}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-3">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                            Services / items
-                                        </p>
-
-                                        <div className="mt-2 flex flex-wrap gap-2">
-                                            {record.services.map((service) => (
-                                                <span
-                                                    key={service}
-                                                    className="rounded-full bg-white px-3 py-1 text-xs text-purple-800 shadow-sm"
-                                                >
-                                                    {service}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </article>
-                            ))}
-                        </div>
-                    </div>
-                )}
+                    )}
 
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[1060px] text-left text-sm">
@@ -1018,103 +2789,182 @@ function AdminTransactions() {
                                     "Payment",
                                     "Status",
                                     "Receipt",
-                                ].map((title) => (
-                                    <th key={title} className="px-3 py-4">
-                                        {title}
-                                    </th>
-                                ))}
+                                ].map(
+                                    (
+                                        title,
+                                    ) => (
+                                        <th
+                                            key={
+                                                title
+                                            }
+                                            className="px-3 py-4"
+                                        >
+                                            {
+                                                title
+                                            }
+                                        </th>
+                                    ),
+                                )}
                             </tr>
                         </thead>
 
                         <tbody className="divide-y divide-gray-100">
-                            {filtered.map((row) => (
-                                <tr key={row.transaction_id} className="hover:bg-purple-50/40">
-                                    <td className="px-3 py-4">
-                                        <p className="font-semibold">{row.customer}</p>
-
-                                        <p className="mt-1 text-xs text-gray-500">
-                                            {dateLabel(
-                                                row.transaction_date,
-                                                row.historical_date_only,
-                                            )}
-                                        </p>
-
-                                        {row.appointment_id && (
-                                            <p className="mt-1 text-xs text-purple-600">
-                                                Booking #{row.appointment_id}
-                                            </p>
-                                        )}
-
-                                        {row.customer_contact && (
-                                            <p className="mt-1 text-xs text-gray-500">
-                                                {row.customer_contact}
-                                            </p>
-                                        )}
-
-                                        {row.customer_email && (
-                                            <p className="mt-1 text-xs text-gray-500">
-                                                {row.customer_email}
-                                            </p>
-                                        )}
-                                    </td>
-
-                                    <td className="px-3 py-4">{row.service}</td>
-
-                                    <td className="whitespace-nowrap px-3 py-4">
-                                        {money(row.amount)}
-                                    </td>
-
-                                    <td className="whitespace-nowrap px-3 py-4 text-emerald-700">
-                                        {money(row.deposit_applied)}
-                                    </td>
-
-                                    <td className="whitespace-nowrap px-3 py-4">
-                                        {money(row.balance_collected)}
-                                    </td>
-
-                                    <td className="px-3 py-4 text-xs text-gray-600">
-                                        {Number(row.deposit_applied) > 0 && (
-                                            <p>
-                                                Deposit: {row.deposit_payment_method || "Recorded"}
-                                            </p>
-                                        )}
-
-                                        {Number(row.balance_collected) > 0 ? (
-                                            <p
-                                                className={
-                                                    Number(row.deposit_applied) > 0 ? "mt-1" : ""
+                            {filtered.map(
+                                (
+                                    row,
+                                ) => (
+                                    <tr
+                                        key={
+                                            row.transaction_id
+                                        }
+                                        className="hover:bg-purple-50/40"
+                                    >
+                                        <td className="px-3 py-4">
+                                            <p className="font-semibold">
+                                                {
+                                                    row.customer
                                                 }
-                                            >
-                                                Balance: {row.payment}
                                             </p>
-                                        ) : (
-                                            <p>No additional payment</p>
-                                        )}
-                                    </td>
 
-                                    <td className="px-3 py-4">{row.status}</td>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                {dateLabel(
+                                                    row.transaction_date,
+                                                    row.historical_date_only,
+                                                )}
+                                            </p>
 
-                                    <td className="px-3 py-4">
-                                        <button
-                                            onClick={() => {
-                                                setReceipt(row)
-                                                window.scrollTo({
-                                                    top: 0,
-                                                    behavior: "smooth",
-                                                })
-                                            }}
-                                            className="rounded-lg bg-purple-50 px-3 py-2 font-semibold text-purple-700"
-                                        >
-                                            View
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
+                                            {row.appointment_id && (
+                                                <p className="mt-1 text-xs text-purple-600">
+                                                    Booking
+                                                    #
+                                                    {
+                                                        row.appointment_id
+                                                    }
+                                                </p>
+                                            )}
+
+                                            {row.customer_contact && (
+                                                <p className="mt-1 text-xs text-gray-500">
+                                                    {
+                                                        row.customer_contact
+                                                    }
+                                                </p>
+                                            )}
+
+                                            {row.customer_email && (
+                                                <p className="mt-1 text-xs text-gray-500">
+                                                    {
+                                                        row.customer_email
+                                                    }
+                                                </p>
+                                            )}
+                                        </td>
+
+                                        <td className="px-3 py-4">
+                                            {
+                                                row.service
+                                            }
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-3 py-4">
+                                            {money(
+                                                row.amount,
+                                            )}
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-3 py-4 text-emerald-700">
+                                            {money(
+                                                row.deposit_applied,
+                                            )}
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-3 py-4">
+                                            {money(
+                                                row.balance_collected,
+                                            )}
+                                        </td>
+
+                                        <td className="px-3 py-4 text-xs text-gray-600">
+                                            {Number(
+                                                row.deposit_applied,
+                                            ) >
+                                                0 && (
+                                                <p>
+                                                    Deposit:{" "}
+                                                    {row.deposit_payment_method ||
+                                                        "Recorded"}
+                                                </p>
+                                            )}
+
+                                            {Number(
+                                                row.balance_collected,
+                                            ) >
+                                            0 ? (
+                                                <p
+                                                    className={
+                                                        Number(
+                                                            row.deposit_applied,
+                                                        ) >
+                                                        0
+                                                            ? "mt-1"
+                                                            : ""
+                                                    }
+                                                >
+                                                    Balance:{" "}
+                                                    {
+                                                        row.payment
+                                                    }
+                                                </p>
+                                            ) : (
+                                                <p>
+                                                    No
+                                                    additional
+                                                    payment
+                                                </p>
+                                            )}
+                                        </td>
+
+                                        <td className="px-3 py-4">
+                                            {row.offline_pending
+                                                ? "Pending sync"
+                                                : row.status}
+                                        </td>
+
+                                        <td className="px-3 py-4">
+                                            <button
+                                                onClick={() => {
+                                                    setReceipt(
+                                                        row,
+                                                    )
+
+                                                    window.scrollTo(
+                                                        {
+                                                            top: 0,
+                                                            behavior:
+                                                                "smooth",
+                                                        },
+                                                    )
+                                                }}
+                                                className="rounded-lg bg-purple-50 px-3 py-2 font-semibold text-purple-700"
+                                            >
+                                                View
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ),
+                            )}
 
                             {!filtered.length && (
                                 <tr>
-                                    <td colSpan={8} className="p-8 text-center text-gray-500">
-                                        {loading ? "Loading…" : "No transactions found."}
+                                    <td
+                                        colSpan={
+                                            8
+                                        }
+                                        className="p-8 text-center text-gray-500"
+                                    >
+                                        {loading
+                                            ? "Loading…"
+                                            : "No transactions found."}
                                     </td>
                                 </tr>
                             )}

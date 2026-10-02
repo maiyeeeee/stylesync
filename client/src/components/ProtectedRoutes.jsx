@@ -9,6 +9,63 @@ import Brand from "./Brand"
 import { Button } from "./ui/button"
 import { API_URL } from "../lib/sessionApi"
 
+const OFFLINE_SESSION_KEY = "stylesync-offline-session"
+
+function saveOfflineSession(user, expiresAt) {
+    try {
+        localStorage.setItem(
+            OFFLINE_SESSION_KEY,
+            JSON.stringify({
+                user,
+                expiresAt,
+            }),
+        )
+    } catch {
+        // Ignore storage errors.
+    }
+}
+
+function getOfflineSession() {
+    try {
+        const raw = localStorage.getItem(
+            OFFLINE_SESSION_KEY,
+        )
+
+        if (!raw) {
+            return null
+        }
+
+        const data = JSON.parse(raw)
+        const expiresAt = Number(
+            data?.expiresAt,
+        )
+
+        if (
+            !data?.user ||
+            !Number.isFinite(expiresAt)
+        ) {
+            return null
+        }
+
+        return {
+            user: data.user,
+            expiresAt,
+        }
+    } catch {
+        return null
+    }
+}
+
+function clearOfflineSession() {
+    try {
+        localStorage.removeItem(
+            OFFLINE_SESSION_KEY,
+        )
+    } catch {
+        // Ignore storage errors.
+    }
+}
+
 function ProtectedRoutes({
     children,
     allowedRoles = ["admin", "owner"],
@@ -30,7 +87,9 @@ function ProtectedRoutes({
         const clearSession = () => {
             requestId += 1
             verifiedUntil = 0
+
             clearTimeout(expiryTimer)
+            clearOfflineSession()
 
             if (active) {
                 setSession({
@@ -40,10 +99,60 @@ function ProtectedRoutes({
             }
         }
 
-        const checkSession = async () => {
+        const useOfflineSession = () => {
+            const offlineSession =
+                getOfflineSession()
+
             if (
-                !navigator.onLine &&
-                verifiedUntil > Date.now()
+                !offlineSession ||
+                offlineSession.expiresAt <=
+                    Date.now()
+            ) {
+                return false
+            }
+
+            verifiedUntil =
+                offlineSession.expiresAt
+
+            clearTimeout(expiryTimer)
+
+            if (active) {
+                setSession({
+                    status: "authenticated",
+                    user: offlineSession.user,
+                })
+            }
+
+            expiryTimer = setTimeout(
+                clearSession,
+                Math.max(
+                    0,
+                    offlineSession.expiresAt -
+                        Date.now(),
+                ),
+            )
+
+            return true
+        }
+
+        const checkSession = async () => {
+            if (!navigator.onLine) {
+                const restored =
+                    useOfflineSession()
+
+                if (!restored && active) {
+                    setSession({
+                        status: "error",
+                        user: null,
+                    })
+                }
+
+                return
+            }
+
+            if (
+                verifiedUntil >
+                Date.now()
             ) {
                 return
             }
@@ -104,7 +213,13 @@ function ProtectedRoutes({
                 }
 
                 verifiedUntil = expiresAt
+
                 clearTimeout(expiryTimer)
+
+                saveOfflineSession(
+                    data.user,
+                    expiresAt,
+                )
 
                 setSession({
                     status: "authenticated",
@@ -115,7 +230,8 @@ function ProtectedRoutes({
                     clearSession,
                     Math.max(
                         0,
-                        expiresAt - Date.now(),
+                        expiresAt -
+                            Date.now(),
                     ),
                 )
             } catch {
@@ -129,10 +245,20 @@ function ProtectedRoutes({
                 verifiedUntil = 0
                 clearTimeout(expiryTimer)
 
-                setSession({
-                    status: "error",
-                    user: null,
-                })
+                /*
+                 * If the network request fails,
+                 * try restoring the last verified
+                 * session before showing an error.
+                 */
+                const restored =
+                    useOfflineSession()
+
+                if (!restored && active) {
+                    setSession({
+                        status: "error",
+                        user: null,
+                    })
+                }
             }
         }
 
@@ -142,6 +268,18 @@ function ProtectedRoutes({
                 "stylesync-logout-event"
             ) {
                 clearSession()
+            }
+        }
+
+        const handleOffline = () => {
+            const restored =
+                useOfflineSession()
+
+            if (!restored && active) {
+                setSession({
+                    status: "error",
+                    user: null,
+                })
             }
         }
 
@@ -156,14 +294,22 @@ function ProtectedRoutes({
             "auth-expired",
             clearSession,
         )
+
         window.addEventListener(
             "storage",
             handleStorage,
         )
+
         window.addEventListener(
             "online",
             checkSession,
         )
+
+        window.addEventListener(
+            "offline",
+            handleOffline,
+        )
+
         window.addEventListener(
             "focus",
             checkSession,
@@ -172,20 +318,29 @@ function ProtectedRoutes({
         return () => {
             active = false
             requestId += 1
+
             clearTimeout(expiryTimer)
 
             window.removeEventListener(
                 "auth-expired",
                 clearSession,
             )
+
             window.removeEventListener(
                 "storage",
                 handleStorage,
             )
+
             window.removeEventListener(
                 "online",
                 checkSession,
             )
+
+            window.removeEventListener(
+                "offline",
+                handleOffline,
+            )
+
             window.removeEventListener(
                 "focus",
                 checkSession,
@@ -226,8 +381,16 @@ function ProtectedRoutes({
         return (
             <SessionGate
                 icon={LuTriangleAlert}
-                title="We can’t reach your session."
-                message="Check your connection and make sure the server is running, then try again."
+                title={
+                    navigator.onLine
+                        ? "We can’t reach your session."
+                        : "Offline access is unavailable."
+                }
+                message={
+                    navigator.onLine
+                        ? "Check your connection and make sure the server is running, then try again."
+                        : "Connect to the internet and sign in once before using emergency offline mode."
+                }
             >
                 <Button
                     type="button"
