@@ -171,8 +171,7 @@ export default function Book() {
 
     const selected = services.find(
         (service) =>
-            String(service.service_id) ===
-            String(form.service_id),
+            String(service.service_id) === String(form.service_id),
     )
 
     const availabilityKey =
@@ -198,8 +197,7 @@ export default function Book() {
         setReservation(data)
 
         setOffset(
-            Date.parse(data.server_now) -
-                Date.now(),
+            Date.parse(data.server_now) - Date.now(),
         )
     }
 
@@ -211,15 +209,12 @@ export default function Book() {
         })
             .then((rows) => {
                 if (!Array.isArray(rows)) {
-                    throw new Error(
-                        "Cannot load services.",
-                    )
+                    throw new Error("Cannot load services.")
                 }
 
                 const list = rows.filter(
                     (service) =>
-                        service.status ===
-                        "Available",
+                        service.status === "Available",
                 )
 
                 setServices(list)
@@ -227,8 +222,7 @@ export default function Book() {
                 const chosen = list.find(
                     (service) =>
                         service.service ===
-                        location.state
-                            ?.selectedService,
+                        location.state?.selectedService,
                 )
 
                 if (chosen) {
@@ -241,9 +235,7 @@ export default function Book() {
                 }
             })
             .catch((err) => {
-                if (
-                    !controller.signal.aborted
-                ) {
+                if (!controller.signal.aborted) {
                     setError(err.message)
                 }
             })
@@ -270,10 +262,7 @@ export default function Book() {
         let running = false
 
         async function refresh() {
-            if (
-                running ||
-                lock.current
-            ) {
+            if (running || lock.current) {
                 return
             }
 
@@ -286,18 +275,14 @@ export default function Book() {
                 const data = await call(
                     "/booking-payments/reservation",
                     {
-                        token:
-                            entry.token,
-
+                        token: entry.token,
                         signal:
-                            controller
-                                .signal,
+                            controller.signal,
                     },
                 )
 
                 if (
-                    !controller.signal
-                        .aborted &&
+                    !controller.signal.aborted &&
                     version ===
                         mutationVersion.current &&
                     !lock.current
@@ -307,8 +292,7 @@ export default function Book() {
                 }
             } catch (err) {
                 if (
-                    !controller.signal
-                        .aborted &&
+                    !controller.signal.aborted &&
                     version ===
                         mutationVersion.current &&
                     !lock.current
@@ -338,8 +322,14 @@ export default function Book() {
     }, [entry])
 
     useEffect(() => {
-        setAvailability(null)
-
+        /*
+         * IMPORTANT:
+         * Do not clear availability while the client
+         * is reviewing the booking.
+         *
+         * The selected slot was already checked before
+         * entering the review screen.
+         */
         if (
             entry ||
             reviewing ||
@@ -350,6 +340,8 @@ export default function Book() {
             setChecking(false)
             return
         }
+
+        setAvailability(null)
 
         const controller =
             new AbortController()
@@ -377,8 +369,7 @@ export default function Book() {
         )
             .then((data) => {
                 if (
-                    !controller.signal
-                        .aborted
+                    !controller.signal.aborted
                 ) {
                     setAvailability({
                         ...data,
@@ -388,16 +379,14 @@ export default function Book() {
             })
             .catch((err) => {
                 if (
-                    !controller.signal
-                        .aborted
+                    !controller.signal.aborted
                 ) {
                     setError(err.message)
                 }
             })
             .finally(() => {
                 if (
-                    !controller.signal
-                        .aborted
+                    !controller.signal.aborted
                 ) {
                     setChecking(false)
                 }
@@ -508,20 +497,16 @@ export default function Book() {
                         (value) =>
                             value
                                 .toString(16)
-                                .padStart(
-                                    2,
-                                    "0",
-                                ),
+                                .padStart(2, "0"),
                     ).join(""),
 
                     payload: form,
                 }
 
                 /*
-                 * Save before sending the
-                 * reservation request so the
-                 * same reservation can be
-                 * resumed after refresh/back.
+                 * Save before sending the reservation
+                 * request so refresh/back can continue
+                 * the same reservation.
                  */
                 sessionStorage.setItem(
                     KEY,
@@ -536,10 +521,8 @@ export default function Book() {
                     "/booking-payments/reserve",
                     {
                         method: "POST",
-                        token:
-                            saved.token,
-                        body:
-                            saved.payload,
+                        token: saved.token,
+                        body: saved.payload,
                     },
                 ),
             )
@@ -557,7 +540,7 @@ export default function Book() {
                         KEY,
                     )
                 } catch {
-                    // Keep form available.
+                    // Keep the form available.
                 }
 
                 setEntry(null)
@@ -588,12 +571,10 @@ export default function Book() {
                     "/booking-payments/submit",
                     {
                         method: "POST",
-                        token:
-                            entry.token,
+                        token: entry.token,
 
                         body: {
                             reference,
-
                             amount:
                                 reservation.required_amount,
                         },
@@ -893,9 +874,8 @@ export default function Book() {
                                         <p className="text-sm leading-relaxed text-gray-600">
                                             Appointment
                                             approval or
-                                            decline
-                                            updates will
-                                            be sent to{" "}
+                                            decline updates
+                                            will be sent to{" "}
                                             <strong>
                                                 {reservation.email ||
                                                     entry
@@ -1135,8 +1115,7 @@ export default function Book() {
                                                     <p className="font-bold">
                                                         Your
                                                         appointment
-                                                        request
-                                                        was
+                                                        request was
                                                         declined.
                                                     </p>
 
@@ -1469,10 +1448,10 @@ export default function Book() {
                                             be
                                             temporarily
                                             reserved for
-                                            15 minutes and
-                                            you will be
-                                            directed to
-                                            the GCash
+                                            15 minutes
+                                            and you will
+                                            be directed
+                                            to the GCash
                                             payment step.
                                             Complete the
                                             required 20%
@@ -1518,8 +1497,7 @@ export default function Book() {
                                             }}
                                             className="rounded-xl border border-purple-200 bg-white px-5 py-3 font-semibold text-purple-800 transition hover:bg-purple-50"
                                         >
-                                            Back and
-                                            edit
+                                            Back and edit
                                         </button>
 
                                         <button
