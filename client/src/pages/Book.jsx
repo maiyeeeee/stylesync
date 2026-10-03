@@ -456,15 +456,16 @@ export default function Book() {
             return
         }
 
-        if (
-            !entry &&
-            !validAvailability
-        ) {
-            setError(
-                "Choose an available slot first.",
-            )
-            return
-        }
+       if (
+    !entry &&
+    !reviewing &&
+    !validAvailability
+) {
+    setError(
+        "Choose an available slot first.",
+    )
+    return
+}
 
         if (
             !entry &&
