@@ -609,71 +609,53 @@ export default function AdminPaymentReview() {
                             </label>
 
                             <div className="flex flex-wrap gap-3 md:col-span-2">
-                                <Button
-                                    type="button"
-                                    disabled={
-                                        !form.confirm_received ||
-                                        busy
-                                    }
-                                    onClick={() =>
-                                        review(
-                                            "verify-and-approve",
-                                        )
-                                    }
-                                >
-                                    {busy
-                                        ? "Processing…"
-                                        : "Verify payment & approve appointment"}
-                                </Button>
+    <Button
+        type="button"
+        disabled={
+            !form.confirm_received ||
+            busy
+        }
+        onClick={() =>
+            review(
+                "verify-and-approve",
+            )
+        }
+    >
+        {busy
+            ? "Processing…"
+            : "Verify payment & confirm booking"}
+    </Button>
 
-                                <Button
-                                    type="button"
-                                    disabled={
-                                        !form.confirm_received ||
-                                        busy
-                                    }
-                                    onClick={() =>
-                                        review(
-                                            "verify",
-                                        )
-                                    }
-                                    variant="secondary"
-                                >
-                                    Verify payment
-                                    only
-                                </Button>
+    <Button
+        type="button"
+        disabled={
+            busy
+        }
+        onClick={() =>
+            review(
+                "reject",
+            )
+        }
+        className="bg-red-50 text-red-700 hover:bg-red-100"
+    >
+        Reject payment
+    </Button>
 
-                                <Button
-                                    type="button"
-                                    disabled={
-                                        busy
-                                    }
-                                    onClick={() =>
-                                        review(
-                                            "reject",
-                                        )
-                                    }
-                                    className="bg-red-50 text-red-700 hover:bg-red-100"
-                                >
-                                    Reject payment
-                                </Button>
-
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    disabled={
-                                        busy
-                                    }
-                                    onClick={() =>
-                                        setChosen(
-                                            null,
-                                        )
-                                    }
-                                >
-                                    Close
-                                </Button>
-                            </div>
-
+    <Button
+        type="button"
+        variant="outline"
+        disabled={
+            busy
+        }
+        onClick={() =>
+            setChosen(
+                null,
+            )
+        }
+    >
+        Close
+    </Button>
+</div>
                             <p className="text-xs leading-5 text-gray-500 md:col-span-2">
                                 “Verify payment
                                 & approve
