@@ -145,24 +145,28 @@ const menuGroups = [
 
 const allItems =
     menuGroups.flatMap(
-        (group) => group.items,
+        (group) =>
+            group.items,
     )
 
 /*
  * Staff can still VIEW Inventory.
- * We will enforce add/edit/delete permissions
- * separately in AdminInventory.jsx and server.js.
+ * Add/edit/delete permissions remain
+ * enforced separately.
  */
-const staffPaths = new Set([
-    "/admin/appointments",
-    "/admin/payment-review",
-    "/admin/services",
-    "/admin/transactions",
-    "/admin/inventory",
-    "/admin/emergency",
-])
+const staffPaths =
+    new Set([
+        "/admin/appointments",
+        "/admin/payment-review",
+        "/admin/services",
+        "/admin/transactions",
+        "/admin/inventory",
+        "/admin/emergency",
+    ])
 
-function notificationLabel(count) {
+function notificationLabel(
+    count,
+) {
     if (count > 99) {
         return "99+"
     }
@@ -170,12 +174,39 @@ function notificationLabel(count) {
     return String(count)
 }
 
+function NotificationBadge({
+    count,
+    label,
+}) {
+    if (!count) {
+        return null
+    }
+
+    return (
+        <span
+            className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
+            aria-label={`${count} ${label}`}
+        >
+            {notificationLabel(
+                count,
+            )}
+        </span>
+    )
+}
+
 function Sidebar({
     user,
+
     appointmentCount,
+
+    paymentReviewCount,
+
     onNavigate,
+
     handleLogout,
+
     loggingOut,
+
     logoutError,
 }) {
     const displayName =
@@ -191,29 +222,37 @@ function Sidebar({
     const visibleMenuGroups =
         user
             ? menuGroups
-                  .map((group) => ({
-                      ...group,
+                  .map(
+                      (
+                          group,
+                      ) => ({
+                          ...group,
 
-                      items:
-                          user.role ===
-                          "user"
-                              ? group.items.filter(
-                                    (
-                                        [
-                                            ,
-                                            path,
-                                        ],
-                                    ) =>
-                                        staffPaths.has(
-                                            path,
-                                        ),
-                                )
-                              : group.items,
-                  }))
+                          items:
+                              user.role ===
+                              "user"
+                                  ? group.items.filter(
+                                        (
+                                            [
+                                                ,
+                                                path,
+                                            ],
+                                        ) =>
+                                            staffPaths.has(
+                                                path,
+                                            ),
+                                    )
+                                  : group.items,
+                      }),
+                  )
                   .filter(
-                      (group) =>
-                          group.items
-                              .length > 0,
+                      (
+                          group,
+                      ) =>
+                          group
+                              .items
+                              .length >
+                          0,
                   )
             : []
 
@@ -221,7 +260,9 @@ function Sidebar({
         <>
             <div className="admin-brand-block">
                 <Link
-                    to={homePath}
+                    to={
+                        homePath
+                    }
                     onClick={
                         onNavigate
                     }
@@ -241,7 +282,9 @@ function Sidebar({
                 className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-6"
             >
                 {visibleMenuGroups.map(
-                    (group) => (
+                    (
+                        group,
+                    ) => (
                         <section
                             key={
                                 group.title
@@ -262,11 +305,17 @@ function Sidebar({
                                             Icon,
                                         ],
                                     ) => {
-                                        const showAppointmentBadge =
+                                        const appointmentBadge =
                                             path ===
-                                                "/admin/appointments" &&
-                                            appointmentCount >
-                                                0
+                                            "/admin/appointments"
+                                                ? appointmentCount
+                                                : 0
+
+                                        const paymentBadge =
+                                            path ===
+                                            "/admin/payment-review"
+                                                ? paymentReviewCount
+                                                : 0
 
                                         return (
                                             <li
@@ -306,16 +355,19 @@ function Sidebar({
                                                         }
                                                     </span>
 
-                                                    {showAppointmentBadge && (
-                                                        <span
-                                                            className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white"
-                                                            aria-label={`${appointmentCount} pending appointment requests`}
-                                                        >
-                                                            {notificationLabel(
-                                                                appointmentCount,
-                                                            )}
-                                                        </span>
-                                                    )}
+                                                    <NotificationBadge
+                                                        count={
+                                                            appointmentBadge
+                                                        }
+                                                        label="pending appointment requests"
+                                                    />
+
+                                                    <NotificationBadge
+                                                        count={
+                                                            paymentBadge
+                                                        }
+                                                        label="payments awaiting verification"
+                                                    />
                                                 </NavLink>
                                             </li>
                                         )
@@ -345,7 +397,8 @@ function Sidebar({
                     >
                         <LuUsers className="size-[17px]" />
 
-                        Manage accounts
+                        Manage
+                        accounts
                     </NavLink>
                 )}
             </nav>
@@ -355,7 +408,10 @@ function Sidebar({
                     <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg bg-muted p-3 [&::-webkit-details-marker]:hidden">
                         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-sm font-semibold text-primary">
                             {displayName
-                                .slice(0, 1)
+                                .slice(
+                                    0,
+                                    1,
+                                )
                                 .toUpperCase()}
                         </span>
 
@@ -451,9 +507,25 @@ export default function AdminLayout({
         setUser,
     ] = useState(null)
 
+    /*
+     * Appointment badge:
+     * only appointments that have
+     * completed payment verification
+     * and are waiting for approval.
+     */
     const [
         appointmentCount,
         setAppointmentCount,
+    ] = useState(0)
+
+    /*
+     * Payment review badge:
+     * deposits submitted by customers
+     * that still need verification.
+     */
+    const [
+        paymentReviewCount,
+        setPaymentReviewCount,
     ] = useState(0)
 
     const [
@@ -477,7 +549,9 @@ export default function AdminLayout({
 
     const currentPage =
         allItems.find(
-            (item) =>
+            (
+                item,
+            ) =>
                 item[1] ===
                 location.pathname,
         )?.[0] ||
@@ -490,12 +564,15 @@ export default function AdminLayout({
 
             "/admin/accounts":
                 "Manage accounts",
-        }[location.pathname] ||
+        }[
+            location
+                .pathname
+        ] ||
         "Workspace"
 
     /*
-     * Load the currently authenticated
-     * team member.
+     * Load current authenticated
+     * user.
      */
     useEffect(() => {
         const controller =
@@ -507,48 +584,61 @@ export default function AdminLayout({
                 credentials:
                     "include",
 
-                cache: "no-store",
+                cache:
+                    "no-store",
 
                 signal:
                     controller.signal,
             },
         )
-            .then((response) =>
-                response.ok
-                    ? response.json()
-                    : null,
+            .then(
+                (
+                    response,
+                ) =>
+                    response.ok
+                        ? response.json()
+                        : null,
             )
-            .then((data) => {
-                if (
-                    !controller
-                        .signal
-                        .aborted &&
-                    data?.user
-                ) {
-                    setUser(
-                        data.user,
-                    )
-                }
-            })
-            .catch(() => {
-                /*
-                 * ProtectedRoutes already
-                 * verifies the session.
-                 */
-            })
+            .then(
+                (
+                    data,
+                ) => {
+                    if (
+                        !controller
+                            .signal
+                            .aborted &&
+                        data?.user
+                    ) {
+                        setUser(
+                            data.user,
+                        )
+                    }
+                },
+            )
+            .catch(
+                () => {
+                    /*
+                     * ProtectedRoutes
+                     * already verifies
+                     * the session.
+                     */
+                },
+            )
 
         return () =>
             controller.abort()
     }, [])
 
     /*
-     * Appointment notification.
+     * Refresh both notification
+     * counters.
      *
-     * Counts appointments that still require
-     * payment verification or appointment review.
+     * Appointments:
+     * status === Pending
      *
-     * Refreshes every 15 seconds while the
-     * admin workspace is open.
+     * Payment review:
+     * payment_status ===
+     * Awaiting Verification
      */
     useEffect(() => {
         if (!user) {
@@ -556,12 +646,13 @@ export default function AdminLayout({
         }
 
         let active = true
+
         let running = false
 
-        const controller =
+        let controller =
             new AbortController()
 
-        async function refreshAppointmentCount() {
+        async function refreshNotifications() {
             if (
                 running ||
                 !active
@@ -571,67 +662,134 @@ export default function AdminLayout({
 
             running = true
 
+            /*
+             * Each refresh gets a
+             * fresh controller.
+             */
+            if (
+                controller
+                    .signal
+                    .aborted
+            ) {
+                controller =
+                    new AbortController()
+            }
+
             try {
-                const response =
-                    await fetch(
-                        `${API_URL}/appointments`,
-                        {
-                            credentials:
-                                "include",
+                const [
+                    appointmentsResponse,
 
-                            cache:
-                                "no-store",
+                    paymentsResponse,
+                ] =
+                    await Promise.all(
+                        [
+                            fetch(
+                                `${API_URL}/appointments`,
+                                {
+                                    credentials:
+                                        "include",
 
-                            signal:
-                                controller.signal,
-                        },
+                                    cache:
+                                        "no-store",
+
+                                    signal:
+                                        controller.signal,
+                                },
+                            ),
+
+                            fetch(
+                                `${API_URL}/booking-payments/review`,
+                                {
+                                    credentials:
+                                        "include",
+
+                                    cache:
+                                        "no-store",
+
+                                    signal:
+                                        controller.signal,
+                                },
+                            ),
+                        ],
                     )
-
-                if (!response.ok) {
-                    return
-                }
-
-                const rows =
-                    await response
-                        .json()
-                        .catch(
-                            () =>
-                                null,
-                        )
 
                 if (
-                    !active ||
-                    !Array.isArray(
-                        rows,
-                    )
+                    appointmentsResponse.ok
                 ) {
-                    return
+                    const appointments =
+                        await appointmentsResponse
+                            .json()
+                            .catch(
+                                () =>
+                                    null,
+                            )
+
+                    if (
+                        active &&
+                        Array.isArray(
+                            appointments,
+                        )
+                    ) {
+                        const pendingAppointments =
+                            appointments.filter(
+                                (
+                                    appointment,
+                                ) =>
+                                    appointment.status ===
+                                    "Pending",
+                            )
+                                .length
+
+                        setAppointmentCount(
+                            pendingAppointments,
+                        )
+                    }
                 }
 
-                const pending =
-                    rows.filter(
-                        (
-                            appointment,
-                        ) =>
-                            [
-                                "Pending",
-                                "Pending Validation",
-                            ].includes(
-                                appointment.status,
-                            ),
-                    ).length
+                if (
+                    paymentsResponse.ok
+                ) {
+                    const payments =
+                        await paymentsResponse
+                            .json()
+                            .catch(
+                                () =>
+                                    null,
+                            )
 
-                setAppointmentCount(
-                    pending,
-                )
-            } catch (error) {
+                    if (
+                        active &&
+                        Array.isArray(
+                            payments,
+                        )
+                    ) {
+                        const awaitingVerification =
+                            payments.filter(
+                                (
+                                    payment,
+                                ) =>
+                                    payment.payment_status ===
+                                    "Awaiting Verification",
+                            )
+                                .length
+
+                        setPaymentReviewCount(
+                            awaitingVerification,
+                        )
+                    }
+                }
+            } catch (
+                error
+            ) {
                 if (
                     error?.name !==
                     "AbortError"
                 ) {
                     /*
-                     * Notification polling should
-                     * never interrupt the workspace.
+                     * Notification
+                     * polling must
+                     * never interrupt
+                     * the workspace.
                      */
                 }
             } finally {
@@ -639,20 +797,16 @@ export default function AdminLayout({
             }
         }
 
-        refreshAppointmentCount()
+        refreshNotifications()
 
         const timer =
             window.setInterval(
-                refreshAppointmentCount,
+                refreshNotifications,
                 15000,
             )
 
-        /*
-         * Also refresh when the browser/tab
-         * becomes active again.
-         */
         function handleFocus() {
-            refreshAppointmentCount()
+            refreshNotifications()
         }
 
         window.addEventListener(
@@ -677,11 +831,14 @@ export default function AdminLayout({
     }, [user])
 
     /*
-     * Immediately refresh the notification
-     * after navigating around the admin app.
+     * Refresh shortly after route
+     * navigation.
      *
-     * This is useful after approving,
-     * declining or reviewing an appointment.
+     * Useful after:
+     * - verifying payment
+     * - approving appointment
+     * - rejecting payment
+     * - declining appointment
      */
     useEffect(() => {
         if (!user) {
@@ -695,56 +852,100 @@ export default function AdminLayout({
             window.setTimeout(
                 async () => {
                     try {
-                        const response =
-                            await fetch(
-                                `${API_URL}/appointments`,
-                                {
-                                    credentials:
-                                        "include",
+                        const [
+                            appointmentsResponse,
 
-                                    cache:
-                                        "no-store",
+                            paymentsResponse,
+                        ] =
+                            await Promise.all(
+                                [
+                                    fetch(
+                                        `${API_URL}/appointments`,
+                                        {
+                                            credentials:
+                                                "include",
 
-                                    signal:
-                                        controller.signal,
-                                },
-                            )
+                                            cache:
+                                                "no-store",
 
-                        if (
-                            !response.ok
-                        ) {
-                            return
-                        }
-
-                        const rows =
-                            await response
-                                .json()
-                                .catch(
-                                    () =>
-                                        null,
-                                )
-
-                        if (
-                            !Array.isArray(
-                                rows,
-                            )
-                        ) {
-                            return
-                        }
-
-                        setAppointmentCount(
-                            rows.filter(
-                                (
-                                    appointment,
-                                ) =>
-                                    [
-                                        "Pending",
-                                        "Pending Validation",
-                                    ].includes(
-                                        appointment.status,
+                                            signal:
+                                                controller.signal,
+                                        },
                                     ),
-                            ).length,
-                        )
+
+                                    fetch(
+                                        `${API_URL}/booking-payments/review`,
+                                        {
+                                            credentials:
+                                                "include",
+
+                                            cache:
+                                                "no-store",
+
+                                            signal:
+                                                controller.signal,
+                                        },
+                                    ),
+                                ],
+                            )
+
+                        if (
+                            appointmentsResponse.ok
+                        ) {
+                            const appointments =
+                                await appointmentsResponse
+                                    .json()
+                                    .catch(
+                                        () =>
+                                            null,
+                                    )
+
+                            if (
+                                Array.isArray(
+                                    appointments,
+                                )
+                            ) {
+                                setAppointmentCount(
+                                    appointments.filter(
+                                        (
+                                            appointment,
+                                        ) =>
+                                            appointment.status ===
+                                            "Pending",
+                                    )
+                                        .length,
+                                )
+                            }
+                        }
+
+                        if (
+                            paymentsResponse.ok
+                        ) {
+                            const payments =
+                                await paymentsResponse
+                                    .json()
+                                    .catch(
+                                        () =>
+                                            null,
+                                    )
+
+                            if (
+                                Array.isArray(
+                                    payments,
+                                )
+                            ) {
+                                setPaymentReviewCount(
+                                    payments.filter(
+                                        (
+                                            payment,
+                                        ) =>
+                                            payment.payment_status ===
+                                            "Awaiting Verification",
+                                    )
+                                        .length,
+                                )
+                            }
+                        }
                     } catch (
                         error
                     ) {
@@ -752,7 +953,7 @@ export default function AdminLayout({
                             error?.name !==
                             "AbortError"
                         ) {
-                            // Silent notification refresh.
+                            // Silent refresh.
                         }
                     }
                 },
@@ -779,12 +980,15 @@ export default function AdminLayout({
 
             localStorage.setItem(
                 "stylesync-logout-event",
-                String(Date.now()),
+                String(
+                    Date.now(),
+                ),
             )
         } catch {
             /*
-             * Navigation does not depend
-             * on browser storage.
+             * Navigation does not
+             * depend on browser
+             * storage.
              */
         }
 
@@ -794,19 +998,24 @@ export default function AdminLayout({
             ),
         )
 
-        navigate("/login", {
-            replace: true,
+        navigate(
+            "/login",
+            {
+                replace:
+                    true,
 
-            state: {
-                message:
-                    "You have been logged out.",
+                state: {
+                    message:
+                        "You have been logged out.",
+                },
             },
-        })
+        )
     }
 
     async function handleLogout() {
         if (
-            logoutLock.current
+            logoutLock
+                .current
         ) {
             return
         }
@@ -814,8 +1023,13 @@ export default function AdminLayout({
         logoutLock.current =
             true
 
-        setLoggingOut(true)
-        setLogoutError("")
+        setLoggingOut(
+            true,
+        )
+
+        setLogoutError(
+            "",
+        )
 
         try {
             const sessionResponse =
@@ -835,6 +1049,7 @@ export default function AdminLayout({
                 401
             ) {
                 finishLogout()
+
                 return
             }
 
@@ -842,7 +1057,8 @@ export default function AdminLayout({
                 await sessionResponse
                     .json()
                     .catch(
-                        () => null,
+                        () =>
+                            null,
                     )
 
             if (
@@ -885,10 +1101,12 @@ export default function AdminLayout({
             }
 
             finishLogout()
-        } catch (error) {
+        } catch (
+            error
+        ) {
             setLogoutError(
                 error instanceof
-                TypeError
+                    TypeError
                     ? "Cannot connect to the server. Please try logging out again."
                     : error.message,
             )
@@ -896,14 +1114,59 @@ export default function AdminLayout({
             logoutLock.current =
                 false
 
-            setLoggingOut(false)
+            setLoggingOut(
+                false,
+            )
         }
     }
+
+    const totalNotifications =
+        appointmentCount +
+        paymentReviewCount
+
+    /*
+     * Payments come first in the
+     * workflow, so the bell opens
+     * Payment Review when there are
+     * unverified deposits.
+     */
+    const notificationPath =
+        paymentReviewCount > 0
+            ? "/admin/payment-review"
+            : "/admin/appointments"
+
+    const notificationText = [
+        paymentReviewCount >
+        0
+            ? `${paymentReviewCount} payment${
+                  paymentReviewCount ===
+                  1
+                      ? ""
+                      : "s"
+              } awaiting verification`
+            : "",
+
+        appointmentCount >
+        0
+            ? `${appointmentCount} appointment${
+                  appointmentCount ===
+                  1
+                      ? ""
+                      : "s"
+              } awaiting approval`
+            : "",
+    ]
+        .filter(
+            Boolean,
+        )
+        .join(", ")
 
     const sidebarProps = {
         user,
 
         appointmentCount,
+
+        paymentReviewCount,
 
         handleLogout,
 
@@ -912,7 +1175,9 @@ export default function AdminLayout({
         logoutError,
 
         onNavigate: () =>
-            setIsOpen(false),
+            setIsOpen(
+                false,
+            ),
     }
 
     return (
@@ -921,7 +1186,8 @@ export default function AdminLayout({
                 href="#admin-content"
                 className="skip-link"
             >
-                Skip to content
+                Skip to
+                content
             </a>
 
             <aside
@@ -995,28 +1261,30 @@ export default function AdminLayout({
 
                     <div className="flex items-center gap-4">
                         <Link
-                            to="/admin/appointments"
+                            to={
+                                notificationPath
+                            }
                             className="relative inline-flex size-9 items-center justify-center rounded-lg border border-border bg-white text-gray-600 transition hover:bg-purple-50 hover:text-purple-800"
                             aria-label={
-                                appointmentCount >
+                                totalNotifications >
                                 0
-                                    ? `${appointmentCount} pending appointment requests`
-                                    : "No pending appointment requests"
+                                    ? notificationText
+                                    : "No pending payment reviews or appointment requests"
                             }
                             title={
-                                appointmentCount >
+                                totalNotifications >
                                 0
-                                    ? `${appointmentCount} pending appointment requests`
-                                    : "No pending appointment requests"
+                                    ? notificationText
+                                    : "No pending payment reviews or appointment requests"
                             }
                         >
                             <LuBell className="size-4" />
 
-                            {appointmentCount >
+                            {totalNotifications >
                                 0 && (
                                 <span className="absolute -right-2 -top-2 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-1 text-[9px] font-bold leading-none text-white">
                                     {notificationLabel(
-                                        appointmentCount,
+                                        totalNotifications,
                                     )}
                                 </span>
                             )}
@@ -1054,10 +1322,14 @@ export default function AdminLayout({
 
                 <main
                     id="admin-content"
-                    tabIndex={-1}
+                    tabIndex={
+                        -1
+                    }
                     className="min-w-0 overflow-x-auto p-4 outline-none md:p-6 lg:p-8 print:p-0"
                 >
-                    {children}
+                    {
+                        children
+                    }
                 </main>
             </div>
         </div>
