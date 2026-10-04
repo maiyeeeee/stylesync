@@ -1237,15 +1237,8 @@ export default function Book() {
                                         </h3>
 
                                         <p className="mt-2 text-sm leading-6 text-gray-600">
-                                            Please make
-                                            sure your
-                                            personal and
-                                            appointment
-                                            information
-                                            below is
-                                            correct before
-                                            proceeding to
-                                            payment.
+                                        Make sure your personal and appointment information
+                                         below is correct before proceeding to payment.
                                         </p>
                                     </div>
 
