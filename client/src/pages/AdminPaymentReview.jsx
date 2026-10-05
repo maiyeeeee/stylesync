@@ -546,8 +546,12 @@ export default function AdminPaymentReview() {
                             <label
                                 className={`${field} md:col-span-2`}
                             >
-                                Review note /
-                                rejection reason
+                                Payment review note / payment rejection reason
+                                <p className="mt-1 text-xs text-gray-500">
+    Use this only for payment-related issues such as incorrect amount,
+    invalid reference, or payment not received. For schedule or
+    appointment concerns, decline the appointment from Appointment Management.
+</p>
 
                                 <textarea
                                     className="input-field mt-2"
