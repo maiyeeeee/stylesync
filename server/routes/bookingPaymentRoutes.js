@@ -284,6 +284,7 @@ async function publicReservation(
                 d.receiving_number,
                 d.qr_snapshot,
                 d.submitted_reference,
+                d.review_note,
 
                 DATE_FORMAT(
                     d.expires_at,

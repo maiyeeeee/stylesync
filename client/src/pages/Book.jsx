@@ -1186,18 +1186,49 @@ export default function Book() {
                                             </>
                                         ) : (
                                             <>
-                                                <p
-                                                    role="status"
-                                                    className="rounded-xl bg-purple-50 p-4 text-purple-900"
-                                                >
-                                                    {reservation.payment_status ===
-                                                    "Awaiting Verification"
-                                                        ? "Your payment details were submitted. Please wait while the salon verifies the payment and confirms your booking."
-                                                        : reservation.payment_status ===
-                                                            "Verified"
-                                                          ? `Payment verified. Appointment status: ${reservation.appointment_status}.`
-                                                          : "This reservation is closed and its slot has been released. If you sent a payment, contact the salon with your receipt."}
-                                                </p>
+                                               {reservation.payment_status ===
+"Rejected" ? (
+    <div
+        role="status"
+        className="rounded-xl bg-red-50 p-5 text-red-900"
+    >
+        <p className="font-bold">
+            Payment was rejected.
+        </p>
+
+        {reservation.review_note && (
+            <div className="mt-3">
+                <p className="text-sm font-semibold">
+                    Reason:
+                </p>
+
+                <p className="mt-1 text-sm leading-relaxed">
+                    {reservation.review_note}
+                </p>
+            </div>
+        )}
+
+        <p className="mt-3 text-sm leading-relaxed">
+            This reservation is closed and its slot has
+            been released. If you already sent payment or
+            believe this was a mistake, please contact the
+            salon and keep your receipt.
+        </p>
+    </div>
+) : (
+    <p
+        role="status"
+        className="rounded-xl bg-purple-50 p-4 text-purple-900"
+    >
+        {reservation.payment_status ===
+        "Awaiting Verification"
+            ? "Your payment details were submitted. Please wait while the salon verifies the payment and confirms your booking."
+            : reservation.payment_status ===
+                "Verified"
+              ? `Payment verified. Appointment status: ${reservation.appointment_status}.`
+              : "This reservation is closed and its slot has been released. If you sent a payment, contact the salon with your receipt."}
+    </p>
+)}
 
                                                 <p className="text-sm text-gray-500">
                                                     Payment
