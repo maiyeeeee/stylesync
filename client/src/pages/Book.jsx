@@ -137,6 +137,19 @@ function formatBookingDate(value) {
     })
 }
 
+function formatBookingNumber(value) {
+    const number = Number(value)
+
+    if (
+        Number.isSafeInteger(number) &&
+        number > 0
+    ) {
+        return `#${String(number).padStart(3, "0")}`
+    }
+
+    return "#—"
+}
+
 export default function Book() {
     const location = useLocation()
 
@@ -228,6 +241,7 @@ export default function Book() {
                 if (chosen) {
                     setForm((current) => ({
                         ...current,
+
                         service_id: String(
                             chosen.service_id,
                         ),
@@ -373,7 +387,9 @@ export default function Book() {
                 ) {
                     setAvailability({
                         ...data,
-                        key: availabilityKey,
+
+                        key:
+                            availabilityKey,
                     })
                 }
             })
@@ -430,6 +446,7 @@ export default function Book() {
             setError(
                 "Choose an available slot first.",
             )
+
             return
         }
 
@@ -437,6 +454,7 @@ export default function Book() {
             setError(
                 "Please confirm the privacy consent before continuing.",
             )
+
             return
         }
 
@@ -456,16 +474,17 @@ export default function Book() {
             return
         }
 
-       if (
-    !entry &&
-    !reviewing &&
-    !validAvailability
-) {
-    setError(
-        "Choose an available slot first.",
-    )
-    return
-}
+        if (
+            !entry &&
+            !reviewing &&
+            !validAvailability
+        ) {
+            setError(
+                "Choose an available slot first.",
+            )
+
+            return
+        }
 
         if (
             !entry &&
@@ -474,6 +493,7 @@ export default function Book() {
             setError(
                 "Please confirm the privacy consent before continuing.",
             )
+
             return
         }
 
@@ -501,7 +521,8 @@ export default function Book() {
                                 .padStart(2, "0"),
                     ).join(""),
 
-                    payload: form,
+                    payload:
+                        form,
                 }
 
                 /*
@@ -511,7 +532,9 @@ export default function Book() {
                  */
                 sessionStorage.setItem(
                     KEY,
-                    JSON.stringify(saved),
+                    JSON.stringify(
+                        saved,
+                    ),
                 )
 
                 setEntry(saved)
@@ -521,9 +544,14 @@ export default function Book() {
                 await call(
                     "/booking-payments/reserve",
                     {
-                        method: "POST",
-                        token: saved.token,
-                        body: saved.payload,
+                        method:
+                            "POST",
+
+                        token:
+                            saved.token,
+
+                        body:
+                            saved.payload,
                     },
                 ),
             )
@@ -571,11 +599,15 @@ export default function Book() {
                 await call(
                     "/booking-payments/submit",
                     {
-                        method: "POST",
-                        token: entry.token,
+                        method:
+                            "POST",
+
+                        token:
+                            entry.token,
 
                         body: {
                             reference,
+
                             amount:
                                 reservation.required_amount,
                         },
@@ -593,7 +625,9 @@ export default function Book() {
     function newBooking(
         prefill = null,
     ) {
-        sessionStorage.removeItem(KEY)
+        sessionStorage.removeItem(
+            KEY,
+        )
 
         setEntry(null)
         setReservation(null)
@@ -606,6 +640,7 @@ export default function Book() {
             setForm((current) => ({
                 ...current,
                 ...prefill,
+
                 privacy_consent:
                     false,
             }))
@@ -645,26 +680,35 @@ export default function Book() {
                 reservation?.suggested_date
                     ? String(
                           reservation.suggested_date,
-                      ).slice(0, 10)
+                      ).slice(
+                          0,
+                          10,
+                      )
                     : "",
 
             appointment_time:
                 reservation?.suggested_time
                     ? String(
                           reservation.suggested_time,
-                      ).slice(0, 5)
+                      ).slice(
+                          0,
+                          5,
+                      )
                     : "",
         })
     }
 
     const total = Math.round(
-        Number(selected?.price || 0) *
-            100,
+        Number(
+            selected?.price ||
+                0,
+        ) * 100,
     )
 
-    const down = Math.round(
-        total / 5,
-    )
+    const down =
+        Math.round(
+            total / 5,
+        )
 
     const dateParts =
         new Intl.DateTimeFormat(
@@ -672,9 +716,15 @@ export default function Book() {
             {
                 timeZone:
                     "Asia/Manila",
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
+
+                year:
+                    "numeric",
+
+                month:
+                    "2-digit",
+
+                day:
+                    "2-digit",
             },
         ).formatToParts(
             new Date(),
@@ -683,7 +733,8 @@ export default function Book() {
     const part = (key) =>
         dateParts.find(
             (item) =>
-                item.type === key,
+                item.type ===
+                key,
         )?.value
 
     const today =
@@ -694,11 +745,12 @@ export default function Book() {
         reservation.payment_status !==
             "Awaiting Payment"
 
-    const step = paymentSubmitted
-        ? 3
-        : entry
-          ? 2
-          : 1
+    const step =
+        paymentSubmitted
+            ? 3
+            : entry
+              ? 2
+              : 1
 
     return (
         <div className="public-site">
@@ -708,7 +760,7 @@ export default function Book() {
                 id="main-content"
                 tabIndex={-1}
             >
-                <div className="page-intro site-container">
+                                <div className="page-intro site-container">
                     <p className="eyebrow">
                         YOUR NEXT MOMENT OF
                         SELF-CARE
@@ -845,7 +897,14 @@ export default function Book() {
                                 ) : (
                                     <div className="space-y-5">
                                         <div className="rounded-xl bg-purple-50 p-4 text-purple-900">
-                                            <p className="font-bold">
+                                            <p className="text-xs font-semibold uppercase tracking-wider text-purple-600">
+                                                Booking{" "}
+                                                {formatBookingNumber(
+                                                    reservation.booking_number,
+                                                )}
+                                            </p>
+
+                                            <p className="mt-1 font-bold">
                                                 {reservation.customer_name ||
                                                     entry
                                                         ?.payload
@@ -1186,49 +1245,57 @@ export default function Book() {
                                             </>
                                         ) : (
                                             <>
-                                               {reservation.payment_status ===
-"Rejected" ? (
-    <div
-        role="status"
-        className="rounded-xl bg-red-50 p-5 text-red-900"
-    >
-        <p className="font-bold">
-            Payment was rejected.
-        </p>
+                                                {reservation.payment_status ===
+                                                "Rejected" ? (
+                                                    <div
+                                                        role="status"
+                                                        className="rounded-xl bg-red-50 p-5 text-red-900"
+                                                    >
+                                                        <p className="font-bold">
+                                                            Payment was rejected.
+                                                        </p>
 
-        {reservation.review_note && (
-            <div className="mt-3">
-                <p className="text-sm font-semibold">
-                    Reason:
-                </p>
+                                                        {reservation.review_note && (
+                                                            <div className="mt-3">
+                                                                <p className="text-sm font-semibold">
+                                                                    Reason:
+                                                                </p>
 
-                <p className="mt-1 text-sm leading-relaxed">
-                    {reservation.review_note}
-                </p>
-            </div>
-        )}
+                                                                <p className="mt-1 text-sm leading-relaxed">
+                                                                    {
+                                                                        reservation.review_note
+                                                                    }
+                                                                </p>
+                                                            </div>
+                                                        )}
 
-        <p className="mt-3 text-sm leading-relaxed">
-            This reservation is closed and its slot has
-            been released. If you already sent payment or
-            believe this was a mistake, please contact the
-            salon and keep your receipt.
-        </p>
-    </div>
-) : (
-    <p
-        role="status"
-        className="rounded-xl bg-purple-50 p-4 text-purple-900"
-    >
-        {reservation.payment_status ===
-        "Awaiting Verification"
-            ? "Your payment details were submitted. Please wait while the salon verifies the payment and confirms your booking."
-            : reservation.payment_status ===
-                "Verified"
-              ? `Payment verified. Appointment status: ${reservation.appointment_status}.`
-              : "This reservation is closed and its slot has been released. If you sent a payment, contact the salon with your receipt."}
-    </p>
-)}
+                                                        <p className="mt-3 text-sm leading-relaxed">
+                                                            This reservation
+                                                            is closed and its
+                                                            slot has been
+                                                            released. If you
+                                                            already sent
+                                                            payment or believe
+                                                            this was a mistake,
+                                                            please contact the
+                                                            salon and keep your
+                                                            receipt.
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <p
+                                                        role="status"
+                                                        className="rounded-xl bg-purple-50 p-4 text-purple-900"
+                                                    >
+                                                        {reservation.payment_status ===
+                                                        "Awaiting Verification"
+                                                            ? "Your payment details were submitted. Please wait while the salon verifies the payment and confirms your booking."
+                                                            : reservation.payment_status ===
+                                                                "Verified"
+                                                              ? `Payment verified. Appointment status: ${reservation.appointment_status}.`
+                                                              : "This reservation is closed and its slot has been released. If you sent a payment, contact the salon with your receipt."}
+                                                    </p>
+                                                )}
 
                                                 <p className="text-sm text-gray-500">
                                                     Payment
@@ -1255,7 +1322,7 @@ export default function Book() {
                                     </div>
                                 )
                             ) : reviewing ? (
-                                <div className="space-y-6">
+                                                                <div className="space-y-6">
                                     <div>
                                         <p className="eyebrow">
                                             BEFORE YOU
@@ -1267,17 +1334,23 @@ export default function Book() {
                                             your booking
                                         </h3>
 
-                                        <p className="mt-2 text-sm leading-6 text-gray-600">
-                                        Make sure your personal and appointment information
-                                         below is correct before proceeding to payment.
+                                        <p className="mt-2 text-sm leading-relaxed text-gray-500">
+                                            Make sure your
+                                            personal and
+                                            appointment
+                                            information
+                                            below is
+                                            correct before
+                                            proceeding to
+                                            payment.
                                         </p>
                                     </div>
 
                                     <div className="overflow-hidden rounded-2xl border border-purple-100 bg-white">
                                         <div className="border-b border-purple-100 bg-purple-50 px-5 py-4">
                                             <p className="font-semibold text-purple-950">
-                                                Customer
-                                                information
+                                                Personal
+                                                details
                                             </p>
                                         </div>
 

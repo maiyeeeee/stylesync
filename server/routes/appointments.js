@@ -12,6 +12,41 @@ const {
 
 const promiseDb = db.promise()
 
+async function nextBookingNumber(connection) {
+    const [rows] = await connection.query(
+        `SELECT last_number
+         FROM booking_number_sequence
+         WHERE id = 1
+         FOR UPDATE`,
+    )
+
+    if (!rows.length) {
+        const error = new Error(
+            "Booking number sequence is not initialized.",
+        )
+
+        error.status = 500
+
+        throw error
+    }
+
+    const bookingNumber =
+        Number(
+            rows[0].last_number,
+        ) + 1
+
+    await connection.query(
+        `UPDATE booking_number_sequence
+         SET last_number = ?
+         WHERE id = 1`,
+        [
+            bookingNumber,
+        ],
+    )
+
+    return bookingNumber
+}
+
 function getResendClient() {
     const apiKey = String(
         process.env.RESEND_API_KEY || "",
@@ -25,12 +60,16 @@ function getResendClient() {
 }
 
 function validEmail(value) {
-    const email = String(value || "").trim()
+    const email = String(
+        value || "",
+    ).trim()
 
     return (
         email.length > 0 &&
         email.length <= 100 &&
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+            email,
+        )
     )
 }
 
@@ -41,36 +80,61 @@ function formatDateForEmail(value) {
 
     if (
         value instanceof Date &&
-        !Number.isNaN(value.getTime())
+        !Number.isNaN(
+            value.getTime(),
+        )
     ) {
-        text = new Intl.DateTimeFormat(
-            "en-CA",
-            {
-                timeZone: "Asia/Manila",
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-            },
-        ).format(value)
+        text =
+            new Intl.DateTimeFormat(
+                "en-CA",
+                {
+                    timeZone:
+                        "Asia/Manila",
+
+                    year:
+                        "numeric",
+
+                    month:
+                        "2-digit",
+
+                    day:
+                        "2-digit",
+                },
+            ).format(value)
     } else {
-        text = String(value).slice(0, 10)
+        text =
+            String(value).slice(
+                0,
+                10,
+            )
     }
 
     const date = new Date(
         `${text}T00:00:00+08:00`,
     )
 
-    if (Number.isNaN(date.getTime())) {
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
         return text
     }
 
     return date.toLocaleDateString(
         "en-PH",
         {
-            timeZone: "Asia/Manila",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
+            timeZone:
+                "Asia/Manila",
+
+            month:
+                "long",
+
+            day:
+                "numeric",
+
+            year:
+                "numeric",
         },
     )
 }
@@ -78,7 +142,12 @@ function formatDateForEmail(value) {
 function formatTimeForEmail(value) {
     if (!value) return ""
 
-    return String(value).slice(0, 5)
+    return String(
+        value,
+    ).slice(
+        0,
+        5,
+    )
 }
 
 async function sendAppointmentStatusEmail({
@@ -88,25 +157,35 @@ async function sendAppointmentStatusEmail({
     suggestedDate,
     suggestedTime,
 }) {
-    const recipient = String(
-        appointment?.email || "",
-    ).trim()
+    const recipient =
+        String(
+            appointment?.email ||
+                "",
+        ).trim()
 
     if (!validEmail(recipient)) {
         return {
             sent: false,
-            reason: "No valid customer email.",
+            reason:
+                "No valid customer email.",
         }
     }
 
-    if (!["Approved", "Declined"].includes(status)) {
+    if (
+        ![
+            "Approved",
+            "Declined",
+        ].includes(status)
+    ) {
         return {
             sent: false,
-            reason: "No email required for this status.",
+            reason:
+                "No email required for this status.",
         }
     }
 
-    const resend = getResendClient()
+    const resend =
+        getResendClient()
 
     if (!resend) {
         console.error(
@@ -115,7 +194,8 @@ async function sendAppointmentStatusEmail({
 
         return {
             sent: false,
-            reason: "Email provider is not configured.",
+            reason:
+                "Email provider is not configured.",
         }
     }
 
@@ -124,13 +204,17 @@ async function sendAppointmentStatusEmail({
             "StyleSync <onboarding@resend.dev>",
     ).trim()
 
-    const customerName = String(
-        appointment.customer_name || "Customer",
-    ).trim()
+    const customerName =
+        String(
+            appointment.customer_name ||
+                "Customer",
+        ).trim()
 
-    const service = String(
-        appointment.service || "Salon service",
-    ).trim()
+    const service =
+        String(
+            appointment.service ||
+                "Salon service",
+        ).trim()
 
     const appointmentDate =
         formatDateForEmail(
@@ -145,7 +229,10 @@ async function sendAppointmentStatusEmail({
     let subject
     let text
 
-    if (status === "Approved") {
+    if (
+        status ===
+        "Approved"
+    ) {
         subject =
             "Your Dahling’s Escape appointment is approved"
 
@@ -213,15 +300,21 @@ async function sendAppointmentStatusEmail({
             "Dahling’s Escape Salon & Spa",
         )
 
-        text = lines.join("\n")
+        text =
+            lines.join("\n")
     }
 
     try {
         const result =
             await resend.emails.send({
                 from,
-                to: [recipient],
+
+                to: [
+                    recipient,
+                ],
+
                 subject,
+
                 text,
             })
 
@@ -229,13 +322,15 @@ async function sendAppointmentStatusEmail({
             console.error(
                 "Appointment email failed:",
                 result.error.name ||
-                    result.error.message ||
+                    result.error
+                        .message ||
                     "RESEND_ERROR",
             )
 
             return {
                 sent: false,
-                reason: "Email delivery failed.",
+                reason:
+                    "Email delivery failed.",
             }
         }
 
@@ -246,7 +341,11 @@ async function sendAppointmentStatusEmail({
 
         return {
             sent: true,
-            id: result?.data?.id || null,
+
+            id:
+                result?.data
+                    ?.id ||
+                null,
         }
     } catch (error) {
         console.error(
@@ -258,41 +357,57 @@ async function sendAppointmentStatusEmail({
 
         return {
             sent: false,
-            reason: "Email delivery failed.",
+            reason:
+                "Email delivery failed.",
         }
     }
 }
 
-router.get("/", async (req, res) => {
-    try {
-        const [rows] =
-            await promiseDb.query(
-                `SELECT
-                    a.*,
-                    s.name AS staff_name,
-                    s.role AS staff_role,
-                    sv.duration_minutes
-                 FROM appointments a
-                 LEFT JOIN staff s
-                    ON s.staff_id = a.staff_id
-                 LEFT JOIN services sv
-                    ON sv.service_id = a.service_id
-                 ORDER BY
-                    a.appointment_date DESC,
-                    a.appointment_time DESC`,
-            )
+router.get(
+    "/",
+    async (
+        req,
+        res,
+    ) => {
+        try {
+            const [rows] =
+                await promiseDb.query(
+                    `SELECT
+                        a.*,
+                        s.name AS staff_name,
+                        s.role AS staff_role,
+                        sv.duration_minutes
+                     FROM appointments a
+                     LEFT JOIN staff s
+                        ON s.staff_id =
+                           a.staff_id
+                     LEFT JOIN services sv
+                        ON sv.service_id =
+                           a.service_id
+                     ORDER BY
+                        a.appointment_date DESC,
+                        a.appointment_time DESC`,
+                )
 
-        res.json(rows)
-    } catch (error) {
-        res.status(500).json({
-            error: error.message,
-        })
-    }
-})
+            res.json(rows)
+        } catch (error) {
+            res.status(
+                500,
+            ).json({
+                error:
+                    error.message,
+            })
+        }
+    },
+)
 
 router.get(
     "/availability",
-    async (req, res) => {
+
+    async (
+        req,
+        res,
+    ) => {
         try {
             const service =
                 await resolveService(
@@ -327,7 +442,8 @@ router.get(
                 )
 
             const qualifiedStaffCount =
-                result.available.length
+                result.available
+                    .length
 
             const dailyLimitConfigured =
                 Boolean(
@@ -338,7 +454,8 @@ router.get(
             const dailyRemaining =
                 dailyLimitConfigured
                     ? Number(
-                          result.dailyLimit
+                          result
+                              .dailyLimit
                               .remaining,
                       )
                     : null
@@ -384,7 +501,8 @@ router.get(
                 daily_client_limit:
                     dailyLimitConfigured
                         ? Number(
-                              result.dailyLimit
+                              result
+                                  .dailyLimit
                                   .limit,
                           )
                         : null,
@@ -392,7 +510,8 @@ router.get(
                 daily_booked:
                     dailyLimitConfigured
                         ? Number(
-                              result.dailyLimit
+                              result
+                                  .dailyLimit
                                   .booked,
                           )
                         : null,
@@ -402,9 +521,11 @@ router.get(
             })
         } catch (error) {
             res.status(
-                error.status || 500,
+                error.status ||
+                    500,
             ).json({
-                error: error.message,
+                error:
+                    error.message,
             })
         }
     },
@@ -412,9 +533,14 @@ router.get(
 
 router.post(
     "/",
-    async (req, res) => {
+
+    async (
+        req,
+        res,
+    ) => {
         const connection =
-            await promiseDb.getConnection()
+            await promiseDb
+                .getConnection()
 
         try {
             const {
@@ -430,7 +556,9 @@ router.post(
                 notes,
                 staff_id,
                 offline_id,
-            } = req.body || {}
+            } =
+                req.body ||
+                {}
 
             if (
                 !customer_name ||
@@ -439,7 +567,9 @@ router.post(
                 !appointment_time
             ) {
                 return res
-                    .status(400)
+                    .status(
+                        400,
+                    )
                     .json({
                         error:
                             "Customer, contact number, appointment date, and time are required",
@@ -447,10 +577,13 @@ router.post(
             }
 
             if (offline_id) {
-                const [duplicate] =
+                const [
+                    duplicate,
+                ] =
                     await connection.query(
                         `SELECT
                             id,
+                            booking_number,
                             status,
                             staff_id
                          FROM appointments
@@ -474,6 +607,10 @@ router.post(
                             duplicate[0]
                                 .id,
 
+                        booking_number:
+                            duplicate[0]
+                                .booking_number,
+
                         status:
                             duplicate[0]
                                 .status,
@@ -484,13 +621,15 @@ router.post(
                 }
             }
 
-            await connection.beginTransaction()
+            await connection
+                .beginTransaction()
 
             const selectedService =
                 await resolveService(
                     connection,
                     {
                         service_id,
+
                         service,
                     },
                 )
@@ -500,7 +639,8 @@ router.post(
                     connection,
                     {
                         serviceId:
-                            selectedService.service_id,
+                            selectedService
+                                .service_id,
 
                         appointmentDate:
                             appointment_date,
@@ -510,7 +650,8 @@ router.post(
 
                         durationMinutes:
                             Number(
-                                selectedService.duration_minutes,
+                                selectedService
+                                    .duration_minutes,
                             ),
 
                         preferredStaffId:
@@ -518,7 +659,9 @@ router.post(
                     },
                 )
 
-            if (!reservation.staff) {
+            if (
+                !reservation.staff
+            ) {
                 const error =
                     new Error(
                         offline_id
@@ -526,9 +669,16 @@ router.post(
                             : "No qualified staff is available for the complete service duration. Choose another schedule.",
                     )
 
-                error.status = 409
+                error.status =
+                    409
+
                 throw error
             }
+
+            const bookingNumber =
+                await nextBookingNumber(
+                    connection,
+                )
 
             const [
                 appointmentResult,
@@ -536,6 +686,7 @@ router.post(
                 await connection.query(
                     `INSERT INTO appointments
                     (
+                        booking_number,
                         customer_name,
                         contact_number,
                         email,
@@ -550,14 +701,17 @@ router.post(
                         offline_id,
                         sync_status
                     )
+
                     VALUES
                     (
-                        ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?,
                         'Pending',
                         ?, ?
                     )`,
                     [
+                        bookingNumber,
+
                         String(
                             customer_name,
                         ).trim(),
@@ -570,15 +724,19 @@ router.post(
                             email || "",
                         ).trim(),
 
-                        selectedService.service_id,
+                        selectedService
+                            .service_id,
 
-                        selectedService.service,
+                        selectedService
+                            .service,
 
                         appointment_date,
 
-                        reservation.startTime,
+                        reservation
+                            .startTime,
 
-                        reservation.endTime,
+                        reservation
+                            .endTime,
 
                         reservation.staff
                             .staff_id,
@@ -612,7 +770,9 @@ router.post(
                     ],
                 )
 
-            if (!customers.length) {
+            if (
+                !customers.length
+            ) {
                 await connection.query(
                     `INSERT INTO customers
                     (
@@ -622,6 +782,7 @@ router.post(
                         gender,
                         customer_type
                     )
+
                     VALUES (?, ?, ?, ?, ?)`,
                     [
                         String(
@@ -649,16 +810,23 @@ router.post(
                 )
             }
 
-            await connection.commit()
+            await connection
+                .commit()
 
-            res.status(201).json({
+            res.status(
+                201,
+            ).json({
                 message:
                     offline_id
                         ? "Offline appointment synchronized and validated"
                         : "Appointment saved and staff time reserved",
 
                 id:
-                    appointmentResult.insertId,
+                    appointmentResult
+                        .insertId,
+
+                booking_number:
+                    bookingNumber,
 
                 status:
                     "Pending",
@@ -667,25 +835,33 @@ router.post(
                     reservation.staff,
 
                 start_time:
-                    reservation.startTime,
+                    reservation
+                        .startTime,
 
                 end_time:
-                    reservation.endTime,
+                    reservation
+                        .endTime,
             })
         } catch (error) {
             await connection
                 .rollback()
-                .catch(() => {})
+                .catch(
+                    () => {},
+                )
 
             if (
                 error.code ===
                     "ER_DUP_ENTRY" &&
-                req.body?.offline_id
+                req.body
+                    ?.offline_id
             ) {
-                const [duplicate] =
+                const [
+                    duplicate,
+                ] =
                     await promiseDb.query(
                         `SELECT
                             id,
+                            booking_number,
                             status
                          FROM appointments
                          WHERE offline_id = ?
@@ -709,6 +885,10 @@ router.post(
                             duplicate[0]
                                 .id,
 
+                        booking_number:
+                            duplicate[0]
+                                .booking_number,
+
                         status:
                             duplicate[0]
                                 .status,
@@ -720,9 +900,11 @@ router.post(
             }
 
             res.status(
-                error.status || 500,
+                error.status ||
+                    500,
             ).json({
-                error: error.message,
+                error:
+                    error.message,
             })
         } finally {
             connection.release()
@@ -732,11 +914,17 @@ router.post(
 
 router.put(
     "/:id/status",
-    async (req, res) => {
-        const connection =
-            await promiseDb.getConnection()
 
-        let committed = false
+    async (
+        req,
+        res,
+    ) => {
+        const connection =
+            await promiseDb
+                .getConnection()
+
+        let committed =
+            false
 
         try {
             const appointmentId =
@@ -748,10 +936,13 @@ router.put(
                 !Number.isSafeInteger(
                     appointmentId,
                 ) ||
-                appointmentId <= 0
+                appointmentId <=
+                    0
             ) {
                 return res
-                    .status(400)
+                    .status(
+                        400,
+                    )
                     .json({
                         error:
                             "Invalid appointment.",
@@ -760,7 +951,8 @@ router.put(
 
             const status =
                 String(
-                    req.body?.status ||
+                    req.body
+                        ?.status ||
                         "",
                 ).trim()
 
@@ -785,13 +977,14 @@ router.put(
                         "",
                 ).trim()
 
-            const allowedStatuses = [
-                "Pending",
-                "Approved",
-                "Declined",
-                "Cancelled",
-                "Completed",
-            ]
+            const allowedStatuses =
+                [
+                    "Pending",
+                    "Approved",
+                    "Declined",
+                    "Cancelled",
+                    "Completed",
+                ]
 
             if (
                 !allowedStatuses.includes(
@@ -799,28 +992,36 @@ router.put(
                 )
             ) {
                 return res
-                    .status(400)
+                    .status(
+                        400,
+                    )
                     .json({
                         error:
                             "Invalid appointment status",
                     })
             }
 
-            await connection.beginTransaction()
+            await connection
+                .beginTransaction()
 
             const [rows] =
                 await connection.query(
                     `SELECT
                         a.*,
+
                         COALESCE(
                             sv.duration_minutes,
                             60
                         ) AS duration_minutes
+
                      FROM appointments a
+
                      LEFT JOIN services sv
                         ON sv.service_id =
                            a.service_id
+
                      WHERE a.id = ?
+
                      FOR UPDATE`,
                     [
                         appointmentId,
@@ -833,7 +1034,9 @@ router.put(
                         "Appointment not found",
                     )
 
-                error.status = 404
+                error.status =
+                    404
+
                 throw error
             }
 
@@ -844,7 +1047,8 @@ router.put(
                 appointment.staff_id
 
             let endTime =
-                appointment.appointment_end_time
+                appointment
+                    .appointment_end_time
 
             let declineReason =
                 null
@@ -864,21 +1068,26 @@ router.put(
                         connection,
                         {
                             serviceId:
-                                appointment.service_id,
+                                appointment
+                                    .service_id,
 
                             appointmentDate:
-                                appointment.appointment_date,
+                                appointment
+                                    .appointment_date,
 
                             startTime:
-                                appointment.appointment_time,
+                                appointment
+                                    .appointment_time,
 
                             durationMinutes:
                                 Number(
-                                    appointment.duration_minutes,
+                                    appointment
+                                        .duration_minutes,
                                 ),
 
                             preferredStaffId:
-                                appointment.staff_id,
+                                appointment
+                                    .staff_id,
 
                             excludeAppointmentId:
                                 appointmentId,
@@ -886,23 +1095,28 @@ router.put(
                     )
 
                 if (
-                    !reservation.staff
+                    !reservation
+                        .staff
                 ) {
                     const error =
                         new Error(
                             "Approval blocked: assigned staff is no longer available for the full interval",
                         )
 
-                    error.status = 409
+                    error.status =
+                        409
+
                     throw error
                 }
 
                 assignedStaffId =
-                    reservation.staff
+                    reservation
+                        .staff
                         .staff_id
 
                 endTime =
-                    reservation.endTime
+                    reservation
+                        .endTime
             }
 
             if (
@@ -917,7 +1131,9 @@ router.put(
                             "Enter a reason for declining this appointment",
                         )
 
-                    error.status = 400
+                    error.status =
+                        400
+
                     throw error
                 }
 
@@ -931,7 +1147,9 @@ router.put(
                             "Select a valid suggested alternative date",
                         )
 
-                    error.status = 400
+                    error.status =
+                        400
+
                     throw error
                 }
 
@@ -945,7 +1163,9 @@ router.put(
                             "Select a valid suggested alternative time",
                         )
 
-                    error.status = 400
+                    error.status =
+                        400
+
                     throw error
                 }
 
@@ -959,7 +1179,8 @@ router.put(
 
                 if (
                     Number.isNaN(
-                        alternativeMoment.getTime(),
+                        alternativeMoment
+                            .getTime(),
                     ) ||
                     alternativeMoment <=
                         new Date()
@@ -969,7 +1190,9 @@ router.put(
                             "The suggested alternative schedule must be in the future",
                         )
 
-                    error.status = 400
+                    error.status =
+                        400
+
                     throw error
                 }
 
@@ -978,7 +1201,8 @@ router.put(
                         connection,
                         {
                             serviceId:
-                                appointment.service_id,
+                                appointment
+                                    .service_id,
 
                             appointmentDate:
                                 requestedSuggestedDate,
@@ -988,7 +1212,8 @@ router.put(
 
                             durationMinutes:
                                 Number(
-                                    appointment.duration_minutes,
+                                    appointment
+                                        .duration_minutes,
                                 ),
 
                             excludeAppointmentId:
@@ -1006,21 +1231,25 @@ router.put(
                             "No qualified staff is available for the suggested alternative schedule",
                         )
 
-                    error.status = 409
+                    error.status =
+                        409
+
                     throw error
                 }
 
                 declineReason =
-                    requestedDeclineReason.slice(
-                        0,
-                        500,
-                    )
+                    requestedDeclineReason
+                        .slice(
+                            0,
+                            500,
+                        )
 
                 suggestedDate =
                     requestedSuggestedDate
 
                 suggestedTime =
-                    alternative.startTime
+                    alternative
+                        .startTime
             }
 
             await connection.query(
@@ -1035,18 +1264,26 @@ router.put(
                  WHERE id = ?`,
                 [
                     status,
+
                     assignedStaffId,
+
                     endTime,
+
                     declineReason,
+
                     suggestedDate,
+
                     suggestedTime,
+
                     appointmentId,
                 ],
             )
 
-            await connection.commit()
+            await connection
+                .commit()
 
-            committed = true
+            committed =
+                true
 
             let emailResult = {
                 sent: false,
@@ -1059,33 +1296,41 @@ router.put(
                     "Declined"
             ) {
                 emailResult =
-                    await sendAppointmentStatusEmail(
-                        {
-                            appointment,
-                            status,
-                            declineReason,
-                            suggestedDate,
-                            suggestedTime,
-                        },
-                    )
+                    await sendAppointmentStatusEmail({
+                        appointment,
+
+                        status,
+
+                        declineReason,
+
+                        suggestedDate,
+
+                        suggestedTime,
+                    })
             }
 
             return res.json({
                 message:
                     status ===
                     "Approved"
-                        ? emailResult.sent
+                        ? emailResult
+                              .sent
                             ? "Appointment approved and customer email sent."
                             : "Appointment approved. Email could not be delivered."
                         : status ===
-                            "Declined"
-                          ? emailResult.sent
+                              "Declined"
+                          ? emailResult
+                                .sent
                               ? "Appointment declined and customer email sent."
                               : "Appointment declined. Email could not be delivered."
                           : "Appointment status updated successfully",
 
                 id:
                     appointmentId,
+
+                booking_number:
+                    appointment
+                        .booking_number,
 
                 status,
 
@@ -1108,12 +1353,15 @@ router.put(
             if (!committed) {
                 await connection
                     .rollback()
-                    .catch(() => {})
+                    .catch(
+                        () => {},
+                    )
             }
 
             return res
                 .status(
-                    error.status || 500,
+                    error.status ||
+                        500,
                 )
                 .json({
                     error:
@@ -1127,9 +1375,14 @@ router.put(
 
 router.put(
     "/:id/assign",
-    async (req, res) => {
+
+    async (
+        req,
+        res,
+    ) => {
         const connection =
-            await promiseDb.getConnection()
+            await promiseDb
+                .getConnection()
 
         try {
             const appointmentId =
@@ -1139,24 +1392,31 @@ router.put(
 
             const staffId =
                 Number(
-                    req.body.staff_id,
+                    req.body
+                        .staff_id,
                 )
 
-            await connection.beginTransaction()
+            await connection
+                .beginTransaction()
 
             const [rows] =
                 await connection.query(
                     `SELECT
                         a.*,
+
                         COALESCE(
                             s.duration_minutes,
                             60
                         ) AS duration_minutes
+
                      FROM appointments a
+
                      LEFT JOIN services s
                         ON s.service_id =
                            a.service_id
+
                      WHERE a.id = ?
+
                      FOR UPDATE`,
                     [
                         appointmentId,
@@ -1169,7 +1429,9 @@ router.put(
                         "Appointment not found",
                     )
 
-                error.status = 404
+                error.status =
+                    404
+
                 throw error
             }
 
@@ -1181,17 +1443,21 @@ router.put(
                     connection,
                     {
                         serviceId:
-                            appointment.service_id,
+                            appointment
+                                .service_id,
 
                         appointmentDate:
-                            appointment.appointment_date,
+                            appointment
+                                .appointment_date,
 
                         startTime:
-                            appointment.appointment_time,
+                            appointment
+                                .appointment_time,
 
                         durationMinutes:
                             Number(
-                                appointment.duration_minutes,
+                                appointment
+                                    .duration_minutes,
                             ),
 
                         preferredStaffId:
@@ -1210,7 +1476,9 @@ router.put(
                         "Selected staff member is unavailable or unqualified",
                     )
 
-                error.status = 409
+                error.status =
+                    409
+
                 throw error
             }
 
@@ -1221,16 +1489,19 @@ router.put(
                     appointment_end_time = ?
                  WHERE id = ?`,
                 [
-                    reservation.staff
+                    reservation
+                        .staff
                         .staff_id,
 
-                    reservation.endTime,
+                    reservation
+                        .endTime,
 
                     appointmentId,
                 ],
             )
 
-            await connection.commit()
+            await connection
+                .commit()
 
             res.json({
                 message:
@@ -1242,10 +1513,13 @@ router.put(
         } catch (error) {
             await connection
                 .rollback()
-                .catch(() => {})
+                .catch(
+                    () => {},
+                )
 
             res.status(
-                error.status || 500,
+                error.status ||
+                    500,
             ).json({
                 error:
                     error.message,

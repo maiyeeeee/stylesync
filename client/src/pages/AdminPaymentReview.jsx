@@ -31,6 +31,24 @@ const peso = (value) =>
 const field =
     "block text-sm font-medium text-purple-900"
 
+const formatBookingNumber = (row) => {
+    const value = Number(
+        row?.booking_number,
+    )
+
+    if (
+        Number.isSafeInteger(value) &&
+        value > 0
+    ) {
+        return `#${String(value).padStart(
+            3,
+            "0",
+        )}`
+    }
+
+    return "#—"
+}
+
 const emptyPaymentForm = {
     reference: "",
     amount: "",
@@ -482,12 +500,6 @@ export default function AdminPaymentReview() {
         setMessage("")
 
         try {
-            /*
-             * PAYMENT REJECTION
-             *
-             * Use only when there is a problem
-             * with the actual payment.
-             */
             if (
                 action ===
                 "reject"
@@ -507,22 +519,12 @@ export default function AdminPaymentReview() {
                 return
             }
 
-            /*
-             * Verify first if this payment
-             * has not been verified yet.
-             */
             if (
                 paymentNeedsVerification
             ) {
                 await verifyPayment()
             }
 
-            /*
-             * VERIFY PAYMENT ONLY
-             *
-             * Payment = Verified
-             * Appointment = Pending
-             */
             if (
                 action ===
                 "verify"
@@ -538,13 +540,6 @@ export default function AdminPaymentReview() {
                 return
             }
 
-            /*
-             * VERIFY + APPROVE
-             *
-             * Payment remains Verified.
-             * Existing appointment endpoint
-             * handles final approval.
-             */
             if (
                 action ===
                 "verify-and-approve"
@@ -564,11 +559,6 @@ export default function AdminPaymentReview() {
                 } catch (
                     approvalError
                 ) {
-                    /*
-                     * Payment verification was
-                     * successful and must NOT be
-                     * rolled back.
-                     */
                     setChosen(null)
 
                     setError(
@@ -581,15 +571,6 @@ export default function AdminPaymentReview() {
                 return
             }
 
-            /*
-             * VERIFY + DECLINE
-             *
-             * Payment = Verified
-             * Appointment = Declined
-             *
-             * The appointment reason is
-             * separate from payment review_note.
-             */
             if (
                 action ===
                 "verify-and-decline"
@@ -623,11 +604,6 @@ export default function AdminPaymentReview() {
                 } catch (
                     declineError
                 ) {
-                    /*
-                     * Payment remains Verified
-                     * even if the appointment
-                     * decline request fails.
-                     */
                     setChosen(null)
 
                     setError(
@@ -749,8 +725,8 @@ export default function AdminPaymentReview() {
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div>
                             <h2 className="text-lg font-bold text-purple-950">
-                                Payment details for booking #
-                                {chosen.appointment_id}
+                                Payment details for booking{" "}
+                                {formatBookingNumber(chosen)}
                                 {" — "}
                                 {chosen.customer_name}
                             </h2>
@@ -820,8 +796,7 @@ export default function AdminPaymentReview() {
                             </strong>
                         </p>
                     </div>
-
-                    {awaitingVerification && (
+                                        {awaitingVerification && (
                         <fieldset
                             disabled={
                                 busy
@@ -1356,8 +1331,7 @@ export default function AdminPaymentReview() {
                                     }
                                 >
                                     <td className="p-3">
-                                        #
-                                        {row.appointment_id}
+                                        {formatBookingNumber(row)}
                                         {" · "}
                                         {row.customer_name}
 
