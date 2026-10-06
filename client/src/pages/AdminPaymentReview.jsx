@@ -31,6 +31,19 @@ const peso = (value) =>
 const field =
     "block text-sm font-medium text-purple-900"
 
+const emptyPaymentForm = {
+    reference: "",
+    amount: "",
+    note: "",
+    confirm_received: false,
+}
+
+const emptyDeclineForm = {
+    reason: "",
+    suggestedDate: "",
+    suggestedTime: "",
+}
+
 export default function AdminPaymentReview() {
     const [
         rows,
@@ -45,12 +58,21 @@ export default function AdminPaymentReview() {
     const [
         form,
         setForm,
-    ] = useState({
-        reference: "",
-        amount: "",
-        note: "",
-        confirm_received: false,
-    })
+    ] = useState(
+        emptyPaymentForm,
+    )
+
+    const [
+        declineForm,
+        setDeclineForm,
+    ] = useState(
+        emptyDeclineForm,
+    )
+
+    const [
+        showDeclineForm,
+        setShowDeclineForm,
+    ] = useState(false)
 
     const [
         error,
@@ -110,7 +132,8 @@ export default function AdminPaymentReview() {
                 !signal?.aborted
             ) {
                 setError(
-                    err.message,
+                    err.message ||
+                        "Cannot load payments.",
                 )
             }
         } finally {
@@ -134,12 +157,113 @@ export default function AdminPaymentReview() {
             controller.abort()
     }, [])
 
+    function openReview(
+        row,
+    ) {
+        setChosen(row)
+
+        setForm({
+            reference:
+                row.submitted_reference ||
+                "",
+
+            amount:
+                row.submitted_amount ||
+                "",
+
+            note:
+                row.review_note ||
+                "",
+
+            confirm_received:
+                false,
+        })
+
+        setDeclineForm({
+            reason:
+                row.decline_reason ||
+                "",
+
+            suggestedDate:
+                row.suggested_date
+                    ? String(
+                          row.suggested_date,
+                      ).slice(
+                          0,
+                          10,
+                      )
+                    : "",
+
+            suggestedTime:
+                row.suggested_time
+                    ? String(
+                          row.suggested_time,
+                      ).slice(
+                          0,
+                          5,
+                      )
+                    : "",
+        })
+
+        setShowDeclineForm(
+            false,
+        )
+
+        setError("")
+        setMessage("")
+    }
+
+    function closeReview() {
+        if (busy) {
+            return
+        }
+
+        setChosen(null)
+
+        setForm(
+            emptyPaymentForm,
+        )
+
+        setDeclineForm(
+            emptyDeclineForm,
+        )
+
+        setShowDeclineForm(
+            false,
+        )
+
+        setError("")
+    }
+
     function validateVerify() {
         if (
             !form.confirm_received
         ) {
             setError(
                 "Check the receiving GCash account and confirm receipt first.",
+            )
+
+            return false
+        }
+
+        if (
+            !form.reference.trim()
+        ) {
+            setError(
+                "Enter the actual received payment reference.",
+            )
+
+            return false
+        }
+
+        if (
+            !form.amount ||
+            Number(
+                form.amount,
+            ) <= 0
+        ) {
+            setError(
+                "Enter the actual received payment amount.",
             )
 
             return false
@@ -153,7 +277,8 @@ export default function AdminPaymentReview() {
             await apiFetch(
                 `${API_URL}/booking-payments/review/${chosen.deposit_id}`,
                 {
-                    method: "POST",
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
@@ -163,6 +288,7 @@ export default function AdminPaymentReview() {
                     body:
                         JSON.stringify({
                             ...form,
+
                             action:
                                 "verify",
                         }),
@@ -170,7 +296,11 @@ export default function AdminPaymentReview() {
             )
 
         const data =
-            await response.json()
+            await response
+                .json()
+                .catch(
+                    () => ({}),
+                )
 
         if (
             !response.ok
@@ -184,12 +314,22 @@ export default function AdminPaymentReview() {
         return data
     }
 
-    async function approveAppointment() {
+    async function rejectPayment() {
+        const reason =
+            form.note.trim()
+
+        if (!reason) {
+            throw new Error(
+                "Enter a payment rejection reason.",
+            )
+        }
+
         const response =
             await apiFetch(
-                `${API_URL}/appointments/${chosen.appointment_id}/status`,
+                `${API_URL}/booking-payments/review/${chosen.deposit_id}`,
                 {
-                    method: "PUT",
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
@@ -198,21 +338,73 @@ export default function AdminPaymentReview() {
 
                     body:
                         JSON.stringify({
-                            status:
-                                "Approved",
+                            ...form,
+
+                            note:
+                                reason,
+
+                            action:
+                                "reject",
                         }),
                 },
             )
 
         const data =
-            await response.json()
+            await response
+                .json()
+                .catch(
+                    () => ({}),
+                )
 
         if (
             !response.ok
         ) {
             throw new Error(
                 data?.error ||
-                    "Payment was verified, but the appointment could not be approved.",
+                    "Cannot reject payment.",
+            )
+        }
+
+        return data
+    }
+
+    async function updateAppointment(
+        status,
+        extra = {},
+    ) {
+        const response =
+            await apiFetch(
+                `${API_URL}/appointments/${chosen.appointment_id}/status`,
+                {
+                    method:
+                        "PUT",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json",
+                    },
+
+                    body:
+                        JSON.stringify({
+                            status,
+                            ...extra,
+                        }),
+                },
+            )
+
+        const data =
+            await response
+                .json()
+                .catch(
+                    () => ({}),
+                )
+
+        if (
+            !response.ok
+        ) {
+            throw new Error(
+                data?.error ||
+                    "Cannot update appointment.",
             )
         }
 
@@ -229,13 +421,19 @@ export default function AdminPaymentReview() {
             return
         }
 
+        const paymentNeedsVerification =
+            chosen.payment_status ===
+            "Awaiting Verification"
+
         if (
-            (
-                action ===
-                    "verify" ||
-                action ===
-                    "verify-and-approve"
+            [
+                "verify",
+                "verify-and-approve",
+                "verify-and-decline",
+            ].includes(
+                action,
             ) &&
+            paymentNeedsVerification &&
             !validateVerify()
         ) {
             return
@@ -247,10 +445,34 @@ export default function AdminPaymentReview() {
             !form.note.trim()
         ) {
             setError(
-                "Enter a rejection reason.",
+                "Enter a payment rejection reason.",
             )
 
             return
+        }
+
+        if (
+            action ===
+            "verify-and-decline"
+        ) {
+            const reason =
+                declineForm.reason.trim()
+
+            if (
+                !reason ||
+                !declineForm.suggestedDate ||
+                !declineForm.suggestedTime
+            ) {
+                setError(
+                    "Enter an appointment decline reason and a suggested alternative date and time.",
+                )
+
+                setShowDeclineForm(
+                    true,
+                )
+
+                return
+            }
         }
 
         lock.current = true
@@ -260,15 +482,78 @@ export default function AdminPaymentReview() {
         setMessage("")
 
         try {
+            /*
+             * PAYMENT REJECTION
+             *
+             * Use only when there is a problem
+             * with the actual payment.
+             */
+            if (
+                action ===
+                "reject"
+            ) {
+                const result =
+                    await rejectPayment()
+
+                setChosen(null)
+
+                setMessage(
+                    result?.message ||
+                        "Payment rejected and reservation released.",
+                )
+
+                await load()
+
+                return
+            }
+
+            /*
+             * Verify first if this payment
+             * has not been verified yet.
+             */
+            if (
+                paymentNeedsVerification
+            ) {
+                await verifyPayment()
+            }
+
+            /*
+             * VERIFY PAYMENT ONLY
+             *
+             * Payment = Verified
+             * Appointment = Pending
+             */
+            if (
+                action ===
+                "verify"
+            ) {
+                setChosen(null)
+
+                setMessage(
+                    "Payment verified. The appointment is now pending final approval.",
+                )
+
+                await load()
+
+                return
+            }
+
+            /*
+             * VERIFY + APPROVE
+             *
+             * Payment remains Verified.
+             * Existing appointment endpoint
+             * handles final approval.
+             */
             if (
                 action ===
                 "verify-and-approve"
             ) {
-                await verifyPayment()
-
                 try {
                     const approval =
-                        await approveAppointment()
+                        await updateAppointment(
+                            "Approved",
+                        )
 
                     setChosen(null)
 
@@ -280,12 +565,9 @@ export default function AdminPaymentReview() {
                     approvalError
                 ) {
                     /*
-                     * Payment remains Verified.
-                     *
-                     * This is intentional:
-                     * we never undo a confirmed
-                     * received payment just because
-                     * appointment approval failed.
+                     * Payment verification was
+                     * successful and must NOT be
+                     * rolled back.
                      */
                     setChosen(null)
 
@@ -299,55 +581,112 @@ export default function AdminPaymentReview() {
                 return
             }
 
-            const response =
-                await apiFetch(
-                    `${API_URL}/booking-payments/review/${chosen.deposit_id}`,
-                    {
-                        method:
-                            "POST",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json",
-                        },
-
-                        body:
-                            JSON.stringify({
-                                ...form,
-                                action,
-                            }),
-                    },
-                )
-
-            const data =
-                await response.json()
-
+            /*
+             * VERIFY + DECLINE
+             *
+             * Payment = Verified
+             * Appointment = Declined
+             *
+             * The appointment reason is
+             * separate from payment review_note.
+             */
             if (
-                !response.ok
+                action ===
+                "verify-and-decline"
             ) {
-                throw new Error(
-                    data?.error ||
-                        "Cannot review payment.",
-                )
+                try {
+                    const decline =
+                        await updateAppointment(
+                            "Declined",
+                            {
+                                decline_reason:
+                                    declineForm.reason.trim(),
+
+                                suggested_date:
+                                    declineForm.suggestedDate,
+
+                                suggested_time:
+                                    declineForm.suggestedTime,
+                            },
+                        )
+
+                    setChosen(null)
+
+                    setShowDeclineForm(
+                        false,
+                    )
+
+                    setMessage(
+                        decline?.message ||
+                            "Payment verified and appointment declined.",
+                    )
+                } catch (
+                    declineError
+                ) {
+                    /*
+                     * Payment remains Verified
+                     * even if the appointment
+                     * decline request fails.
+                     */
+                    setChosen(null)
+
+                    setError(
+                        `Payment was verified successfully, but the appointment was not declined: ${declineError.message}`,
+                    )
+                }
+
+                await load()
+
+                return
             }
-
-            setChosen(null)
-
-            setMessage(
-                data.message,
+        } catch (err) {
+            setError(
+                err.message ||
+                    "Unable to complete this action.",
             )
 
             await load()
-        } catch (err) {
-            setError(
-                err.message,
-            )
+                .catch(
+                    () => {},
+                )
         } finally {
             lock.current = false
 
             setBusy(false)
         }
     }
+
+    const awaitingVerification =
+        chosen?.payment_status ===
+        "Awaiting Verification"
+
+    const paymentVerified =
+        chosen?.payment_status ===
+        "Verified"
+
+    const appointmentStatus =
+        chosen?.appointment_status ||
+        ""
+
+    const appointmentPending =
+        appointmentStatus ===
+            "Pending" ||
+        appointmentStatus ===
+            "Pending Validation" ||
+        (
+            !appointmentStatus &&
+            (
+                awaitingVerification ||
+                paymentVerified
+            )
+        )
+
+    const canDecideAppointment =
+        (
+            awaitingVerification ||
+            paymentVerified
+        ) &&
+        appointmentPending
 
     return (
         <div className="space-y-6">
@@ -363,11 +702,8 @@ export default function AdminPaymentReview() {
                         </h1>
 
                         <p className="dashboard-subtitle">
-                            Check each deposit
-                            against your GCash
-                            account before
-                            approving the
-                            appointment.
+                            Check each deposit against your GCash account,
+                            then decide what should happen to the appointment.
                         </p>
                     </div>
 
@@ -410,31 +746,38 @@ export default function AdminPaymentReview() {
 
             {chosen && (
                 <section className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6">
-                    <h2 className="text-lg font-bold text-purple-950">
-                        Payment details
-                        for booking #
-                        {
-                            chosen.appointment_id
-                        }{" "}
-                        —{" "}
-                        {
-                            chosen.customer_name
-                        }
-                    </h2>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-lg font-bold text-purple-950">
+                                Payment details for booking #
+                                {chosen.appointment_id}
+                                {" — "}
+                                {chosen.customer_name}
+                            </h2>
 
-                    <p className="mt-2 text-sm text-gray-500">
-                        Receiving account
-                        shown to customer:{" "}
-                        {
-                            chosen.receiving_name
-                        }{" "}
-                        ·{" "}
-                        {
-                            chosen.receiving_number
-                        }
-                    </p>
+                            <p className="mt-2 text-sm text-gray-500">
+                                Receiving account shown to customer:{" "}
+                                {chosen.receiving_name}
+                                {" · "}
+                                {chosen.receiving_number}
+                            </p>
+                        </div>
 
-                    <div className="mb-5 mt-3 grid gap-2 rounded-xl bg-purple-50 p-4 text-sm text-gray-700 md:grid-cols-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            disabled={
+                                busy
+                            }
+                            onClick={
+                                closeReview
+                            }
+                        >
+                            Close
+                        </Button>
+                    </div>
+
+                    <div className="mb-5 mt-4 grid gap-2 rounded-xl bg-purple-50 p-4 text-sm text-gray-700 md:grid-cols-2">
                         <p>
                             Required deposit:{" "}
                             {peso(
@@ -450,26 +793,35 @@ export default function AdminPaymentReview() {
                         </p>
 
                         <p>
-                            Customer
-                            reference:{" "}
-                            {
-                                chosen.submitted_reference ||
-                                "Not provided"
-                            }
+                            Customer reference:{" "}
+                            {chosen.submitted_reference ||
+                                "Not provided"}
                         </p>
 
                         <p>
                             Payment status:{" "}
                             <strong>
-                                {
-                                    chosen.payment_status
-                                }
+                                {chosen.payment_status}
+                            </strong>
+                        </p>
+
+                        <p>
+                            Appointment status:{" "}
+                            <strong>
+                                {chosen.appointment_status ||
+                                    "Pending Validation"}
+                            </strong>
+                        </p>
+
+                        <p>
+                            Service:{" "}
+                            <strong>
+                                {chosen.service}
                             </strong>
                         </p>
                     </div>
 
-                    {chosen.payment_status ===
-                    "Awaiting Verification" ? (
+                    {awaitingVerification && (
                         <fieldset
                             disabled={
                                 busy
@@ -481,8 +833,7 @@ export default function AdminPaymentReview() {
                                     field
                                 }
                             >
-                                Actual received
-                                reference
+                                Actual received reference
 
                                 <input
                                     className="input-field mt-2"
@@ -513,8 +864,7 @@ export default function AdminPaymentReview() {
                                     field
                                 }
                             >
-                                Actual received
-                                amount (₱)
+                                Actual received amount (₱)
 
                                 <input
                                     type="number"
@@ -547,11 +897,13 @@ export default function AdminPaymentReview() {
                                 className={`${field} md:col-span-2`}
                             >
                                 Payment review note / payment rejection reason
-                                <p className="mt-1 text-xs text-gray-500">
-    Use this only for payment-related issues such as incorrect amount,
-    invalid reference, or payment not received. For schedule or
-    appointment concerns, decline the appointment from Appointment Management.
-</p>
+
+                                <p className="mt-1 text-xs font-normal leading-5 text-gray-500">
+                                    Use this only for payment-related issues,
+                                    such as incorrect amount, invalid reference,
+                                    or payment not received. Do not use this
+                                    field for schedule or appointment concerns.
+                                </p>
 
                                 <textarea
                                     className="input-field mt-2"
@@ -605,101 +957,356 @@ export default function AdminPaymentReview() {
                                     }
                                 />
 
-                                I checked the
-                                receiving account
-                                and confirmed this
-                                payment was
-                                received.
+                                <span>
+                                    I checked the receiving account and
+                                    confirmed this payment was received.
+                                </span>
                             </label>
-
-                            <div className="flex flex-wrap gap-3 md:col-span-2">
-    <Button
-        type="button"
-        disabled={
-            !form.confirm_received ||
-            busy
-        }
-        onClick={() =>
-            review(
-                "verify-and-approve",
-            )
-        }
-    >
-        {busy
-            ? "Processing…"
-            : "Verify payment & confirm booking"}
-    </Button>
-
-    <Button
-        type="button"
-        disabled={
-            busy
-        }
-        onClick={() =>
-            review(
-                "reject",
-            )
-        }
-        className="bg-red-50 text-red-700 hover:bg-red-100"
-    >
-        Reject payment
-    </Button>
-
-    <Button
-        type="button"
-        variant="outline"
-        disabled={
-            busy
-        }
-        onClick={() =>
-            setChosen(
-                null,
-            )
-        }
-    >
-        Close
-    </Button>
-</div>
-                            <p className="text-xs leading-5 text-gray-500 md:col-span-2">
-                                “Verify payment
-                                & approve
-                                appointment”
-                                verifies the
-                                received deposit
-                                first, then
-                                approves the
-                                appointment. If
-                                appointment
-                                approval fails,
-                                the payment stays
-                                verified and the
-                                appointment can
-                                still be reviewed
-                                separately.
-                            </p>
                         </fieldset>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="rounded-xl border border-purple-100 p-4 text-sm text-gray-600">
-                                <p className="font-medium text-purple-950">
-                                    Review note
+                    )}
+
+                    {paymentVerified && (
+                        <div className="mb-5 rounded-xl border border-green-100 bg-green-50 p-4 text-sm text-green-800">
+                            <p className="font-semibold">
+                                Payment already verified.
+                            </p>
+
+                            <p className="mt-1">
+                                You can now approve or decline the appointment
+                                without checking or verifying the payment again.
+                            </p>
+                        </div>
+                    )}
+
+                    {showDeclineForm &&
+                        canDecideAppointment && (
+                            <div className="mt-5 rounded-2xl border border-red-100 bg-red-50/40 p-5">
+                                <h3 className="font-bold text-red-900">
+                                    Decline appointment
+                                </h3>
+
+                                <p className="mt-1 text-sm leading-6 text-gray-600">
+                                    Use this when the payment is valid, but the
+                                    requested appointment cannot be approved.
+                                    The customer will receive the appointment
+                                    decline reason and suggested alternative
+                                    schedule.
                                 </p>
 
-                                <p className="mt-1">
-                                    {
-                                        chosen.review_note ||
-                                        "No review note was recorded."
-                                    }
-                                </p>
+                                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                                    <label
+                                        className={`${field} md:col-span-2`}
+                                    >
+                                        Appointment decline reason
+
+                                        <textarea
+                                            className="input-field mt-2"
+                                            maxLength={
+                                                500
+                                            }
+                                            placeholder="Example: No staff is available for the selected schedule."
+                                            value={
+                                                declineForm.reason
+                                            }
+                                            onChange={(
+                                                event,
+                                            ) =>
+                                                setDeclineForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        reason:
+                                                            event
+                                                                .target
+                                                                .value,
+                                                    }),
+                                                )
+                                            }
+                                        />
+                                    </label>
+
+                                    <label
+                                        className={
+                                            field
+                                        }
+                                    >
+                                        Suggested alternative date
+
+                                        <input
+                                            type="date"
+                                            className="input-field mt-2"
+                                            value={
+                                                declineForm.suggestedDate
+                                            }
+                                            onChange={(
+                                                event,
+                                            ) =>
+                                                setDeclineForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        suggestedDate:
+                                                            event
+                                                                .target
+                                                                .value,
+                                                    }),
+                                                )
+                                            }
+                                        />
+                                    </label>
+
+                                    <label
+                                        className={
+                                            field
+                                        }
+                                    >
+                                        Suggested alternative time
+
+                                        <input
+                                            type="time"
+                                            className="input-field mt-2"
+                                            value={
+                                                declineForm.suggestedTime
+                                            }
+                                            onChange={(
+                                                event,
+                                            ) =>
+                                                setDeclineForm(
+                                                    (
+                                                        current,
+                                                    ) => ({
+                                                        ...current,
+
+                                                        suggestedTime:
+                                                            event
+                                                                .target
+                                                                .value,
+                                                    }),
+                                                )
+                                            }
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="mt-4 flex flex-wrap gap-3">
+                                    <Button
+                                        type="button"
+                                        disabled={
+                                            busy ||
+                                            (
+                                                awaitingVerification &&
+                                                !form.confirm_received
+                                            )
+                                        }
+                                        onClick={() =>
+                                            review(
+                                                "verify-and-decline",
+                                            )
+                                        }
+                                        className="bg-red-700 text-white hover:bg-red-800"
+                                    >
+                                        {busy
+                                            ? "Processing…"
+                                            : paymentVerified
+                                              ? "Decline appointment"
+                                              : "Verify payment & decline appointment"}
+                                    </Button>
+
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={
+                                            busy
+                                        }
+                                        onClick={() =>
+                                            setShowDeclineForm(
+                                                false,
+                                            )
+                                        }
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
                             </div>
+                        )}
+
+                    {canDecideAppointment && (
+                        <div className="mt-5">
+                            <p className="mb-3 text-sm font-semibold text-purple-950">
+                                Choose what happens next:
+                            </p>
+
+                            <div className="flex flex-wrap gap-3">
+                                {awaitingVerification && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={
+                                            busy ||
+                                            !form.confirm_received
+                                        }
+                                        onClick={() =>
+                                            review(
+                                                "verify",
+                                            )
+                                        }
+                                    >
+                                        {busy
+                                            ? "Processing…"
+                                            : "Verify payment only"}
+                                    </Button>
+                                )}
+
+                                <Button
+                                    type="button"
+                                    disabled={
+                                        busy ||
+                                        (
+                                            awaitingVerification &&
+                                            !form.confirm_received
+                                        )
+                                    }
+                                    onClick={() =>
+                                        review(
+                                            "verify-and-approve",
+                                        )
+                                    }
+                                    className="bg-green-700 text-white hover:bg-green-800"
+                                >
+                                    {busy
+                                        ? "Processing…"
+                                        : paymentVerified
+                                          ? "Approve appointment"
+                                          : "Verify payment & approve appointment"}
+                                </Button>
+
+                                <Button
+                                    type="button"
+                                    disabled={
+                                        busy ||
+                                        (
+                                            awaitingVerification &&
+                                            !form.confirm_received
+                                        )
+                                    }
+                                    onClick={() => {
+                                        setError("")
+
+                                        setShowDeclineForm(
+                                            true,
+                                        )
+                                    }}
+                                    className="bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                >
+                                    {paymentVerified
+                                        ? "Decline appointment"
+                                        : "Verify payment & decline appointment"}
+                                </Button>
+
+                                {awaitingVerification && (
+                                    <Button
+                                        type="button"
+                                        disabled={
+                                            busy
+                                        }
+                                        onClick={() =>
+                                            review(
+                                                "reject",
+                                            )
+                                        }
+                                        className="bg-red-50 text-red-700 hover:bg-red-100"
+                                    >
+                                        {busy
+                                            ? "Processing…"
+                                            : "Reject payment"}
+                                    </Button>
+                                )}
+
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={
+                                        busy
+                                    }
+                                    onClick={
+                                        closeReview
+                                    }
+                                >
+                                    Close
+                                </Button>
+                            </div>
+
+                            <p className="mt-3 text-xs leading-5 text-gray-500">
+                                Reject payment only when there is a payment
+                                problem. If the payment is valid but the
+                                appointment cannot be accommodated, use
+                                Verify payment & decline appointment instead.
+                            </p>
+                        </div>
+                    )}
+
+                    {!canDecideAppointment && (
+                        <div className="mt-5 space-y-4">
+                            {chosen.review_note && (
+                                <div className="rounded-xl border border-purple-100 p-4 text-sm text-gray-600">
+                                    <p className="font-medium text-purple-950">
+                                        Payment review note
+                                    </p>
+
+                                    <p className="mt-1">
+                                        {chosen.review_note}
+                                    </p>
+                                </div>
+                            )}
+
+                            {chosen.appointment_status ===
+                                "Declined" &&
+                                chosen.decline_reason && (
+                                    <div className="rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-800">
+                                        <p className="font-semibold">
+                                            Appointment decline reason
+                                        </p>
+
+                                        <p className="mt-1">
+                                            {chosen.decline_reason}
+                                        </p>
+
+                                        {chosen.suggested_date &&
+                                            chosen.suggested_time && (
+                                                <p className="mt-2">
+                                                    Suggested alternative:{" "}
+                                                    {chosen.suggested_date}
+                                                    {" at "}
+                                                    {String(
+                                                        chosen.suggested_time,
+                                                    ).slice(
+                                                        0,
+                                                        5,
+                                                    )}
+                                                </p>
+                                            )}
+                                    </div>
+                                )}
+
+                            {!chosen.review_note &&
+                                !chosen.decline_reason && (
+                                    <div className="rounded-xl border border-purple-100 p-4 text-sm text-gray-600">
+                                        No review note was recorded.
+                                    </div>
+                                )}
 
                             <Button
                                 type="button"
                                 variant="outline"
-                                onClick={() =>
-                                    setChosen(
-                                        null,
-                                    )
+                                disabled={
+                                    busy
+                                }
+                                onClick={
+                                    closeReview
                                 }
                             >
                                 Close details
@@ -710,7 +1317,7 @@ export default function AdminPaymentReview() {
             )}
 
             <div className="overflow-x-auto rounded-2xl border border-purple-100 bg-white p-5 shadow-sm">
-                <table className="w-full min-w-[750px] text-left text-sm">
+                <table className="w-full min-w-[900px] text-left text-sm">
                     <thead>
                         <tr>
                             {[
@@ -718,7 +1325,8 @@ export default function AdminPaymentReview() {
                                 "Service / date",
                                 "Deposit",
                                 "Reference",
-                                "Status",
+                                "Payment",
+                                "Appointment",
                                 "Payment Review",
                             ].map(
                                 (
@@ -730,9 +1338,7 @@ export default function AdminPaymentReview() {
                                             heading
                                         }
                                     >
-                                        {
-                                            heading
-                                        }
+                                        {heading}
                                     </th>
                                 ),
                             )}
@@ -751,31 +1357,21 @@ export default function AdminPaymentReview() {
                                 >
                                     <td className="p-3">
                                         #
-                                        {
-                                            row.appointment_id
-                                        }{" "}
-                                        ·{" "}
-                                        {
-                                            row.customer_name
-                                        }
+                                        {row.appointment_id}
+                                        {" · "}
+                                        {row.customer_name}
 
                                         <br />
 
-                                        {
-                                            row.contact_number
-                                        }
+                                        {row.contact_number}
                                     </td>
 
                                     <td className="p-3">
-                                        {
-                                            row.service
-                                        }
+                                        {row.service}
 
                                         <br />
 
-                                        {
-                                            row.appointment_date
-                                        }
+                                        {row.appointment_date}
                                     </td>
 
                                     <td className="p-3">
@@ -785,15 +1381,17 @@ export default function AdminPaymentReview() {
                                     </td>
 
                                     <td className="p-3">
-                                        {
-                                            row.submitted_reference
-                                        }
+                                        {row.submitted_reference ||
+                                            "—"}
                                     </td>
 
                                     <td className="p-3">
-                                        {
-                                            row.payment_status
-                                        }
+                                        {row.payment_status}
+                                    </td>
+
+                                    <td className="p-3">
+                                        {row.appointment_status ||
+                                            "—"}
                                     </td>
 
                                     <td className="p-3">
@@ -805,43 +1403,21 @@ export default function AdminPaymentReview() {
                                                 busy ||
                                                 loading
                                             }
-                                            onClick={() => {
-                                                setChosen(
+                                            onClick={() =>
+                                                openReview(
                                                     row,
                                                 )
-
-                                                setForm(
-                                                    {
-                                                        reference:
-                                                            row.submitted_reference ||
-                                                            "",
-
-                                                        amount:
-                                                            row.submitted_amount ||
-                                                            "",
-
-                                                        note:
-                                                            row.review_note ||
-                                                            "",
-
-                                                        confirm_received:
-                                                            false,
-                                                    },
-                                                )
-
-                                                setError(
-                                                    "",
-                                                )
-
-                                                setMessage(
-                                                    "",
-                                                )
-                                            }}
+                                            }
                                         >
                                             {row.payment_status ===
                                             "Awaiting Verification"
                                                 ? "Review Payment"
-                                                : "View Details"}
+                                                : row.payment_status ===
+                                                        "Verified" &&
+                                                    row.appointment_status ===
+                                                        "Pending"
+                                                  ? "Complete Appointment Review"
+                                                  : "View Details"}
                                         </Button>
                                     </td>
                                 </tr>
@@ -852,7 +1428,7 @@ export default function AdminPaymentReview() {
                             <tr>
                                 <td
                                     colSpan={
-                                        6
+                                        7
                                     }
                                     className="p-8 text-center text-gray-500"
                                 >
