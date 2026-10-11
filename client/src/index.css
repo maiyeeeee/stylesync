@@ -2036,19 +2036,7 @@
     .hero-seal .brand-mark { width: 59px; height: 59px; }
 }
 
-
-/* Hide the printable document on screen */
-.stylesync-print-report {
-  display: none;
-}
-
-@media print {
-  @page {
-    size: A4 portrait;
-    margin: 14mm;
-  }
-
-  /* Hide the application while printing */
+ /* Hide the application while printing */
   body * {
     visibility: hidden !important;
   }
@@ -2192,4 +2180,48 @@
     font-size: 9px;
     color: #666;
   }
+
+
+
+
+/* Hide the printable document on screen */
+.stylesync-print-report {
+  display: none;
+}
+
+/* StyleSync Reports - Print Fix */
+@media print {
+  .stylesync-screen-dashboard {
+    display: none !important;
+  }
+
+  .stylesync-reports-page {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .stylesync-print-report {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    visibility: visible !important;
+  }
+
+  .stylesync-print-report * {
+    visibility: visible !important;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+
 }

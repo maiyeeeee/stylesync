@@ -13,7 +13,7 @@ import {
 } from "recharts"
 
 import { API_URL, apiFetch } from "../lib/sessionApi"
-import salonLogo from "../assets/dahling-logo.png"
+import salonLogo from "../assets/dahling-logo.jpg"
 
 const panel = "rounded-2xl border border-purple-100 bg-white shadow-sm"
 
