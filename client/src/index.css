@@ -1833,7 +1833,7 @@
 }
 
 /* =========================================
-   STYLESYNC REPORT: PRINT-ONLY STYLES
+   INSIGHTGLOW REPORT: PRINT-ONLY STYLES
    ========================================= */
 @media print {
   @page {
@@ -1845,16 +1845,16 @@
     visibility: hidden !important;
   }
 
-  .stylesync-print-report,
-  .stylesync-print-report * {
+  .insightglow-print-report,
+  .insightglow-print-report * {
     visibility: visible !important;
   }
 
-  .stylesync-screen-dashboard {
+  .insightglow-screen-dashboard {
     display: none !important;
   }
 
-  .stylesync-print-report {
+  .insightglow-print-report {
     display: block !important;
     position: absolute;
     top: 0;
@@ -1867,7 +1867,7 @@
     line-height: 1.5;
   }
 
-  .stylesync-print-header {
+  .insightglow-print-header {
     display: flex;
     align-items: center;
     gap: 20px;
@@ -1876,35 +1876,35 @@
     border-bottom: 2px solid #7e22ce;
   }
 
-  .stylesync-print-logo {
+  .insightglow-print-logo {
     width: 90px;
     height: 90px;
     object-fit: contain;
   }
 
-  .stylesync-print-header h1 {
+  .insightglow-print-header h1 {
     font-size: 19px;
     font-weight: 800;
     color: #581c87;
     margin: 0;
   }
 
-  .stylesync-print-header h2 {
+  .insightglow-print-header h2 {
     font-size: 13px;
     font-weight: 700;
     margin: 4px 0;
   }
 
-  .stylesync-print-header p {
+  .insightglow-print-header p {
     margin: 2px 0;
     font-size: 10px;
   }
 
-  .stylesync-print-section {
+  .insightglow-print-section {
     margin-bottom: 22px;
   }
 
-  .stylesync-print-section h3 {
+  .insightglow-print-section h3 {
     font-size: 13px;
     font-weight: 700;
     color: #581c87;
@@ -1913,46 +1913,46 @@
     border-bottom: 1px solid #ddd;
   }
 
-  .stylesync-print-kpis {
+  .insightglow-print-kpis {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
   }
 
-  .stylesync-print-kpis > div {
+  .insightglow-print-kpis > div {
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 10px;
   }
 
-  .stylesync-print-kpis span {
+  .insightglow-print-kpis span {
     display: block;
     font-size: 9px;
     color: #555;
   }
 
-  .stylesync-print-kpis strong {
+  .insightglow-print-kpis strong {
     display: block;
     margin-top: 5px;
     font-size: 14px;
     color: #581c87;
   }
 
-  .stylesync-print-section table {
+  .insightglow-print-section table {
     width: 100%;
     border-collapse: collapse;
     font-size: 9px;
   }
 
-  .stylesync-print-section th,
-  .stylesync-print-section td {
+  .insightglow-print-section th,
+  .insightglow-print-section td {
     padding: 7px;
     border: 1px solid #ddd;
     text-align: left;
     overflow-wrap: anywhere;
   }
 
-  .stylesync-print-section th {
+  .insightglow-print-section th {
     background: #f3e8ff !important;
     color: #581c87;
     font-weight: 700;
@@ -1960,27 +1960,27 @@
     print-color-adjust: exact;
   }
 
-  .stylesync-print-section tr {
+  .insightglow-print-section tr {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .stylesync-print-section ul {
+  .insightglow-print-section ul {
     padding-left: 18px;
     list-style: disc;
   }
 
-  .stylesync-print-section li {
+  .insightglow-print-section li {
     margin-bottom: 5px;
   }
 
-  .stylesync-print-note {
+  .insightglow-print-note {
     margin-top: 10px;
     color: #666;
     font-style: italic;
   }
 
-  .stylesync-print-footer {
+  .insightglow-print-footer {
     margin-top: 25px;
     padding-top: 12px;
     border-top: 1px solid #ccc;
@@ -1994,7 +1994,7 @@
    NORMAL WEBPAGE: HIDE PRINT-ONLY REPORT
    ========================================= */
 @media screen {
-  .stylesync-print-report {
+  .insightglow-print-report {
     display: none !important;
   }
 }

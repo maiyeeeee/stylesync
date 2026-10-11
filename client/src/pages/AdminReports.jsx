@@ -142,7 +142,7 @@ function PrintableSalonReport({ report, generatedAt }) {
         <div>
           <h1>DAHLING'S SALON AND SPA</h1>
           <h2>SALES & PERFORMANCE REPORT</h2>
-          <p>Generated through StyleSync Management System</p>
+          <p>Generated through InsightGlow Management System</p>
           <p>
             Reporting Period: {report.periodLabel}
           </p>

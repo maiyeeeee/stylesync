@@ -10,7 +10,7 @@ export default function AuthLayout({ title, subtitle, children }) {
                 <Link to="/" className="auth-back">
                     <LuArrowLeft /> Back to website
                 </Link>
-                <span>STYLESYNC · TEAM WORKSPACE</span>
+                <span>INSIGHTGLOW · TEAM WORKSPACE</span>
             </div>
             <section className="auth-frame" aria-label="Salon account access">
                 <aside className="auth-brand">

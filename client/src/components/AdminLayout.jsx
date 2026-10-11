@@ -266,13 +266,13 @@ function Sidebar({
                     onClick={
                         onNavigate
                     }
-                    aria-label="StyleSync workspace"
+                    aria-label="InsightGlow workspace"
                 >
                     <Brand />
                 </Link>
 
                 <p className="admin-brand-caption">
-                    STYLESYNC · TEAM
+                    INSIGHTGLOW · TEAM
                     WORKSPACE
                 </p>
             </div>
