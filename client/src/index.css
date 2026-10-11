@@ -2035,3 +2035,161 @@
     .brand-symbol { width: 42px; height: 42px; }
     .hero-seal .brand-mark { width: 59px; height: 59px; }
 }
+
+
+/* Hide the printable document on screen */
+.stylesync-print-report {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  /* Hide the application while printing */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .stylesync-print-report,
+  .stylesync-print-report * {
+    visibility: visible !important;
+  }
+
+  .stylesync-print-report {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    color: #222;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .stylesync-print-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding-bottom: 18px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #7e22ce;
+  }
+
+  .stylesync-print-logo {
+    width: 90px;
+    height: 90px;
+    object-fit: contain;
+  }
+
+  .stylesync-print-header h1 {
+    font-size: 19px;
+    font-weight: 800;
+    color: #581c87;
+    margin: 0;
+  }
+
+  .stylesync-print-header h2 {
+    font-size: 13px;
+    font-weight: 700;
+    margin: 4px 0;
+  }
+
+  .stylesync-print-header p {
+    margin: 2px 0;
+    font-size: 10px;
+  }
+
+  .stylesync-print-section {
+    margin-bottom: 22px;
+  }
+
+  .stylesync-print-section h3 {
+    font-size: 13px;
+    font-weight: 700;
+    color: #581c87;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .stylesync-print-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .stylesync-print-kpis > div {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 10px;
+  }
+
+  .stylesync-print-kpis span {
+    display: block;
+    font-size: 9px;
+    color: #555;
+  }
+
+  .stylesync-print-kpis strong {
+    display: block;
+    margin-top: 5px;
+    font-size: 14px;
+    color: #581c87;
+  }
+
+  .stylesync-print-section table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9px;
+  }
+
+  .stylesync-print-section th,
+  .stylesync-print-section td {
+    padding: 7px;
+    border: 1px solid #ddd;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .stylesync-print-section th {
+    background: #f3e8ff !important;
+    color: #581c87;
+    font-weight: 700;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .stylesync-print-section tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .stylesync-print-section ul {
+    padding-left: 18px;
+    list-style: disc;
+  }
+
+  .stylesync-print-section li {
+    margin-bottom: 5px;
+  }
+
+  .stylesync-print-note {
+    margin-top: 10px;
+    color: #666;
+    font-style: italic;
+  }
+
+  .stylesync-print-footer {
+    margin-top: 25px;
+    padding-top: 12px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    font-size: 9px;
+    color: #666;
+  }
+}
