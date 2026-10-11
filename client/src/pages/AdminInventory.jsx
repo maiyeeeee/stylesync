@@ -1,1506 +1,834 @@
-import {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-} from "react"
 
-import {
-    API_URL,
-    apiFetch,
-} from "../lib/sessionApi"
+import { useCallback, useEffect, useState } from "react";
+import { API_URL, apiFetch } from "../lib/sessionApi";
 
-const panel =
-    "rounded-2xl border border-purple-100 bg-white shadow-sm"
+const inputClass =
+  "w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple-400";
 
-const input =
-    "w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-800 outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+const buttonClass =
+  "rounded-xl bg-purple-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50";
 
-const primary =
-    "rounded-xl bg-purple-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-purple-800 disabled:cursor-not-allowed disabled:opacity-50"
+const panelClass =
+  "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm";
 
-const secondary =
-    "rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-
-const emptyForm = {
-    name: "",
-    category: "",
-    stock: "",
-    alertLevel: "",
-    price: "",
-}
+const emptyProduct = {
+  name: "",
+  category: "",
+  stock: "",
+  alertLevel: "",
+  price: "",
+};
 
 const money = (value) =>
-    Number(
-        value || 0,
-    ).toLocaleString(
-        "en-PH",
-        {
-            style: "currency",
-            currency: "PHP",
-        },
-    )
+  Number(value || 0).toLocaleString("en-PH", {
+    style: "currency",
+    currency: "PHP",
+  });
 
 function stockStatus(product) {
-    if (
-        Number(
-            product.stock,
-        ) === 0
-    ) {
-        return "Out of stock"
-    }
+  const stock = Number(product.stock);
+  const level = Number(product.alertLevel);
 
-    if (
-        Number(
-            product.stock,
-        ) <=
-        Number(
-            product.alertLevel,
-        )
-    ) {
-        return "Low stock"
-    }
-
-    return "In stock"
+  if (stock === 0) return "Out of Stock";
+  if (stock <= level) return "Low Stock";
+  return "In Stock";
 }
 
-async function request(
-    path,
-    options,
-) {
-    const response =
-        await apiFetch(
-            `${API_URL}${path}`,
-            options,
-        )
+async function request(path, options = {}) {
+  const response = await apiFetch(`${API_URL}${path}`, options);
+  const data = await response.json().catch(() => null);
 
-    const data =
-        await response
-            .json()
-            .catch(() => null)
+  if (!response.ok) {
+    throw new Error(data?.error || "Request failed.");
+  }
 
-    if (!response.ok) {
-        throw new Error(
-            data?.error ||
-                "Unable to complete this request.",
-        )
-    }
-
-    return data
-}
-
-function Field({
-    label,
-    children,
-}) {
-    return (
-        <label className="block">
-            <span className="mb-2 block text-sm font-medium text-gray-700">
-                {label}
-            </span>
-
-            {children}
-        </label>
-    )
+  return data;
 }
 
 function AdminInventory() {
-    const [
-        products,
-        setProducts,
-    ] = useState([])
+  const [products, setProducts] = useState([]);
+  const [movements, setMovements] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
 
-    const [
-        search,
-        setSearch,
-    ] = useState("")
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-    const [
-        filter,
-        setFilter,
-    ] = useState("All")
+  const [search, setSearch] = useState("");
+  const [stockFilter, setStockFilter] = useState("All");
 
-    const [
-        showForm,
-        setShowForm,
-    ] = useState(false)
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [productForm, setProductForm] = useState(emptyProduct);
 
-    const [
-        editingProduct,
-        setEditingProduct,
-    ] = useState(null)
+  const [adjustProduct, setAdjustProduct] = useState(null);
+  const [adjustType, setAdjustType] = useState("Stock In");
+  const [quantity, setQuantity] = useState("");
+  const [reason, setReason] = useState("");
 
-    const [
-        form,
-        setForm,
-    ] = useState({
-        ...emptyForm,
-    })
+  const [historyMonth, setHistoryMonth] = useState("");
+  const [historyDate, setHistoryDate] = useState("");
+  const [historyType, setHistoryType] = useState("All");
+  const [historySearch, setHistorySearch] = useState("");
 
-    const [
-        currentUser,
-        setCurrentUser,
-    ] = useState(null)
+  const canManage =
+    currentUser?.role === "owner" ||
+    currentUser?.role === "admin";
 
-    const [
-        sessionLoading,
-        setSessionLoading,
-    ] = useState(true)
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
 
-    const [
-        loading,
-        setLoading,
-    ] = useState(true)
+      const [productData, movementData] = await Promise.all([
+        request("/inventory"),
+        request("/inventory/movements"),
+      ]);
 
-    const [
-        loadError,
-        setLoadError,
-    ] = useState("")
+      setProducts(Array.isArray(productData) ? productData : []);
+      setMovements(Array.isArray(movementData) ? movementData : []);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-    const [
-        error,
-        setError,
-    ] = useState("")
+  useEffect(() => {
+    async function initialize() {
+      try {
+        const session = await request("/auth/session");
+        setCurrentUser(session?.user || null);
+      } catch {
+        setCurrentUser(null);
+      }
 
-    const [
-        message,
-        setMessage,
-    ] = useState("")
-
-    const [
-        busy,
-        setBusy,
-    ] = useState(false)
-
-    const mutationLock =
-        useRef(false)
-
-    const requestVersion =
-        useRef(0)
-
-    const formRef =
-        useRef(null)
-
-    /*
-     * Only owner/admin can change inventory.
-     *
-     * Staff uses role "user" in the current
-     * authentication setup.
-     */
-    const canManageInventory =
-        currentUser?.role ===
-            "owner" ||
-        currentUser?.role ===
-            "admin"
-
-    const fetchProducts =
-        useCallback(
-            async (
-                signal,
-            ) => {
-                const version =
-                    ++requestVersion.current
-
-                setLoading(
-                    true,
-                )
-
-                setLoadError(
-                    "",
-                )
-
-                try {
-                    const data =
-                        await request(
-                            "/inventory",
-                            {
-                                signal,
-                            },
-                        )
-
-                    if (
-                        !Array.isArray(
-                            data,
-                        )
-                    ) {
-                        throw new Error(
-                            "Unexpected inventory response. Please try again.",
-                        )
-                    }
-
-                    if (
-                        !signal?.aborted &&
-                        version ===
-                            requestVersion.current
-                    ) {
-                        setProducts(
-                            data,
-                        )
-                    }
-                } catch (
-                    err
-                ) {
-                    if (
-                        !signal?.aborted &&
-                        version ===
-                            requestVersion.current
-                    ) {
-                        setLoadError(
-                            err.message ||
-                                "Unable to load inventory.",
-                        )
-                    }
-                } finally {
-                    if (
-                        !signal?.aborted &&
-                        version ===
-                            requestVersion.current
-                    ) {
-                        setLoading(
-                            false,
-                        )
-                    }
-                }
-            },
-            [],
-        )
-
-    /*
-     * Read the logged-in user's role.
-     */
-    useEffect(() => {
-        const controller =
-            new AbortController()
-
-        async function loadSession() {
-            try {
-                const response =
-                    await apiFetch(
-                        `${API_URL}/auth/session`,
-                        {
-                            signal:
-                                controller.signal,
-                        },
-                    )
-
-                const data =
-                    await response
-                        .json()
-                        .catch(
-                            () =>
-                                null,
-                        )
-
-                if (
-                    controller
-                        .signal
-                        .aborted
-                ) {
-                    return
-                }
-
-                if (
-                    response.ok &&
-                    data?.user
-                ) {
-                    setCurrentUser(
-                        data.user,
-                    )
-                } else {
-                    setCurrentUser(
-                        null,
-                    )
-                }
-            } catch (
-                err
-            ) {
-                if (
-                    !controller
-                        .signal
-                        .aborted
-                ) {
-                    setCurrentUser(
-                        null,
-                    )
-                }
-            } finally {
-                if (
-                    !controller
-                        .signal
-                        .aborted
-                ) {
-                    setSessionLoading(
-                        false,
-                    )
-                }
-            }
-        }
-
-        loadSession()
-
-        return () =>
-            controller.abort()
-    }, [])
-
-    /*
-     * Load inventory.
-     */
-    useEffect(() => {
-        const controller =
-            new AbortController()
-
-        fetchProducts(
-            controller.signal,
-        )
-
-        return () =>
-            controller.abort()
-    }, [fetchProducts])
-
-    /*
-     * If the user turns out to be staff,
-     * make sure an edit form cannot remain open.
-     */
-    useEffect(() => {
-        if (
-            !sessionLoading &&
-            !canManageInventory
-        ) {
-            setShowForm(
-                false,
-            )
-
-            setEditingProduct(
-                null,
-            )
-
-            setForm({
-                ...emptyForm,
-            })
-        }
-    }, [
-        sessionLoading,
-        canManageInventory,
-    ])
-
-    useEffect(() => {
-        if (
-            showForm &&
-            canManageInventory
-        ) {
-            formRef.current?.scrollIntoView(
-                {
-                    behavior:
-                        "smooth",
-
-                    block:
-                        "start",
-                },
-            )
-        }
-    }, [
-        showForm,
-        editingProduct,
-        canManageInventory,
-    ])
-
-    function resetForm() {
-        setForm({
-            ...emptyForm,
-        })
-
-        setEditingProduct(
-            null,
-        )
-
-        setShowForm(false)
+      await loadData();
     }
 
-    function openForm(
-        product = null,
+    initialize();
+  }, [loadData]);
+
+  function openAddProduct() {
+    setEditingProduct(null);
+    setProductForm({ ...emptyProduct });
+    setShowProductForm(true);
+    setError("");
+  }
+
+  function openEditProduct(product) {
+    setEditingProduct(product);
+    setProductForm({
+      name: product.name,
+      category: product.category,
+      stock: product.stock,
+      alertLevel: product.alertLevel,
+      price: product.price,
+    });
+    setShowProductForm(true);
+    setError("");
+  }
+
+  async function saveProduct(event) {
+    event.preventDefault();
+    if (!canManage || busy) return;
+
+    const payload = {
+      name: productForm.name.trim(),
+      category: productForm.category.trim(),
+      stock: Number(productForm.stock),
+      alertLevel: Number(productForm.alertLevel),
+      price: Number(productForm.price),
+    };
+
+    if (
+      !payload.name ||
+      !payload.category ||
+      !Number.isSafeInteger(payload.stock) ||
+      payload.stock < 0 ||
+      !Number.isSafeInteger(payload.alertLevel) ||
+      payload.alertLevel < 0 ||
+      !Number.isFinite(payload.price) ||
+      payload.price < 0
     ) {
-        if (
-            !canManageInventory
-        ) {
-            setError(
-                "Only an administrator or owner can add or edit inventory products.",
-            )
-
-            return
-        }
-
-        setError("")
-        setMessage("")
-
-        setEditingProduct(
-            product,
-        )
-
-        setForm(
-            product
-                ? {
-                      name:
-                          product.name ||
-                          "",
-
-                      category:
-                          product.category ||
-                          "",
-
-                      stock:
-                          product.stock ??
-                          "",
-
-                      alertLevel:
-                          product.alertLevel ??
-                          "",
-
-                      price:
-                          product.price ??
-                          "",
-                  }
-                : {
-                      ...emptyForm,
-                  },
-        )
-
-        setShowForm(true)
+      setError("Please enter valid product details.");
+      return;
     }
 
-    function handleChange(
-        event,
+    setBusy(true);
+    setError("");
+    setMessage("");
+
+    try {
+      if (editingProduct) {
+        // Stock quantity must be changed through Stock In/Out,
+        // not through the ordinary Edit form.
+        payload.stock = Number(editingProduct.stock);
+
+        await request(`/inventory/${editingProduct.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await request("/inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
+
+      setMessage(
+        editingProduct
+          ? "Product updated successfully."
+          : "Product added successfully."
+      );
+
+      setShowProductForm(false);
+      setEditingProduct(null);
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteProduct(product) {
+    if (!canManage || busy) return;
+
+    if (!window.confirm(`Delete "${product.name}"?`)) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      await request(`/inventory/${product.id}`, {
+        method: "DELETE",
+      });
+
+      setMessage("Product deleted successfully.");
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openAdjustment(product, type = "Stock In") {
+    setAdjustProduct(product);
+    setAdjustType(type);
+    setQuantity("");
+    setReason("");
+    setError("");
+    setMessage("");
+  }
+
+  async function submitAdjustment(event) {
+    event.preventDefault();
+    if (!adjustProduct || !canManage || busy) return;
+
+    const amount = Number(quantity);
+
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      setError("Quantity must be a positive whole number.");
+      return;
+    }
+
+    const quantityChange =
+      adjustType === "Stock In" ? amount : -amount;
+
+    if (
+      Number(adjustProduct.stock) + quantityChange < 0
     ) {
-        const {
-            name,
-            value,
-        } = event.target
-
-        setForm(
-            (
-                previous,
-            ) => ({
-                ...previous,
-
-                [name]:
-                    value,
-            }),
-        )
+      setError("Not enough stock available.");
+      return;
     }
 
-    async function handleSubmit(
-        event,
-    ) {
-        event.preventDefault()
+    const finalReason = `${adjustType}: ${reason.trim()}`;
 
-        if (
-            mutationLock.current
-        ) {
-            return
-        }
-
-        if (
-            !canManageInventory
-        ) {
-            setError(
-                "Only an administrator or owner can change inventory products.",
-            )
-
-            return
-        }
-
-        setError("")
-        setMessage("")
-
-        const payload = {
-            name:
-                form.name.trim(),
-
-            category:
-                form.category.trim(),
-
-            stock:
-                Number(
-                    form.stock,
-                ),
-
-            alertLevel:
-                Number(
-                    form.alertLevel,
-                ),
-
-            price:
-                Number(
-                    form.price,
-                ),
-        }
-
-        if (
-            !payload.name ||
-            !payload.category ||
-            String(
-                form.stock,
-            ).trim() ===
-                "" ||
-            String(
-                form.alertLevel,
-            ).trim() ===
-                "" ||
-            String(
-                form.price,
-            ).trim() ===
-                "" ||
-            !Number.isInteger(
-                payload.stock,
-            ) ||
-            payload.stock <
-                0 ||
-            !Number.isInteger(
-                payload.alertLevel,
-            ) ||
-            payload.alertLevel <
-                0 ||
-            !Number.isFinite(
-                payload.price,
-            ) ||
-            payload.price <
-                0
-        ) {
-            setError(
-                "Enter a name, category, non-negative whole-number stock and reorder level, and a valid price.",
-            )
-
-            return
-        }
-
-        mutationLock.current =
-            true
-
-        setBusy(true)
-
-        try {
-            await request(
-                editingProduct
-                    ? `/inventory/${editingProduct.id}`
-                    : "/inventory",
-
-                {
-                    method:
-                        editingProduct
-                            ? "PUT"
-                            : "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-
-                    body:
-                        JSON.stringify(
-                            payload,
-                        ),
-                },
-            )
-
-            setMessage(
-                editingProduct
-                    ? "Product updated successfully."
-                    : "Product added successfully.",
-            )
-
-            resetForm()
-
-            await fetchProducts()
-        } catch (err) {
-            setError(
-                err.message ||
-                    "Unable to save this product.",
-            )
-        } finally {
-            mutationLock.current =
-                false
-
-            setBusy(false)
-        }
+    if (!reason.trim() || finalReason.length > 255) {
+      setError("Please enter a reason (maximum 255 characters).");
+      return;
     }
 
-    async function handleDelete(
-        product,
-    ) {
-        if (
-            mutationLock.current
-        ) {
-            return
-        }
+    setBusy(true);
+    setError("");
+    setMessage("");
 
-        if (
-            !canManageInventory
-        ) {
-            setError(
-                "Only an administrator or owner can delete inventory products.",
-            )
+    try {
+      await request(`/inventory/${adjustProduct.id}/adjust`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          quantity_change: quantityChange,
+          reason: finalReason,
+        }),
+      });
 
-            return
-        }
+      setMessage(`${adjustType} recorded successfully.`);
+      setAdjustProduct(null);
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
-        const confirmed =
-            window.confirm(
-                `Delete "${product.name}" from inventory?`,
-            )
+  const filteredProducts = products.filter((product) => {
+    const term = search.toLowerCase();
 
-        if (!confirmed) {
-            return
-        }
+    const matchesSearch =
+      product.name.toLowerCase().includes(term) ||
+      product.category.toLowerCase().includes(term);
 
-        mutationLock.current =
-            true
+    const matchesStatus =
+      stockFilter === "All" ||
+      stockStatus(product) === stockFilter;
 
-        setBusy(true)
-        setError("")
-        setMessage("")
+    return matchesSearch && matchesStatus;
+  });
 
-        try {
-            await request(
-                `/inventory/${product.id}`,
-                {
-                    method:
-                        "DELETE",
-                },
-            )
+  // The database records movement timestamps.
+  // Convert them into local date/month strings for filtering.
+  function movementDate(value) {
+    if (!value) return "";
 
-            if (
-                editingProduct?.id ===
-                product.id
-            ) {
-                resetForm()
-            }
+    const text = String(value);
 
-            setMessage(
-                "Product deleted successfully.",
-            )
-
-            await fetchProducts()
-        } catch (err) {
-            setError(
-                err.message ||
-                    "Unable to delete this product.",
-            )
-        } finally {
-            mutationLock.current =
-                false
-
-            setBusy(false)
-        }
+    // MySQL DATETIME returned as a date string.
+    if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+      return text.slice(0, 10);
     }
 
-    const disabled =
-        busy ||
-        loading ||
-        sessionLoading ||
-        Boolean(
-            loadError,
-        )
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
 
-    const query =
-        search
-            .trim()
-            .toLowerCase()
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
 
-    const filteredProducts =
-        products.filter(
-            (product) => {
-                const matchesSearch =
-                    [
-                        product.name,
-                        product.category,
-                    ].some(
-                        (
-                            value,
-                        ) =>
-                            String(
-                                value ||
-                                    "",
-                            )
-                                .toLowerCase()
-                                .includes(
-                                    query,
-                                ),
-                    )
+    return `${year}-${month}-${day}`;
+  }
 
-                const matchesFilter =
-                    filter ===
-                        "All" ||
-                    stockStatus(
-                        product,
-                    ) ===
-                        filter
+  function movementType(movement) {
+    const reason = String(movement.reason || "").toLowerCase();
+    const change = Number(movement.quantity_change);
 
-                return (
-                    matchesSearch &&
-                    matchesFilter
-                )
-            },
-        )
+    if (reason.startsWith("damaged:")) return "Damaged";
+    if (reason.startsWith("stock in:")) return "Stock In";
+    if (reason.startsWith("stock out:")) return "Stock Out";
 
-    const availableProductCount =
-        products.filter(
-            (product) =>
-                Number(
-                    product.stock,
-                ) > 0,
-        ).length
+    return change > 0 ? "Stock In" : "Stock Out";
+  }
 
-    const totalQuantityAvailable =
-        products.reduce(
-            (
-                total,
-                product,
-            ) =>
-                total +
-                Math.max(
-                    0,
+  const filteredMovements = movements.filter((movement) => {
+    const date = movementDate(movement.recorded_at);
+    const type = movementType(movement);
 
-                    Number(
-                        product.stock,
-                    ) || 0,
-                ),
+    const matchesMonth =
+      !historyMonth || date.slice(0, 7) === historyMonth;
 
-            0,
-        )
+    const matchesDate =
+      !historyDate || date === historyDate;
 
-    const lowStockCount =
-        products.filter(
-            (product) =>
-                Number(
-                    product.stock,
-                ) > 0 &&
-                Number(
-                    product.stock,
-                ) <=
-                    Number(
-                        product.alertLevel,
-                    ),
-        ).length
+    const matchesType =
+      historyType === "All" || type === historyType;
 
-    const outOfStockCount =
-        products.filter(
-            (product) =>
-                Number(
-                    product.stock,
-                ) === 0,
-        ).length
+    const term = historySearch.toLowerCase();
 
-    const cards = [
-        {
-            label:
-                "Product types",
-
-            value:
-                products.length,
-
-            note:
-                "All products, including zero-stock items",
-
-            color:
-                "text-purple-800",
-        },
-
-        {
-            label:
-                "Available products",
-
-            value:
-                availableProductCount,
-
-            note:
-                "Product types with at least one unit",
-
-            color:
-                "text-emerald-700",
-        },
-
-        {
-            label:
-                "Total quantity available",
-
-            value:
-                totalQuantityAvailable.toLocaleString(
-                    "en-PH",
-                ),
-
-            note:
-                "Combined remaining quantity of all products",
-
-            color:
-                "text-purple-800",
-        },
-
-        {
-            label:
-                "Needs attention",
-
-            value:
-                lowStockCount +
-                outOfStockCount,
-
-            note:
-                `${lowStockCount} low stock · ${outOfStockCount} out of stock`,
-
-            color:
-                "text-amber-700",
-        },
-    ]
+    const matchesSearch =
+      String(movement.item_name || "")
+        .toLowerCase()
+        .includes(term) ||
+      String(movement.reason || "")
+        .toLowerCase()
+        .includes(term);
 
     return (
-        <div className="min-w-0 space-y-6">
-            <header className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-purple-500">
-                        Sales &
-                        Inventory
-                    </p>
+      matchesMonth &&
+      matchesDate &&
+      matchesType &&
+      matchesSearch
+    );
+  });
 
-                    <h1 className="text-3xl font-bold text-purple-950">
-                        Inventory
-                        Management
-                    </h1>
+  const totalQuantity = products.reduce(
+    (sum, product) => sum + Number(product.stock || 0),
+    0
+  );
 
-                    <p className="mt-2 text-sm text-gray-500">
-                        Keep track of
-                        products,
-                        stock levels,
-                        and
-                        restocking
-                        needs.
-                    </p>
-                </div>
+  const availableProducts = products.filter(
+    (product) => Number(product.stock) > 0
+  ).length;
 
-                <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        disabled={
-                            loading ||
-                            busy
-                        }
-                        onClick={() =>
-                            fetchProducts()
-                        }
-                        className={
-                            secondary
-                        }
-                    >
-                        {loading
-                            ? "Refreshing…"
-                            : "Refresh"}
-                    </button>
+  const needsAttention = products.filter(
+    (product) =>
+      Number(product.stock) <= Number(product.alertLevel)
+  ).length;
 
-                    {canManageInventory && (
-                        <button
-                            type="button"
-                            disabled={
-                                disabled
-                            }
-                            onClick={() =>
-                                openForm()
-                            }
-                            className={
-                                primary
-                            }
-                        >
-                            + Add
-                            product
-                        </button>
-                    )}
-                </div>
-            </header>
-
-            {!sessionLoading &&
-                !canManageInventory && (
-                    <div
-                        role="status"
-                        className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm leading-relaxed text-blue-800"
-                    >
-                        <strong>
-                            View-only
-                            access.
-                        </strong>{" "}
-                        Staff members
-                        can view,
-                        search, and
-                        monitor stock
-                        levels.
-                        Adding,
-                        editing, and
-                        deleting
-                        inventory
-                        products is
-                        restricted to
-                        administrators
-                        and the owner.
-                    </div>
-                )}
-
-            {loading && (
-                <p
-                    role="status"
-                    className="text-sm text-purple-700"
-                >
-                    Loading
-                    inventory…
-                </p>
-            )}
-
-            {loadError && (
-                <div
-                    role="alert"
-                    className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
-                >
-                    {
-                        loadError
-                    }
-
-                    <button
-                        type="button"
-                        disabled={
-                            loading ||
-                            busy
-                        }
-                        onClick={() =>
-                            fetchProducts()
-                        }
-                        className="ml-3 font-semibold underline"
-                    >
-                        Retry
-                        loading
-                    </button>
-                </div>
-            )}
-
-            {error && (
-                <div
-                    role="alert"
-                    className="rounded-xl bg-red-50 p-4 text-sm text-red-700"
-                >
-                    {
-                        error
-                    }
-                </div>
-            )}
-
-            {message && (
-                <div
-                    role="status"
-                    className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800"
-                >
-                    {
-                        message
-                    }
-                </div>
-            )}
-
-            <section
-                className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-                aria-label="Inventory summary"
-            >
-                {cards.map(
-                    (card) => (
-                        <div
-                            key={
-                                card.label
-                            }
-                            className={`${panel} p-5`}
-                        >
-                            <p className="text-sm text-gray-500">
-                                {
-                                    card.label
-                                }
-                            </p>
-
-                            <p
-                                className={`mt-3 text-3xl font-bold ${card.color}`}
-                            >
-                                {loading ||
-                                loadError
-                                    ? "—"
-                                    : card.value}
-                            </p>
-
-                            <p className="mt-2 text-xs leading-relaxed text-gray-500">
-                                {
-                                    card.note
-                                }
-                            </p>
-                        </div>
-                    ),
-                )}
-            </section>
-
-            {showForm &&
-                canManageInventory && (
-                    <section
-                        ref={
-                            formRef
-                        }
-                        className={`${panel} scroll-mt-6 p-5 md:p-6`}
-                    >
-                        <div className="mb-5">
-                            <h2 className="text-lg font-bold text-purple-950">
-                                {editingProduct
-                                    ? "Edit product"
-                                    : "Add a product"}
-                            </h2>
-
-                            <p className="mt-1 text-sm text-gray-500">
-                                Set the
-                                product
-                                details
-                                and its
-                                individual
-                                reorder
-                                level.
-                            </p>
-                        </div>
-
-                        <form
-                            onSubmit={
-                                handleSubmit
-                            }
-                        >
-                            <fieldset
-                                disabled={
-                                    disabled ||
-                                    !canManageInventory
-                                }
-                                className="grid gap-4 md:grid-cols-2"
-                            >
-                                <Field label="Product name">
-                                    <input
-                                        autoFocus
-                                        required
-                                        name="name"
-                                        value={
-                                            form.name
-                                        }
-                                        onChange={
-                                            handleChange
-                                        }
-                                        placeholder="e.g. Hair conditioner"
-                                        className={
-                                            input
-                                        }
-                                    />
-                                </Field>
-
-                                <Field label="Category">
-                                    <input
-                                        required
-                                        name="category"
-                                        value={
-                                            form.category
-                                        }
-                                        onChange={
-                                            handleChange
-                                        }
-                                        placeholder="e.g. Hair Care"
-                                        className={
-                                            input
-                                        }
-                                    />
-                                </Field>
-
-                                <Field label="Stock quantity">
-                                    <input
-                                        required
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        name="stock"
-                                        value={
-                                            form.stock
-                                        }
-                                        onChange={
-                                            handleChange
-                                        }
-                                        className={
-                                            input
-                                        }
-                                    />
-                                </Field>
-
-                                <Field label="Reorder level">
-                                    <input
-                                        required
-                                        type="number"
-                                        min="0"
-                                        step="1"
-                                        name="alertLevel"
-                                        value={
-                                            form.alertLevel
-                                        }
-                                        onChange={
-                                            handleChange
-                                        }
-                                        className={
-                                            input
-                                        }
-                                    />
-                                </Field>
-
-                                <Field label="Selling price (₱)">
-                                    <input
-                                        required
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        name="price"
-                                        value={
-                                            form.price
-                                        }
-                                        onChange={
-                                            handleChange
-                                        }
-                                        className={
-                                            input
-                                        }
-                                    />
-                                </Field>
-
-                                <div className="flex items-center rounded-xl bg-purple-50 p-4 text-sm leading-relaxed text-purple-800">
-                                    A
-                                    restocking
-                                    alert
-                                    appears
-                                    when
-                                    stock
-                                    reaches
-                                    or
-                                    falls
-                                    below
-                                    this
-                                    product’s
-                                    reorder
-                                    level.
-                                </div>
-
-                                <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-4 md:col-span-2">
-                                    <button
-                                        type="submit"
-                                        className={
-                                            primary
-                                        }
-                                    >
-                                        {busy
-                                            ? "Saving…"
-                                            : editingProduct
-                                              ? "Save changes"
-                                              : "Save product"}
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={
-                                            resetForm
-                                        }
-                                        className={
-                                            secondary
-                                        }
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </fieldset>
-                        </form>
-                    </section>
-                )}
-
-            <section
-                className={`${panel} overflow-hidden`}
-            >
-                <div className="flex flex-wrap items-end justify-between gap-4 p-5 md:p-6">
-                    <div>
-                        <h2 className="text-lg font-bold text-purple-950">
-                            Product
-                            list
-                        </h2>
-
-                        <p className="mt-1 text-sm text-gray-500">
-                            {
-                                filteredProducts.length
-                            }{" "}
-                            of{" "}
-                            {
-                                products.length
-                            }{" "}
-                            products
-                        </p>
-                    </div>
-
-                    <div className="flex w-full flex-wrap gap-3 md:w-auto">
-                        <div className="min-w-0 flex-1 md:w-64">
-                            <label
-                                htmlFor="inventory-search"
-                                className="sr-only"
-                            >
-                                Search
-                                products
-                                or
-                                categories
-                            </label>
-
-                            <input
-                                id="inventory-search"
-                                type="search"
-                                value={
-                                    search
-                                }
-                                onChange={(
-                                    event,
-                                ) =>
-                                    setSearch(
-                                        event
-                                            .target
-                                            .value,
-                                    )
-                                }
-                                placeholder="Search product or category…"
-                                className={
-                                    input
-                                }
-                            />
-                        </div>
-
-                        <div>
-                            <label
-                                htmlFor="inventory-filter"
-                                className="sr-only"
-                            >
-                                Filter
-                                stock
-                                status
-                            </label>
-
-                            <select
-                                id="inventory-filter"
-                                value={
-                                    filter
-                                }
-                                onChange={(
-                                    event,
-                                ) =>
-                                    setFilter(
-                                        event
-                                            .target
-                                            .value,
-                                    )
-                                }
-                                className={
-                                    input
-                                }
-                            >
-                                <option value="All">
-                                    All
-                                    stock
-                                    levels
-                                </option>
-
-                                <option>
-                                    In
-                                    stock
-                                </option>
-
-                                <option>
-                                    Low
-                                    stock
-                                </option>
-
-                                <option>
-                                    Out
-                                    of
-                                    stock
-                                </option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                    <table className="w-full min-w-[760px] text-left text-sm">
-                        <thead className="border-y border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-                            <tr>
-                                <th className="px-6 py-4">
-                                    Product
-                                </th>
-
-                                <th className="px-4 py-4 text-right">
-                                    Available
-                                    quantity
-                                </th>
-
-                                <th className="px-4 py-4 text-right">
-                                    Reorder
-                                    level
-                                </th>
-
-                                <th className="px-4 py-4 text-right">
-                                    Unit
-                                    price
-                                </th>
-
-                                <th className="px-4 py-4">
-                                    Status
-                                </th>
-
-                                {canManageInventory && (
-                                    <th className="px-6 py-4 text-right">
-                                        Actions
-                                    </th>
-                                )}
-                            </tr>
-                        </thead>
-
-                        <tbody className="divide-y divide-gray-100">
-                            {filteredProducts.length ===
-                            0 ? (
-                                <tr>
-                                    <td
-                                        colSpan={
-                                            canManageInventory
-                                                ? 6
-                                                : 5
-                                        }
-                                        className="px-6 py-12 text-center text-gray-500"
-                                    >
-                                        {loading
-                                            ? "Loading products…"
-                                            : loadError
-                                              ? "Inventory could not be loaded."
-                                              : "No products match your search or filter."}
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredProducts.map(
-                                    (
-                                        product,
-                                    ) => {
-                                        const status =
-                                            stockStatus(
-                                                product,
-                                            )
-
-                                        const badge =
-                                            status ===
-                                            "Out of stock"
-                                                ? "bg-rose-50 text-rose-700"
-                                                : status ===
-                                                    "Low stock"
-                                                  ? "bg-amber-50 text-amber-800"
-                                                  : "bg-emerald-50 text-emerald-700"
-
-                                        return (
-                                            <tr
-                                                key={
-                                                    product.id
-                                                }
-                                                className="transition hover:bg-purple-50/40"
-                                            >
-                                                <td className="px-6 py-4">
-                                                    <p className="font-semibold text-gray-800">
-                                                        {
-                                                            product.name
-                                                        }
-                                                    </p>
-
-                                                    <p className="mt-1 text-xs text-gray-500">
-                                                        {product.category ||
-                                                            "Uncategorized"}
-                                                    </p>
-                                                </td>
-
-                                                <td className="px-4 py-4 text-right font-semibold tabular-nums text-gray-800">
-                                                    {Number(
-                                                        product.stock,
-                                                    ).toLocaleString(
-                                                        "en-PH",
-                                                    )}
-                                                </td>
-
-                                                <td className="px-4 py-4 text-right tabular-nums text-gray-500">
-                                                    {Number(
-                                                        product.alertLevel,
-                                                    ).toLocaleString(
-                                                        "en-PH",
-                                                    )}
-                                                </td>
-
-                                                <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums text-gray-700">
-                                                    {money(
-                                                        product.price,
-                                                    )}
-                                                </td>
-
-                                                <td className="px-4 py-4">
-                                                    <span
-                                                        className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ${badge}`}
-                                                    >
-                                                        {
-                                                            status
-                                                        }
-                                                    </span>
-                                                </td>
-
-                                                {canManageInventory && (
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex justify-end gap-2">
-                                                            <button
-                                                                type="button"
-                                                                disabled={
-                                                                    disabled
-                                                                }
-                                                                onClick={() =>
-                                                                    openForm(
-                                                                        product,
-                                                                    )
-                                                                }
-                                                                aria-label={`Edit ${product.name}`}
-                                                                className="rounded-lg bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-50"
-                                                            >
-                                                                Edit
-                                                            </button>
-
-                                                            <button
-                                                                type="button"
-                                                                disabled={
-                                                                    disabled
-                                                                }
-                                                                onClick={() =>
-                                                                    handleDelete(
-                                                                        product,
-                                                                    )
-                                                                }
-                                                                aria-label={`Delete ${product.name}`}
-                                                                className="rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                )}
-                                            </tr>
-                                        )
-                                    },
-                                )
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-
-                <div className="border-t border-gray-100 px-5 py-4 text-xs leading-relaxed text-gray-500 md:px-6">
-                    {canManageInventory
-                        ? "Administrators can add, edit, and delete inventory products."
-                        : "Inventory is view-only for staff accounts. Contact an administrator or owner to make product changes."}
-                </div>
-            </section>
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-purple-500">
+            Sales & Inventory
+          </p>
+          <h1 className="text-3xl font-bold text-purple-950">
+            Inventory Management
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Manage products, stock movements, and inventory history.
+          </p>
         </div>
-    )
+
+        <div className="flex gap-2">
+          <button
+            className={buttonClass}
+            onClick={loadData}
+            disabled={busy || loading}
+          >
+            Refresh
+          </button>
+
+          {canManage && (
+            <button
+              className={buttonClass}
+              onClick={openAddProduct}
+              disabled={busy}
+            >
+              + Add Product
+            </button>
+          )}
+        </div>
+      </header>
+
+      {error && (
+        <div role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">
+          {error}
+        </div>
+      )}
+
+      {message && (
+        <div role="status" className="rounded-xl bg-green-50 p-4 text-green-700">
+          {message}
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Product Types", products.length],
+          ["Available Products", availableProducts],
+          ["Total Quantity Available", totalQuantity],
+          ["Needs Attention", needsAttention],
+        ].map(([label, value]) => (
+          <div key={label} className={panelClass}>
+            <p className="text-sm text-gray-500">{label}</p>
+            <p className="mt-3 text-3xl font-bold text-purple-800">
+              {value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {showProductForm && canManage && (
+        <section className={panelClass}>
+          <h2 className="mb-4 text-xl font-bold text-purple-950">
+            {editingProduct ? "Edit Product" : "Add Product"}
+          </h2>
+
+          <form onSubmit={saveProduct} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              {[
+                ["name", "Product Name", "text"],
+                ["category", "Category", "text"],
+                ["alertLevel", "Reorder Level", "number"],
+                ["price", "Selling Price", "number"],
+                ...(!editingProduct
+                  ? [["stock", "Initial Stock", "number"]]
+                  : []),
+              ].map(([name, label, type]) => (
+                <label key={name} className="block">
+                  <span className="mb-2 block text-sm font-medium">
+                    {label}
+                  </span>
+                  <input
+                    className={inputClass}
+                    type={type}
+                    min={type === "number" ? "0" : undefined}
+                    step={name === "price" ? "0.01" : "1"}
+                    required
+                    value={productForm[name]}
+                    onChange={(event) =>
+                      setProductForm((previous) => ({
+                        ...previous,
+                        [name]: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+
+            {editingProduct && (
+              <p className="text-sm text-gray-500">
+                To change the stock quantity, use Stock In/Out.
+                This keeps a movement history.
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button className={buttonClass} disabled={busy}>
+                Save Product
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProductForm(false)}
+                className="rounded-xl border px-4 py-2"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className={panelClass}>
+        <h2 className="mb-4 text-xl font-bold text-purple-950">
+          Product List
+        </h2>
+
+        <div className="mb-4 flex flex-wrap gap-3">
+          <input
+            className={`${inputClass} max-w-sm`}
+            placeholder="Search product or category..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+
+          <select
+            className={`${inputClass} max-w-xs`}
+            value={stockFilter}
+            onChange={(event) => setStockFilter(event.target.value)}
+          >
+            <option value="All">All Stock Levels</option>
+            <option value="In Stock">In Stock</option>
+            <option value="Low Stock">Low Stock</option>
+            <option value="Out of Stock">Out of Stock</option>
+          </select>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[850px] text-left text-sm">
+            <thead className="bg-purple-50 text-purple-950">
+              <tr>
+                <th className="p-3">Product</th>
+                <th className="p-3">Quantity</th>
+                <th className="p-3">Reorder Level</th>
+                <th className="p-3">Price</th>
+                <th className="p-3">Status</th>
+                {canManage && <th className="p-3">Actions</th>}
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredProducts.map((product) => (
+                <tr key={product.id} className="border-b">
+                  <td className="p-3">
+                    <p className="font-semibold">{product.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {product.category}
+                    </p>
+                  </td>
+                  <td className="p-3">{product.stock}</td>
+                  <td className="p-3">{product.alertLevel}</td>
+                  <td className="p-3">{money(product.price)}</td>
+                  <td className="p-3">
+                    {stockStatus(product)}
+                  </td>
+
+                  {canManage && (
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="rounded-lg bg-green-50 px-3 py-2 text-green-700"
+                          disabled={busy}
+                          onClick={() =>
+                            openAdjustment(product, "Stock In")
+                          }
+                        >
+                          Stock +/−
+                        </button>
+
+                        <button
+                          className="rounded-lg bg-purple-50 px-3 py-2 text-purple-700"
+                          disabled={busy}
+                          onClick={() => openEditProduct(product)}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          className="rounded-lg px-3 py-2 text-red-600"
+                          disabled={busy}
+                          onClick={() => deleteProduct(product)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {!loading && filteredProducts.length === 0 && (
+            <p className="p-6 text-center text-gray-500">
+              No products found.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {adjustProduct && canManage && (
+        <section className={panelClass}>
+          <h2 className="text-xl font-bold text-purple-950">
+            Stock Adjustment
+          </h2>
+
+          <p className="mb-4 mt-2 text-sm text-gray-500">
+            Product: <strong>{adjustProduct.name}</strong>
+            {" · "}
+            Current Stock: <strong>{adjustProduct.stock}</strong>
+          </p>
+
+          <form onSubmit={submitAdjustment} className="space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium">
+                Movement Type
+              </span>
+              <select
+                className={inputClass}
+                value={adjustType}
+                onChange={(event) =>
+                  setAdjustType(event.target.value)
+                }
+              >
+                <option>Stock In</option>
+                <option>Stock Out</option>
+                <option>Damaged</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium">
+                Quantity
+              </span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                required
+                className={inputClass}
+                value={quantity}
+                onChange={(event) =>
+                  setQuantity(event.target.value)
+                }
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium">
+                Reason / Notes
+              </span>
+              <textarea
+                required
+                maxLength={240}
+                className={inputClass}
+                rows={3}
+                placeholder={
+                  adjustType === "Stock In"
+                    ? "e.g. New delivery from supplier"
+                    : adjustType === "Damaged"
+                    ? "e.g. Bottle leaked during storage"
+                    : "e.g. Used for salon service"
+                }
+                value={reason}
+                onChange={(event) =>
+                  setReason(event.target.value)
+                }
+              />
+            </label>
+
+            <div className="flex gap-2">
+              <button className={buttonClass} disabled={busy}>
+                {busy ? "Saving..." : "Save Movement"}
+              </button>
+
+              <button
+                type="button"
+                className="rounded-xl border px-4 py-2"
+                onClick={() => setAdjustProduct(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className={panelClass}>
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-purple-950">
+            Inventory Movement History
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Review stock additions, deductions, and damaged items.
+          </p>
+        </div>
+
+        <div className="mb-5 grid gap-3 md:grid-cols-4">
+          <label>
+            <span className="mb-1 block text-sm">Month</span>
+            <input
+              type="month"
+              className={inputClass}
+              value={historyMonth}
+              onChange={(event) =>
+                setHistoryMonth(event.target.value)
+              }
+            />
+          </label>
+
+          <label>
+            <span className="mb-1 block text-sm">Exact Date</span>
+            <input
+              type="date"
+              className={inputClass}
+              value={historyDate}
+              onChange={(event) =>
+                setHistoryDate(event.target.value)
+              }
+            />
+          </label>
+
+          <label>
+            <span className="mb-1 block text-sm">Movement Type</span>
+            <select
+              className={inputClass}
+              value={historyType}
+              onChange={(event) =>
+                setHistoryType(event.target.value)
+              }
+            >
+              <option>All</option>
+              <option>Stock In</option>
+              <option>Stock Out</option>
+              <option>Damaged</option>
+            </select>
+          </label>
+
+          <label>
+            <span className="mb-1 block text-sm">Search</span>
+            <input
+              className={inputClass}
+              placeholder="Product or reason"
+              value={historySearch}
+              onChange={(event) =>
+                setHistorySearch(event.target.value)
+              }
+            />
+          </label>
+        </div>
+
+        <button
+          className="mb-4 rounded-xl border px-4 py-2 text-sm"
+          onClick={() => {
+            setHistoryMonth("");
+            setHistoryDate("");
+            setHistoryType("All");
+            setHistorySearch("");
+          }}
+        >
+          Clear Filters
+        </button>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[750px] text-left text-sm">
+            <thead className="bg-purple-50 text-purple-950">
+              <tr>
+                <th className="p-3">Date</th>
+                <th className="p-3">Product</th>
+                <th className="p-3">Movement</th>
+                <th className="p-3">Quantity</th>
+                <th className="p-3">Reason</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredMovements.map((movement) => {
+                const change = Number(movement.quantity_change);
+                const type = movementType(movement);
+
+                return (
+                  <tr
+                    key={movement.movement_id}
+                    className="border-b"
+                  >
+                    <td className="p-3">
+                      {movementDate(movement.recorded_at)}
+                    </td>
+
+                    <td className="p-3 font-medium">
+                      {movement.item_name}
+                    </td>
+
+                    <td className="p-3">
+                      <span
+                        className={
+                          type === "Stock In"
+                            ? "font-semibold text-green-700"
+                            : type === "Damaged"
+                            ? "font-semibold text-red-600"
+                            : "font-semibold text-amber-700"
+                        }
+                      >
+                        {type}
+                      </span>
+                    </td>
+
+                    <td className="p-3 font-semibold">
+                      {change > 0 ? "+" : ""}
+                      {change}
+                    </td>
+
+                    <td className="p-3">
+                      {movement.reason}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {!loading && filteredMovements.length === 0 && (
+            <p className="p-6 text-center text-gray-500">
+              No inventory movements match your filters.
+            </p>
+          )}
+        </div>
+
+        <p className="mt-4 text-xs text-gray-500">
+          Showing {filteredMovements.length} of {movements.length}
+          {" "}movement records.
+        </p>
+      </section>
+    </div>
+  );
 }
 
-export default AdminInventory
+export default AdminInventory;
