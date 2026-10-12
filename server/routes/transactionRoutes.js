@@ -344,7 +344,12 @@ router.post("/", async (req, res) => {
 
             service = product.name
             const newStock = Number(product.stock) - quantity
-            const stockStatus = newStock <= Number(product.alertLevel) ? "Low Stock" : "In Stock"
+           const stockStatus =
+    newStock === 0
+        ? "Out of Stock"
+        : newStock <= Number(product.alertLevel)
+          ? "Low Stock"
+          : "In Stock"
 
             await connection.query("UPDATE inventory SET stock = ?, status = ? WHERE id = ?", [
                 newStock,
@@ -353,41 +358,69 @@ router.post("/", async (req, res) => {
             ])
         }
 
-        if (!customer || customer.length > 100 || !service || service.length > 150) {
-            throw problem("Enter a valid customer and item/service name.")
-        }
+      if (!customer || customer.length > 100 || !service || service.length > 150) {
+    throw problem("Enter a valid customer and item/service name.")
+}
 
-        const [result] = await connection.query(
-            `INSERT INTO transactions
-       (appointment_id, customer, service, amount, payment, status,
-        sale_type, item_id, quantity, offline_id, transaction_date, historical_date_only)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${saleEpoch == null ? "CURRENT_TIMESTAMP" : "FROM_UNIXTIME(?)"}, ?)`,
-            [
-                appointmentId,
-                customer,
-                service,
-                decimal(total),
-                payment,
-                status,
-                saleType,
-                itemId,
-                quantity,
-                offlineId,
-                ...(saleEpoch == null ? [] : [saleEpoch]),
-                saleEpoch == null ? 0 : 1,
-            ],
-        )
+const [result] = await connection.query(
+    `INSERT INTO transactions
+     (appointment_id, customer, service, amount, payment, status,
+      sale_type, item_id, quantity, offline_id, transaction_date, historical_date_only)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${saleEpoch == null ? "CURRENT_TIMESTAMP" : "FROM_UNIXTIME(?)"}, ?)`,
+    [
+        appointmentId,
+        customer,
+        service,
+        decimal(total),
+        payment,
+        status,
+        saleType,
+        itemId,
+        quantity,
+        offlineId,
+        ...(saleEpoch == null ? [] : [saleEpoch]),
+        saleEpoch == null ? 0 : 1,
+    ],
+)
 
-        if (depositId) {
-            const userId = positiveId(req.user.user_id, "Signed-in user")
+// ============================================
+// AUTOMATIC POS INVENTORY MOVEMENT RECORD
+// ============================================
+// Product stock was already deducted earlier.
+// This records the deduction in Inventory History
+// without deducting stock a second time.
+//
+// The movement is saved in the same database
+// transaction as the POS sale.
+// ============================================
 
-            await connection.query(
-                `INSERT INTO booking_deposit_applications
+if (saleType === "Product") {
+    await connection.query(
+        `INSERT INTO inventory_movements
+         (item_id, quantity_change, reason, offline_id)
+         VALUES (?, ?, ?, NULL)`,
+        [
+            itemId,
+            -quantity,
+            `POS product sale #${result.insertId}`,
+        ],
+    )
+}
+
+// ============================================
+// EXISTING BOOKING DEPOSIT APPLICATION
+// ============================================
+
+if (depositId) {
+    const userId = positiveId(req.user.user_id, "Signed-in user")
+
+    await connection.query(
+        `INSERT INTO booking_deposit_applications
          (deposit_id, transaction_id, amount_applied, applied_by)
          VALUES (?, ?, ?, ?)`,
-                [depositId, result.insertId, decimal(depositAmount), userId],
-            )
-        }
+        [depositId, result.insertId, decimal(depositAmount), userId],
+    )
+}
 
         await connection.commit()
         inTransaction = false

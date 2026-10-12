@@ -214,6 +214,19 @@ function PrintableSalonReport({ report, generatedAt }) {
       <section className="stylesync-print-section">
         <h3>2. Paid Sales by Date</h3>
 
+        <div className="stylesync-print-chart">
+          {report.salesTrend.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={report.salesTrend}>
+                <CartesianGrid stroke="#eee8f3" strokeDasharray="3 3" />
+                <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 9 }} />
+                <YAxis tick={{ fontSize: 9 }} />
+                <Tooltip formatter={(value) => money(value)} />
+                <Line dataKey="sales" name="Paid Sales" type="monotone" stroke="#7e22ce" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No sales data.</ChartEmpty>}
+        </div>
         <table>
           <thead>
             <tr>
@@ -246,6 +259,17 @@ function PrintableSalonReport({ report, generatedAt }) {
       <section className="stylesync-print-section">
         <h3>3. Appointment Status Analysis</h3>
 
+        <div className="stylesync-print-chart">
+          {report.appointmentStatus.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={report.appointmentStatus}>
+                <XAxis dataKey="status" tick={{ fontSize: 9 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
+                <Bar dataKey="count" name="Appointments" fill="#ec4899" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No appointment data.</ChartEmpty>}
+        </div>
         <table>
           <thead>
             <tr>
@@ -281,6 +305,17 @@ function PrintableSalonReport({ report, generatedAt }) {
       <section className="stylesync-print-section">
         <h3>4. Most Requested Services</h3>
 
+        <div className="stylesync-print-chart">
+          {report.mostRequestedServices.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={report.mostRequestedServices} layout="vertical" margin={{ left: 20 }}>
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 9 }} />
+                <YAxis type="category" dataKey="service" width={115} tick={{ fontSize: 9 }} />
+                <Bar dataKey="count" name="Requests" fill="#7e22ce" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No service requests.</ChartEmpty>}
+        </div>
         <table>
           <thead>
             <tr>
@@ -311,6 +346,18 @@ function PrintableSalonReport({ report, generatedAt }) {
       <section className="stylesync-print-section">
         <h3>5. Daily Activity Summary</h3>
 
+        <div className="stylesync-print-chart">
+          {rows.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={rows}>
+                <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 9 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
+                <Bar dataKey="transactions" name="Transactions" fill="#9333ea" />
+                <Bar dataKey="appointments" name="Appointments" fill="#ec4899" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No daily activity.</ChartEmpty>}
+        </div>
         <table>
           <thead>
             <tr>
@@ -386,6 +433,17 @@ function PrintableSalonReport({ report, generatedAt }) {
 
         <h4>Stock by Category</h4>
 
+        <div className="stylesync-print-chart">
+          {inventory.categoryStock.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={inventory.categoryStock} layout="vertical" margin={{ left: 10 }}>
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 9 }} />
+                <YAxis type="category" dataKey="category" width={110} tick={{ fontSize: 9 }} />
+                <Bar dataKey="units" name="Units" fill="#9333ea" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No inventory categories.</ChartEmpty>}
+        </div>
         <table>
           <thead>
             <tr>
@@ -414,8 +472,71 @@ function PrintableSalonReport({ report, generatedAt }) {
           </tbody>
         </table>
 
+        <h4>Product Stock Status</h4>
+        <div className="stylesync-print-chart">
+          {inventory.snapshot.products ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={[
+                { status: "In Stock", count: Number(inventory.snapshot.inStock || 0) },
+                { status: "Low Stock", count: Number(inventory.snapshot.lowStock || 0) },
+                { status: "Out of Stock", count: Number(inventory.snapshot.outOfStock || 0) },
+              ]}>
+                <XAxis dataKey="status" tick={{ fontSize: 9 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
+                <Bar dataKey="count" fill="#7e22ce" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No inventory status data.</ChartEmpty>}
+        </div>
+        <table>
+          <thead><tr><th>Status</th><th>Products</th></tr></thead>
+          <tbody>
+            <tr><td>In Stock</td><td>{inventory.snapshot.inStock}</td></tr>
+            <tr><td>Low Stock</td><td>{inventory.snapshot.lowStock}</td></tr>
+            <tr><td>Out of Stock</td><td>{inventory.snapshot.outOfStock}</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Stock Movement by Date</h4>
+        <div className="stylesync-print-chart">
+          {inventory.movementTrend.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={inventory.movementTrend}>
+                <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 9 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
+                <Bar dataKey="stockIn" name="Stock In" fill="#9333ea" />
+                <Bar dataKey="stockOut" name="Stock Out" fill="#f59e0b" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No stock movements.</ChartEmpty>}
+        </div>
+        <table>
+          <thead><tr><th>Date</th><th>Stock In</th><th>Stock Out</th></tr></thead>
+          <tbody>
+            {inventory.movementTrend.length ? inventory.movementTrend.map((row) => (
+              <tr key={row.date}>
+                <td>{longDate(row.date)}</td>
+                <td>{Number(row.stockIn || 0)}</td>
+                <td>{Number(row.stockOut || 0)}</td>
+              </tr>
+            )) : <tr><td colSpan={3}>No stock movements recorded.</td></tr>}
+          </tbody>
+        </table>
+
         <h4>Products Requiring Attention</h4>
 
+        <div className="stylesync-print-chart">
+          {inventory.attentionItems.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={inventory.attentionItems} layout="vertical" margin={{ left: 10 }}>
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 9 }} />
+                <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 9 }} />
+                <Bar dataKey="stock" name="Current Stock" fill="#9333ea" />
+                <Bar dataKey="alertLevel" name="Reorder Level" fill="#f59e0b" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <ChartEmpty>No products need attention.</ChartEmpty>}
+        </div>
         <table>
           <thead>
             <tr>
@@ -947,6 +1068,14 @@ function AdminReports() {
               font-weight: 700;
             }
 
+            .stylesync-print-chart {
+              width: 100%;
+              height: 175px;
+              margin: 10px 0 12px;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
             .stylesync-print-section table {
               width: 100%;
               border-collapse: collapse;
@@ -1299,6 +1428,7 @@ function AdminReports() {
 
         {/* SALES AND APPOINTMENT CHARTS */}
         <section className="grid gap-6 xl:grid-cols-2">
+
           {/* SALES CHART */}
           <article className={`${panel} p-5 md:p-6`}>
             <h2 className="text-lg font-bold text-purple-950">
@@ -1347,6 +1477,46 @@ function AdminReports() {
                 </ResponsiveContainer>
               )}
             </div>
+
+            {/* PAID SALES DATA TABLE */}
+        <div className="mt-6 overflow-x-auto border-t border-purple-100 pt-5">
+            <h3 className="mb-3 text-sm font-bold text-purple-950">
+        Paid Sales — Data Table
+            </h3>
+
+            <table className="w-full text-left text-sm">
+            <thead className="bg-purple-50 text-purple-950">
+            <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3 text-right">Paid Sales</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {report.salesTrend.length ? (
+                report.salesTrend.map((row) => (
+                    <tr
+                        key={row.date}
+                        className="border-b border-gray-100"
+                    >
+                        <td className="px-4 py-3">
+                            {longDate(row.date)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                            {money(row.sales)}
+                        </td>
+                    </tr>
+                ))
+            ) : (
+                <tr>
+                    <td colSpan={2} className="px-4 py-4 text-center text-gray-500">
+                        No sales data available.
+                    </td>
+                </tr>
+            )}
+        </tbody>
+    </table>
+</div>
           </article>
 
           {/* APPOINTMENT STATUS CHART */}
@@ -1394,6 +1564,44 @@ function AdminReports() {
                 </ResponsiveContainer>
               )}
             </div>
+
+            {/* APPOINTMENT STATUS DATA TABLE */}
+        <div className="mt-6 overflow-x-auto border-t border-purple-100 pt-5">
+    <h3 className="mb-3 text-sm font-bold text-purple-950">
+        Appointment Status — Data Table
+    </h3>
+
+    <table className="w-full text-left text-sm">
+        <thead className="bg-purple-50 text-purple-950">
+            <tr>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Appointments</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {report.appointmentStatus.length ? (
+                report.appointmentStatus.map((row) => (
+                    <tr
+                        key={row.status}
+                        className="border-b border-gray-100"
+                    >
+                        <td className="px-4 py-3">{row.status}</td>
+                        <td className="px-4 py-3 text-right">
+                            {row.count}
+                        </td>
+                    </tr>
+                ))
+            ) : (
+                <tr>
+                    <td colSpan={2} className="px-4 py-4 text-center text-gray-500">
+                        No appointment records available.
+                    </td>
+                </tr>
+            )}
+                    </tbody>
+            </table>
+                </div>
           </article>
         </section>
 
@@ -1448,10 +1656,131 @@ function AdminReports() {
               </ResponsiveContainer>
             )}
           </div>
+                    {/* MOST REQUESTED SERVICES DATA TABLE */}
+            <div className="mt-6 overflow-x-auto border-t border-purple-100 pt-5">
+            <h3 className="mb-3 text-sm font-bold text-purple-950">
+        Most Requested Services — Data Table
+    </h3>
+
+            <table className="w-full text-left text-sm">
+        <thead className="bg-purple-50 text-purple-950">
+            <tr>
+                <th className="px-4 py-3">Service</th>
+                <th className="px-4 py-3 text-right">Requests</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            {report.mostRequestedServices.length ? (
+                report.mostRequestedServices.map((row) => (
+                    <tr
+                        key={row.service}
+                        className="border-b border-gray-100"
+                    >
+                        <td className="px-4 py-3">{row.service}</td>
+                        <td className="px-4 py-3 text-right">
+                            {row.count}
+                        </td>
+                    </tr>
+                ))
+            ) : (
+                <tr>
+                    <td colSpan={2} className="px-4 py-4 text-center text-gray-500">
+                        No service requests available.
+                    </td>
+                </tr>
+            )}
+                    </tbody>
+                </table>
+            </div>
         </section>
 
-        {/* ACTIVITY TABLE */}
-        <section className={`${panel} overflow-hidden`}>
+        {/* ACTIVITY BY DATE — CHART AND TABLE */}
+<section className={`${panel} overflow-hidden`}>
+
+    {/* ACTIVITY CHART */}
+    <div className="border-b border-purple-100 p-5 md:p-6">
+        <h3 className="text-lg font-bold text-purple-950">
+            Daily Activity Comparison — {report.periodLabel}
+        </h3>
+
+        <p className="mt-1 text-xs text-gray-500">
+            Comparison of paid transactions and recorded appointments
+            for each date in the selected period.
+        </p>
+
+        <div className="mt-5 h-72">
+            {!report.summary.length ? (
+                <ChartEmpty>
+                    No activity recorded for the selected period.
+                </ChartEmpty>
+            ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                        data={report.summary}
+                        margin={{
+                            top: 10,
+                            right: 20,
+                            left: 0,
+                            bottom: 5,
+                        }}
+                    >
+                        <CartesianGrid
+                            stroke="#eee8f3"
+                            strokeDasharray="3 3"
+                            vertical={false}
+                        />
+
+                        <XAxis
+                            dataKey="date"
+                            tickFormatter={shortDate}
+                            tick={{ fontSize: 11 }}
+                            interval={
+                                period === "monthly" ? 4 : 0
+                            }
+                        />
+
+                        <YAxis
+                            allowDecimals={false}
+                            tick={{ fontSize: 12 }}
+                        />
+
+                        <Tooltip
+                            labelFormatter={longDate}
+                        />
+
+                        <Bar
+                            dataKey="transactions"
+                            name="Paid Transactions"
+                            fill="#9333ea"
+                            radius={[5, 5, 0, 0]}
+                            maxBarSize={24}
+                        />
+
+                        <Bar
+                            dataKey="appointments"
+                            name="Appointments"
+                            fill="#ec4899"
+                            radius={[5, 5, 0, 0]}
+                            maxBarSize={24}
+                        />
+                    </BarChart>
+                </ResponsiveContainer>
+            )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-5 text-xs text-gray-600">
+            <span>
+                <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-purple-600" />
+                Paid Transactions
+            </span>
+
+            <span>
+                <span className="mr-2 inline-block h-3 w-3 rounded-sm bg-pink-500" />
+                Appointments
+            </span>
+        </div>
+    </div>
           <div className="p-5 md:p-6">
             <h2 className="text-lg font-bold text-purple-950">
               Activity by Date — {report.periodLabel}
@@ -1568,6 +1897,8 @@ function AdminReports() {
 
           {/* INVENTORY CHARTS */}
           <div className="grid gap-5 xl:grid-cols-2">
+
+
             {/* STOCK BY CATEGORY */}
             <article className={`${panel} min-w-0 p-5 md:p-6`}>
               <h3 className="text-lg font-bold text-purple-950">
@@ -1645,6 +1976,53 @@ function AdminReports() {
                   </ResponsiveContainer>
                 )}
               </div>
+
+              {/* STOCK BY CATEGORY — MATCHING TABLE */}
+            <div className="mt-6 border-t border-purple-100 pt-5">
+    <h4 className="mb-3 text-sm font-bold text-purple-950">
+        Stock by Category — Data Table
+    </h4>
+
+    <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+            <thead className="bg-purple-50 text-purple-950">
+                <tr>
+                    <th className="px-4 py-3">Category</th>
+                    <th className="px-4 py-3 text-right">Products</th>
+                    <th className="px-4 py-3 text-right">Units on Hand</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {categoryChartData.length ? (
+                    categoryChartData.map((row) => (
+                        <tr
+                            key={row.category}
+                            className="border-b border-gray-100"
+                        >
+                            <td className="px-4 py-3">{row.category}</td>
+                            <td className="px-4 py-3 text-right">
+                                {Number(row.products || 0)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                                {Number(row.units || 0)}
+                            </td>
+                        </tr>
+                    ))
+                ) : (
+                    <tr>
+                        <td
+                            colSpan={3}
+                            className="px-4 py-5 text-center text-gray-500"
+                        >
+                            No inventory products recorded.
+                        </td>
+                    </tr>
+                )}
+                        </tbody>
+                        </table>
+                </div>
+            </div>
             </article>
 
             {/* PRODUCT STOCK STATUS */}
@@ -1717,8 +2095,47 @@ function AdminReports() {
                   </div>
                 ))}
               </div>
+
+              {/* PRODUCT STOCK STATUS — MATCHING TABLE */}
+                <div className="mt-6 border-t border-purple-100 pt-5">
+                <h4 className="mb-3 text-sm font-bold text-purple-950">
+        Product Stock Status — Data Table
+    </h4>
+
+        <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+            <thead className="bg-purple-50 text-purple-950">
+                <tr>
+                    <th className="px-4 py-3">Stock Status</th>
+                    <th className="px-4 py-3 text-right">Products</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {stockStatuses.map((item) => (
+                    <tr
+                        key={item.name}
+                        className="border-b border-gray-100"
+                    >
+                        <td className="px-4 py-3">
+                            <span
+                                className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
+                                style={{ backgroundColor: item.fill }}
+                            />
+                            {item.name}
+                        </td>
+
+                        <td className="px-4 py-3 text-right font-semibold">
+                            {Number(item.value || 0)}
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+</div>
+</div>
             </article>
-          </div>
+
 
           {/* STOCK MOVEMENT CHART */}
           <article className={`${panel} min-w-0 p-5 md:p-6`}>
@@ -1807,7 +2224,43 @@ function AdminReports() {
                 </ResponsiveContainer>
               )}
             </div>
+
+            {/* STOCK MOVEMENT DATA TABLE */}
+            <div className="mt-6 border-t border-purple-100 pt-5">
+              <h4 className="mb-3 text-sm font-bold text-purple-950">
+                Stock Movement — Data Table
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-purple-50 text-purple-950">
+                    <tr>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3 text-right">Stock In</th>
+                      <th className="px-4 py-3 text-right">Stock Out</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventory.movementTrend.length ? (
+                      inventory.movementTrend.map((row) => (
+                        <tr key={row.date} className="border-b border-gray-100">
+                          <td className="px-4 py-3">{longDate(row.date)}</td>
+                          <td className="px-4 py-3 text-right">{Number(row.stockIn || 0)}</td>
+                          <td className="px-4 py-3 text-right">{Number(row.stockOut || 0)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3} className="px-4 py-5 text-center text-gray-500">
+                          No stock movements recorded.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </article>
+          </div>
 
           {/* LOW STOCK MONITORING TABLE */}
           <article className={`${panel} overflow-hidden`}>
@@ -1832,6 +2285,36 @@ function AdminReports() {
                 aria-label="Search products needing stock attention"
                 className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-purple-400 md:max-w-xs"
               />
+            </div>
+
+            {/* STOCK ATTENTION CHART — SAME FILTERED DATA AS TABLE */}
+            <div className="border-y border-purple-100 p-5 md:p-6">
+              <h4 className="mb-2 text-sm font-bold text-purple-950">
+                Stock Attention — Current Stock vs Reorder Level
+              </h4>
+              <p className="mb-4 text-xs text-gray-500">
+                Chart and table both follow the product search above.
+              </p>
+              <div style={{ height: Math.max(240, attentionItems.length * 45) }}>
+                {!attentionItems.length ? (
+                  <ChartEmpty>No matching products needing stock attention.</ChartEmpty>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={attentionItems}
+                      layout="vertical"
+                      margin={{ top: 5, right: 15, bottom: 5, left: 10 }}
+                    >
+                      <CartesianGrid stroke="#eee8f3" strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" allowDecimals={false} />
+                      <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="stock" name="Current Stock" fill="#9333ea" maxBarSize={18} />
+                      <Bar dataKey="alertLevel" name="Reorder Level" fill="#f59e0b" maxBarSize={18} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">

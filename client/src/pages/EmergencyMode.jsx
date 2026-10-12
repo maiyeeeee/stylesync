@@ -534,26 +534,25 @@ function EmergencyMode() {
                     ),
             }
         } else {
-            payload = {
-                item_id:
-                    Number(
-                        fields.get(
-                            "item_id",
-                        ),
-                    ),
+            const quantityChange = Number(fields.get("quantity_change"))
+            const reason = String(fields.get("reason") || "").trim()
 
-                quantity_change:
-                    Number(
-                        fields.get(
-                            "quantity_change",
-                        ),
-                    ),
-
-                reason:
-                    fields.get(
-                        "reason",
-                    ),
+    if (!Number.isSafeInteger(quantityChange) || quantityChange === 0) {
+    throw new Error("Enter a valid non-zero whole number.")
             }
+
+        if (!reason) {
+    throw new Error("Enter a reason for this inventory adjustment.")
+            }
+
+        payload = {
+    item_id: Number(fields.get("item_id")),
+    quantity_change: quantityChange,
+    reason:
+        quantityChange > 0
+            ? `Stock In: ${reason}`
+            : `Damaged: ${reason}`,
+}
         }
 
         if (

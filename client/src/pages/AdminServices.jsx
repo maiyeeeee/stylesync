@@ -295,6 +295,7 @@ function AdminServices() {
     const lock = useRef(false)
     const sequence = useRef(0)
     const editor = useRef(null)
+    const serviceListRef = useRef(null)
 
     const loadServices =
         useCallback(
@@ -410,17 +411,22 @@ function AdminServices() {
             )
     }, [image])
 
+    // Move the viewport and keyboard focus to the Add/Edit form.
     useEffect(() => {
-        if (showForm) {
-            editor.current
-                ?.scrollIntoView({
-                    block: "start",
-                })
+        if (!showForm) return
 
-            editor.current?.focus({
-                preventScroll: true,
-            })
-        }
+        const target = editor.current
+        if (!target) return
+
+        const reducedMotion = window.matchMedia?.(
+            "(prefers-reduced-motion: reduce)",
+        ).matches
+
+        target.scrollIntoView({
+            behavior: reducedMotion ? "auto" : "smooth",
+            block: "start",
+        })
+        target.focus({ preventScroll: true })
     }, [showForm, editing])
 
     const blocked =
@@ -483,6 +489,27 @@ function AdminServices() {
         setError("")
         setMessage("")
         setShowForm(true)
+    }
+
+    function closeServiceForm() {
+        if (busy) return
+
+        setShowForm(false)
+        setEditing(null)
+        setImage(null)
+        setError("")
+
+        // The list stays mounted when the editor closes.
+        requestAnimationFrame(() => {
+            const reducedMotion = window.matchMedia?.(
+                "(prefers-reduced-motion: reduce)",
+            ).matches
+
+            serviceListRef.current?.scrollIntoView({
+                behavior: reducedMotion ? "auto" : "smooth",
+                block: "start",
+            })
+        })
     }
 
     function changeField(event) {
@@ -655,7 +682,6 @@ function AdminServices() {
             setBusy(false)
         }
     }
-
     function saveService(event) {
         event.preventDefault()
 
@@ -756,7 +782,14 @@ function AdminServices() {
 
             () => {
                 setShowForm(false)
+                setEditing(null)
                 setImage(null)
+                requestAnimationFrame(() => {
+                    serviceListRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                    })
+                })
             },
         )
     }
@@ -1484,22 +1517,12 @@ function AdminServices() {
 
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setShowForm(
-                                            false,
-                                        )
-
-                                        setImage(
-                                            null,
-                                        )
-
-                                        setError("")
-                                    }}
+                                    onClick={closeServiceForm}
                                     className={
                                         buttonClass
                                     }
                                 >
-                                    Cancel
+                                    Back to service list
                                 </button>
                             </div>
                         </fieldset>
@@ -1507,7 +1530,10 @@ function AdminServices() {
                 </section>
             )}
 
-            <section className="min-w-0 overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm">
+            <section
+                ref={serviceListRef}
+                className="scroll-mt-24 min-w-0 overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm"
+            >
                 <div className="flex flex-wrap items-center justify-between gap-4 p-5">
                     <div>
                         <h3 className="text-lg font-bold text-purple-950">
@@ -1977,3 +2003,4 @@ function AdminServices() {
 }
 
 export default AdminServices
+

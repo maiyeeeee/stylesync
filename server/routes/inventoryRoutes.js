@@ -399,6 +399,20 @@ router.post("/:id/adjust", async (req, res) => {
         "Adjustment reason is required and must not exceed 255 characters."
       );
     }
+    // Only Stock In and Damaged are allowed as manual adjustments.
+// POS product sales record their own Stock Out movements.
+
+    if (quantityChange > 0 && !reason.startsWith("Stock In:")) {
+    throw problem(
+        "Positive inventory adjustments must use Stock In."
+    );
+    }
+
+    if (quantityChange < 0 && !reason.startsWith("Damaged:")) {
+    throw problem(
+        "Manual Stock Out is disabled. Use Damaged for damaged items."
+    );
+    }
 
     if (offlineId && offlineId.length > 64) {
       throw problem(

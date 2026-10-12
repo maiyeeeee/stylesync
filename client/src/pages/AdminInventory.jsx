@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, apiFetch } from "../lib/sessionApi";
 
 const inputClass =
@@ -63,6 +63,7 @@ function AdminInventory() {
   const [productForm, setProductForm] = useState(emptyProduct);
 
   const [adjustProduct, setAdjustProduct] = useState(null);
+  const adjustmentRef = useRef(null);
   const [adjustType, setAdjustType] = useState("Stock In");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
@@ -217,14 +218,22 @@ function AdminInventory() {
     }
   }
 
-  function openAdjustment(product, type = "Stock In") {
+ function openAdjustment(product, type = "Stock In") {
     setAdjustProduct(product);
-    setAdjustType(type);
+    setAdjustType(type === "Damaged" ? "Damaged" : "Stock In");
     setQuantity("");
     setReason("");
     setError("");
     setMessage("");
-  }
+}
+useEffect(() => {
+    if (!adjustProduct) return;
+
+    adjustmentRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+    });
+}, [adjustProduct]);
 
   async function submitAdjustment(event) {
     event.preventDefault();
@@ -595,7 +604,10 @@ function AdminInventory() {
       </section>
 
       {adjustProduct && canManage && (
-        <section className={panelClass}>
+    <section
+        ref={adjustmentRef}
+        className={`${panelClass} scroll-mt-6`}
+    >
           <h2 className="text-xl font-bold text-purple-950">
             Stock Adjustment
           </h2>
@@ -611,17 +623,16 @@ function AdminInventory() {
               <span className="mb-2 block text-sm font-medium">
                 Movement Type
               </span>
+
               <select
                 className={inputClass}
                 value={adjustType}
                 onChange={(event) =>
-                  setAdjustType(event.target.value)
-                }
-              >
-                <option>Stock In</option>
-                <option>Stock Out</option>
-                <option>Damaged</option>
-              </select>
+            setAdjustType(event.target.value)
+        }
+>           <option>Stock In</option>
+            <option>Damaged</option>
+            </select>
             </label>
 
             <label className="block">
