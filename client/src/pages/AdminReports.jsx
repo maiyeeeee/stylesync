@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Bar,
   BarChart,
+  Cell,
+  Pie,
+  PieChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -11,7 +14,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-
 import { API_URL, apiFetch } from "../lib/sessionApi"
 import salonLogo from "../assets/dahling-logo.jpg"
 
@@ -33,6 +35,21 @@ const emptyReport = {
   salesTrend: [],
   appointmentStatus: [],
   mostRequestedServices: [],
+  inventoryAnalytics: {
+    snapshot: {
+      products: 0,
+      unitsOnHand: 0,
+      inStock: 0,
+      lowStock: 0,
+      outOfStock: 0,
+      needsAttention: 0,
+    },
+    categoryStock: [],
+    movementTrend: [],
+    totalStockIn: 0,
+    totalStockOut: 0,
+    attentionItems: [],
+  },
 }
 
 const money = (value) =>
@@ -71,7 +88,9 @@ function mondayOf(value) {
 function formatDate(value, options = {}) {
   if (!value) return "N/A"
 
-  const date = new Date(`${String(value).slice(0, 10)}T00:00:00Z`)
+  const date = new Date(
+    `${String(value).slice(0, 10)}T00:00:00Z`
+  )
 
   if (Number.isNaN(date.getTime())) return "N/A"
 
@@ -109,7 +128,8 @@ function PrintableSalonReport({ report, generatedAt }) {
   const topService = report.mostRequestedServices?.[0]
 
   const highestSalesDay = [...rows].sort(
-    (a, b) => Number(b.sales || 0) - Number(a.sales || 0)
+    (a, b) =>
+      Number(b.sales || 0) - Number(a.sales || 0)
   )[0]
 
   const insights = [
@@ -118,13 +138,23 @@ function PrintableSalonReport({ report, generatedAt }) {
     `${report.appointments} active appointments were recorded during the selected period.`,
   ]
 
+  const inventory = report.inventoryAnalytics
+
+  insights.push(
+    `Current inventory contains ${inventory.snapshot.unitsOnHand} units across ${inventory.snapshot.products} products; ${inventory.snapshot.needsAttention} product(s) need stock attention.`,
+    `During the selected period, ${inventory.totalStockIn} units were recorded as stock in and ${inventory.totalStockOut} units as stock out.`
+  )
+
   if (topService) {
     insights.push(
       `The leading requested service was ${topService.service}, with ${topService.count} recorded request(s).`
     )
   }
 
-  if (highestSalesDay && Number(highestSalesDay.sales) > 0) {
+  if (
+    highestSalesDay &&
+    Number(highestSalesDay.sales) > 0
+  ) {
     insights.push(
       `The highest-sales date was ${longDate(highestSalesDay.date)}, generating ${money(highestSalesDay.sales)}.`
     )
@@ -142,14 +172,19 @@ function PrintableSalonReport({ report, generatedAt }) {
         <div>
           <h1>DAHLING'S SALON AND SPA</h1>
           <h2>SALES & PERFORMANCE REPORT</h2>
-          <p>Generated through InsightGlow Management System</p>
+          <p>
+            Generated through InsightGlow Management System
+          </p>
           <p>
             Reporting Period: {report.periodLabel}
           </p>
           <p>
-            {longDate(report.periodStart)} – {longDate(report.periodEnd)}
+            {longDate(report.periodStart)} –{" "}
+            {longDate(report.periodEnd)}
           </p>
-          <p>Generated: {generatedAt} (Philippine Time)</p>
+          <p>
+            Generated: {generatedAt} (Philippine Time)
+          </p>
         </div>
       </header>
 
@@ -161,17 +196,14 @@ function PrintableSalonReport({ report, generatedAt }) {
             <span>Total Paid Sales</span>
             <strong>{money(report.sales)}</strong>
           </div>
-
           <div>
             <span>Paid Transactions</span>
             <strong>{report.transactions}</strong>
           </div>
-
           <div>
             <span>Average Sale</span>
             <strong>{money(report.averageSale)}</strong>
           </div>
-
           <div>
             <span>Active Appointments</span>
             <strong>{report.appointments}</strong>
@@ -202,7 +234,9 @@ function PrintableSalonReport({ report, generatedAt }) {
               ))
             ) : (
               <tr>
-                <td colSpan={3}>No recorded sales activity.</td>
+                <td colSpan={3}>
+                  No recorded sales activity.
+                </td>
               </tr>
             )}
           </tbody>
@@ -230,14 +264,17 @@ function PrintableSalonReport({ report, generatedAt }) {
               ))
             ) : (
               <tr>
-                <td colSpan={2}>No appointment records.</td>
+                <td colSpan={2}>
+                  No appointment records.
+                </td>
               </tr>
             )}
           </tbody>
         </table>
 
         <p className="stylesync-print-note">
-          Unpaid reservation holds are excluded from appointment status analysis.
+          Unpaid reservation holds are excluded from
+          appointment status analysis.
         </p>
       </section>
 
@@ -262,7 +299,9 @@ function PrintableSalonReport({ report, generatedAt }) {
               ))
             ) : (
               <tr>
-                <td colSpan={2}>No service requests recorded.</td>
+                <td colSpan={2}>
+                  No service requests recorded.
+                </td>
               </tr>
             )}
           </tbody>
@@ -296,7 +335,9 @@ function PrintableSalonReport({ report, generatedAt }) {
               ))
             ) : (
               <tr>
-                <td colSpan={5}>No activity for this period.</td>
+                <td colSpan={5}>
+                  No activity for this period.
+                </td>
               </tr>
             )}
           </tbody>
@@ -304,7 +345,112 @@ function PrintableSalonReport({ report, generatedAt }) {
       </section>
 
       <section className="stylesync-print-section">
-        <h3>6. Management Insights</h3>
+        <h3>6. Inventory Analytics</h3>
+
+        <p className="stylesync-print-note">
+          Stock quantities are a current snapshot.
+          Stock movement totals cover the selected
+          report period.
+        </p>
+
+        <div className="stylesync-print-kpis">
+          <div>
+            <span>Products</span>
+            <strong>
+              {inventory.snapshot.products}
+            </strong>
+          </div>
+
+          <div>
+            <span>Units on Hand</span>
+            <strong>
+              {inventory.snapshot.unitsOnHand}
+            </strong>
+          </div>
+
+          <div>
+            <span>Needs Attention</span>
+            <strong>
+              {inventory.snapshot.needsAttention}
+            </strong>
+          </div>
+
+          <div>
+            <span>Stock In / Out</span>
+            <strong>
+              {inventory.totalStockIn} /{" "}
+              {inventory.totalStockOut}
+            </strong>
+          </div>
+        </div>
+
+        <h4>Stock by Category</h4>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Products</th>
+              <th>Units on Hand</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {inventory.categoryStock.length ? (
+              inventory.categoryStock.map((row) => (
+                <tr key={row.category}>
+                  <td>{row.category}</td>
+                  <td>{row.products}</td>
+                  <td>{row.units}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={3}>
+                  No inventory products recorded.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        <h4>Products Requiring Attention</h4>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Category</th>
+              <th>Stock</th>
+              <th>Reorder Level</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {inventory.attentionItems.length ? (
+              inventory.attentionItems.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.name}</td>
+                  <td>{item.category}</td>
+                  <td>{item.stock}</td>
+                  <td>{item.alertLevel}</td>
+                  <td>{item.status}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={5}>
+                  No products currently need restocking.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="stylesync-print-section">
+        <h3>7. Management Insights</h3>
 
         <ul>
           {insights.map((insight, index) => (
@@ -313,14 +459,19 @@ function PrintableSalonReport({ report, generatedAt }) {
         </ul>
 
         <p className="stylesync-print-note">
-          These insights summarize recorded business activity and do not
-          represent forecasts or predictions.
+          These insights summarize recorded business
+          activity and do not represent forecasts
+          or predictions.
         </p>
       </section>
 
       <footer className="stylesync-print-footer">
-        <p>Prepared for Dahling's Salon and Spa</p>
-        <p>Generated by StyleSync | Internal Management Report</p>
+        <p>
+          Prepared for Dahling's Salon and Spa
+        </p>
+        <p>
+          Generated by StyleSync | Internal Management Report
+        </p>
       </footer>
     </article>
   )
@@ -331,6 +482,7 @@ function AdminReports() {
   const currentYear = Number(today.slice(0, 4))
 
   const [period, setPeriod] = useState("weekly")
+
   const [filters, setFilters] = useState({
     daily: today,
     weekly: mondayOf(today),
@@ -341,112 +493,163 @@ function AdminReports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [generatedAt, setGeneratedAt] = useState("")
+  const [attentionSearch, setAttentionSearch] = useState("")
 
   const selectedValue = filters[period]
 
   const dayOptions = useMemo(
-    () => Array.from(
-      { length: 31 },
-      (_, index) => addDays(today, -index)
-    ),
+    () =>
+      Array.from(
+        { length: 31 },
+        (_, index) => addDays(today, -index)
+      ),
     [today]
   )
 
   const weekOptions = useMemo(
-    () => Array.from(
-      { length: 12 },
-      (_, index) => addDays(mondayOf(today), -7 * index)
-    ),
+    () =>
+      Array.from(
+        { length: 12 },
+        (_, index) =>
+          addDays(mondayOf(today), -7 * index)
+      ),
     [today]
   )
 
   const yearOptions = useMemo(
-    () => Array.from(
-      { length: 5 },
-      (_, index) => currentYear - index
-    ),
+    () =>
+      Array.from(
+        { length: 5 },
+        (_, index) => currentYear - index
+      ),
     [currentYear]
   )
 
   const monthOptions = useMemo(
-    () => Array.from({ length: 12 }, (_, index) => {
-      const month = String(index + 1).padStart(2, "0")
-      const value = `${filters.monthly.slice(0, 4)}-${month}`
+    () =>
+      Array.from({ length: 12 }, (_, index) => {
+        const month = String(index + 1).padStart(2, "0")
+        const value =
+          `${filters.monthly.slice(0, 4)}-${month}`
 
-      return {
-        value,
-        label: formatDate(`${value}-01`, {
-          month: "long",
-        }),
-      }
-    }),
+        return {
+          value,
+          label: formatDate(`${value}-01`, {
+            month: "long",
+          }),
+        }
+      }),
     [filters.monthly]
   )
 
-  const loadReport = useCallback(async (
-    selectedPeriod,
-    selectedValue,
-    signal
-  ) => {
-    setLoading(true)
-    setError("")
+  const loadReport = useCallback(
+    async (selectedPeriod, selectedValue, signal) => {
+      setLoading(true)
+      setError("")
 
-    try {
-      const params = new URLSearchParams({
-        period: selectedPeriod,
-      })
+      try {
+        const params = new URLSearchParams({
+          period: selectedPeriod,
+        })
 
-      const queryNames = {
-        daily: "date",
-        weekly: "week",
-        monthly: "month",
-      }
+        const queryNames = {
+          daily: "date",
+          weekly: "week",
+          monthly: "month",
+        }
 
-      params.set(queryNames[selectedPeriod], selectedValue)
-
-      const response = await apiFetch(
-        `${API_URL}/reports?${params.toString()}`,
-        { signal }
-      )
-
-      const data = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error || "Unable to load the report."
+        params.set(
+          queryNames[selectedPeriod],
+          selectedValue
         )
-      }
 
-      if (!data || typeof data !== "object" || Array.isArray(data)) {
-        throw new Error("Unexpected report response.")
-      }
+        const response = await apiFetch(
+          `${API_URL}/reports?${params.toString()}`,
+          { signal }
+        )
 
-      if (!signal?.aborted) {
-        setReport({
-          ...emptyReport,
-          ...data,
+        const data = await response.json().catch(() => null)
 
-          summary: Array.isArray(data.summary)
-            ? data.summary
-            : [],
+        if (!response.ok) {
+          throw new Error(
+            data?.error || "Unable to load the report."
+          )
+        }
 
-          salesTrend: Array.isArray(data.salesTrend)
-            ? data.salesTrend.map((item) => ({
-                ...item,
-                dateLabel: shortDate(item.date),
-                sales: Number(item.sales || 0),
-              }))
-            : [],
+        if (
+          !data ||
+          typeof data !== "object" ||
+          Array.isArray(data)
+        ) {
+          throw new Error("Unexpected report response.")
+        }
 
-          appointmentStatus: Array.isArray(data.appointmentStatus)
-            ? data.appointmentStatus.map((item) => ({
-                ...item,
-                count: Number(item.count || 0),
-              }))
-            : [],
+        if (!signal?.aborted) {
+          setReport({
+            ...emptyReport,
+            ...data,
 
-          mostRequestedServices: Array.isArray(data.mostRequestedServices)
-            ? data.mostRequestedServices.map((item) => ({
+            summary: Array.isArray(data.summary)
+              ? data.summary
+              : [],
+
+            salesTrend: Array.isArray(data.salesTrend)
+              ? data.salesTrend.map((item) => ({
+                  ...item,
+                  dateLabel: shortDate(item.date),
+                  sales: Number(item.sales || 0),
+                }))
+              : [],
+
+            appointmentStatus: Array.isArray(
+              data.appointmentStatus
+            )
+              ? data.appointmentStatus.map((item) => ({
+                  ...item,
+                  count: Number(item.count || 0),
+                }))
+              : [],
+
+            inventoryAnalytics: {
+              ...emptyReport.inventoryAnalytics,
+              ...(data.inventoryAnalytics || {}),
+
+              snapshot: {
+                ...emptyReport.inventoryAnalytics.snapshot,
+                ...(data.inventoryAnalytics?.snapshot || {}),
+              },
+
+              categoryStock: Array.isArray(
+                data.inventoryAnalytics?.categoryStock
+              )
+                ? data.inventoryAnalytics.categoryStock
+                : [],
+
+              movementTrend: Array.isArray(
+                data.inventoryAnalytics?.movementTrend
+              )
+                ? data.inventoryAnalytics.movementTrend.map(
+                    (row) => ({
+                      ...row,
+                      dateLabel: shortDate(row.date),
+                      stockIn: Number(row.stockIn || 0),
+                      stockOut: Number(row.stockOut || 0),
+                    })
+                  )
+                : [],
+
+              attentionItems: Array.isArray(
+                data.inventoryAnalytics?.attentionItems
+              )
+                ? data.inventoryAnalytics.attentionItems
+                : [],
+            },
+
+            mostRequestedServices: Array.isArray(
+              data.mostRequestedServices
+            )
+              ? data.mostRequestedServices.map((item) => ({
+
                 ...item,
                 count: Number(item.count || 0),
               }))
@@ -508,6 +711,84 @@ function AdminReports() {
   const hasSales = report.salesTrend.some(
     (item) => item.sales > 0
   )
+
+  const inventory = report.inventoryAnalytics
+
+  const stockStatuses = [
+    {
+      name: "In Stock",
+      value: inventory.snapshot.inStock,
+      fill: "#7e22ce",
+    },
+    {
+      name: "Low Stock",
+      value: inventory.snapshot.lowStock,
+      fill: "#f59e0b",
+    },
+    {
+      name: "Out of Stock",
+      value: inventory.snapshot.outOfStock,
+      fill: "#ef4444",
+    },
+  ]
+
+  const hasStockMovement = inventory.movementTrend.some(
+    (row) => row.stockIn > 0 || row.stockOut > 0
+  )
+
+  const categoryChartData =
+    inventory.categoryStock.length > 8
+      ? [
+          ...inventory.categoryStock.slice(0, 7),
+          {
+            category: "Other categories",
+            units: inventory.categoryStock
+              .slice(7)
+              .reduce(
+                (sum, row) =>
+                  sum + Number(row.units || 0),
+                0
+              ),
+            products: inventory.categoryStock
+              .slice(7)
+              .reduce(
+                (sum, row) =>
+                  sum + Number(row.products || 0),
+                0
+              ),
+          },
+        ]
+      : inventory.categoryStock
+
+  const attentionItems = inventory.attentionItems.filter(
+    (item) =>
+      `${item.name} ${item.category} ${item.status}`
+        .toLowerCase()
+        .includes(attentionSearch.toLowerCase().trim())
+  )
+
+  const inventoryCards = [
+    {
+      label: "Products",
+      value: inventory.snapshot.products,
+      note: "Current inventory records",
+    },
+    {
+      label: "Units on Hand",
+      value: inventory.snapshot.unitsOnHand,
+      note: "Total available quantity",
+    },
+    {
+      label: "Needs Attention",
+      value: inventory.snapshot.needsAttention,
+      note: "Low-stock and out-of-stock products",
+    },
+    {
+      label: "Stock In / Out",
+      value: `${inventory.totalStockIn} / ${inventory.totalStockOut}`,
+      note: `Units moved · ${report.periodLabel}`,
+    },
+  ]
 
   const cards = [
     {
@@ -659,6 +940,13 @@ function AdminReports() {
               font-size: 14px;
             }
 
+            .stylesync-print-section h4 {
+              margin: 14px 0 7px;
+              color: #581c87;
+              font-size: 11px;
+              font-weight: 700;
+            }
+
             .stylesync-print-section table {
               width: 100%;
               border-collapse: collapse;
@@ -722,8 +1010,8 @@ function AdminReports() {
       </style>
 
       <div className="stylesync-screen-dashboard min-w-0 space-y-6">
-
         {/* PAGE HEADER */}
+
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-purple-500">
@@ -735,7 +1023,8 @@ function AdminReports() {
             </h1>
 
             <p className="mt-2 text-sm text-gray-500">
-              Review recorded sales, appointments, and service activity.
+              Review recorded sales, appointments,
+              services, and inventory activity.
             </p>
           </div>
 
@@ -743,7 +1032,9 @@ function AdminReports() {
             <button
               type="button"
               disabled={loading}
-              onClick={() => loadReport(period, selectedValue)}
+              onClick={() =>
+                loadReport(period, selectedValue)
+              }
               className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
             >
               {loading ? "Refreshing…" : "Refresh"}
@@ -761,6 +1052,7 @@ function AdminReports() {
         </header>
 
         {/* ERROR MESSAGE */}
+
         {error && (
           <div
             role="alert"
@@ -771,7 +1063,9 @@ function AdminReports() {
             <button
               type="button"
               disabled={loading}
-              onClick={() => loadReport(period, selectedValue)}
+              onClick={() =>
+                loadReport(period, selectedValue)
+              }
               className="ml-3 font-semibold underline"
             >
               Retry
@@ -780,6 +1074,7 @@ function AdminReports() {
         )}
 
         {/* REPORT FILTERS */}
+
         <section className={`${panel} p-4 md:p-5`}>
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
@@ -816,7 +1111,9 @@ function AdminReports() {
             <div className="flex flex-wrap items-end gap-3">
               {period === "daily" && (
                 <label className="min-w-[260px] text-sm font-medium text-gray-700">
-                  <span className="mb-2 block">Select day</span>
+                  <span className="mb-2 block">
+                    Select day
+                  </span>
 
                   <select
                     value={filters.daily}
@@ -826,8 +1123,13 @@ function AdminReports() {
                     className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5"
                   >
                     {dayOptions.map((value) => (
-                      <option key={value} value={value}>
-                        {value === today ? "Today — " : ""}
+                      <option
+                        key={value}
+                        value={value}
+                      >
+                        {value === today
+                          ? "Today — "
+                          : ""}
                         {longDate(value)}
                       </option>
                     ))}
@@ -837,7 +1139,9 @@ function AdminReports() {
 
               {period === "weekly" && (
                 <label className="min-w-[260px] text-sm font-medium text-gray-700">
-                  <span className="mb-2 block">Select week</span>
+                  <span className="mb-2 block">
+                    Select week
+                  </span>
 
                   <select
                     value={filters.weekly}
@@ -846,12 +1150,22 @@ function AdminReports() {
                     }
                     className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5"
                   >
-                    {weekOptions.map((value, index) => (
-                      <option key={value} value={value}>
-                        {index === 0 ? "This week — " : ""}
-                        {shortDate(value)} – {longDate(addDays(value, 6))}
-                      </option>
-                    ))}
+                    {weekOptions.map(
+                      (value, index) => (
+                        <option
+                          key={value}
+                          value={value}
+                        >
+                          {index === 0
+                            ? "This week — "
+                            : ""}
+                          {shortDate(value)} –{" "}
+                          {longDate(
+                            addDays(value, 6)
+                          )}
+                        </option>
+                      )
+                    )}
                   </select>
                 </label>
               )}
@@ -859,41 +1173,59 @@ function AdminReports() {
               {period === "monthly" && (
                 <>
                   <label className="min-w-[180px] text-sm font-medium text-gray-700">
-                    <span className="mb-2 block">Select month</span>
+                    <span className="mb-2 block">
+                      Select month
+                    </span>
 
                     <select
                       value={filters.monthly}
                       onChange={(event) =>
-                        updateFilter(event.target.value)
+                        updateFilter(
+                          event.target.value
+                        )
                       }
                       className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5"
                     >
-                      {monthOptions.map((option) => (
-                        <option
-                          key={option.value}
-                          value={option.value}
-                        >
-                          {option.label}
-                        </option>
-                      ))}
+                      {monthOptions.map(
+                        (option) => (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                          >
+                            {option.label}
+                          </option>
+                        )
+                      )}
                     </select>
                   </label>
 
                   <label className="min-w-[120px] text-sm font-medium text-gray-700">
-                    <span className="mb-2 block">Year</span>
+                    <span className="mb-2 block">
+                      Year
+                    </span>
 
                     <select
-                      value={filters.monthly.slice(0, 4)}
+                      value={filters.monthly.slice(
+                        0,
+                        4
+                      )}
                       onChange={(event) =>
-                        updateMonthYear(event.target.value)
+                        updateMonthYear(
+                          event.target.value
+                        )
                       }
                       className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5"
                     >
-                      {yearOptions.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
+                      {yearOptions.map(
+                        (year) => (
+                          <option
+                            key={year}
+                            value={year}
+                          >
+                            {year}
+                          </option>
+                        )
+                      )}
                     </select>
                   </label>
                 </>
@@ -908,7 +1240,9 @@ function AdminReports() {
             </span>
 
             {loading && (
-              <span className="ml-2">Loading…</span>
+              <span className="ml-2">
+                Loading…
+              </span>
             )}
           </p>
         </section>
@@ -923,11 +1257,9 @@ function AdminReports() {
               <p className="text-sm text-gray-500">
                 {card.label}
               </p>
-
               <p className="mt-3 text-2xl font-bold text-purple-800">
                 {loading && !error ? "—" : card.value}
               </p>
-
               <p className="mt-2 text-xs leading-relaxed text-gray-500">
                 {card.note}
               </p>
@@ -941,7 +1273,6 @@ function AdminReports() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               {report.periodLabel} paid sales
             </p>
-
             <p className="mt-2 text-xl font-bold text-purple-900">
               {money(report.sales)}
             </p>
@@ -951,7 +1282,6 @@ function AdminReports() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Paid transactions
             </p>
-
             <p className="mt-2 text-xl font-bold text-purple-900">
               {report.transactions}
             </p>
@@ -961,7 +1291,6 @@ function AdminReports() {
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
               Average sale
             </p>
-
             <p className="mt-2 text-xl font-bold text-emerald-700">
               {money(report.averageSale)}
             </p>
@@ -970,13 +1299,11 @@ function AdminReports() {
 
         {/* SALES AND APPOINTMENT CHARTS */}
         <section className="grid gap-6 xl:grid-cols-2">
-
           {/* SALES CHART */}
           <article className={`${panel} p-5 md:p-6`}>
             <h2 className="text-lg font-bold text-purple-950">
               Paid Sales — {report.periodLabel}
             </h2>
-
             <p className="mt-1 text-xs text-gray-500">
               Dates without paid sales are shown as zero.
             </p>
@@ -994,24 +1321,20 @@ function AdminReports() {
                       strokeDasharray="3 3"
                       vertical={false}
                     />
-
                     <XAxis
                       dataKey="dateLabel"
                       tick={{ fontSize: 12 }}
                     />
-
                     <YAxis
                       tick={{ fontSize: 12 }}
                       tickFormatter={(value) => `₱${value}`}
                     />
-
                     <Tooltip
                       formatter={(value) => [
                         money(value),
                         "Paid sales",
                       ]}
                     />
-
                     <Line
                       type="monotone"
                       dataKey="sales"
@@ -1031,7 +1354,6 @@ function AdminReports() {
             <h2 className="text-lg font-bold text-purple-950">
               Appointment Status — {report.periodLabel}
             </h2>
-
             <p className="mt-1 text-xs text-gray-500">
               Unpaid reservation holds are not included.
             </p>
@@ -1049,24 +1371,20 @@ function AdminReports() {
                       strokeDasharray="3 3"
                       vertical={false}
                     />
-
                     <XAxis
                       dataKey="status"
                       tick={{ fontSize: 11 }}
                     />
-
                     <YAxis
                       allowDecimals={false}
                       tick={{ fontSize: 12 }}
                     />
-
                     <Tooltip
                       formatter={(value) => [
                         value,
                         "Appointments",
                       ]}
                     />
-
                     <Bar
                       dataKey="count"
                       fill="#ec4899"
@@ -1084,7 +1402,6 @@ function AdminReports() {
           <h2 className="text-lg font-bold text-purple-950">
             Most Requested Services — {report.periodLabel}
           </h2>
-
           <p className="mt-1 text-xs text-gray-500">
             Based on actual active appointment records, not forecasts.
           </p>
@@ -1106,26 +1423,22 @@ function AdminReports() {
                     strokeDasharray="3 3"
                     horizontal={false}
                   />
-
                   <XAxis
                     type="number"
                     allowDecimals={false}
                   />
-
                   <YAxis
                     type="category"
                     dataKey="service"
                     width={130}
                     tick={{ fontSize: 12 }}
                   />
-
                   <Tooltip
                     formatter={(value) => [
                       value,
                       "Appointments",
                     ]}
                   />
-
                   <Bar
                     dataKey="count"
                     fill="#7e22ce"
@@ -1143,7 +1456,6 @@ function AdminReports() {
             <h2 className="text-lg font-bold text-purple-950">
               Activity by Date — {report.periodLabel}
             </h2>
-
             <p className="mt-1 text-xs text-gray-500">
               Sales count paid transactions; appointments come from
               booking records.
@@ -1191,19 +1503,15 @@ function AdminReports() {
                       <td className="px-6 py-4 font-medium text-gray-800">
                         {longDate(row.date)}
                       </td>
-
                       <td className="px-4 py-4 text-right font-semibold tabular-nums text-purple-800">
                         {money(row.sales)}
                       </td>
-
                       <td className="px-4 py-4 text-right tabular-nums">
                         {Number(row.transactions || 0)}
                       </td>
-
                       <td className="px-4 py-4 text-right tabular-nums">
                         {Number(row.appointments || 0)}
                       </td>
-
                       <td className="px-6 py-4 text-gray-600">
                         {row.topService || "N/A"}
                       </td>
@@ -1215,9 +1523,394 @@ function AdminReports() {
           </div>
         </section>
 
+        {/* INVENTORY ANALYTICS */}
+        <section
+          className="space-y-5"
+          aria-labelledby="inventory-analytics-heading"
+        >
+          <div className="border-t border-purple-100 pt-7">
+            <p className="text-xs font-semibold uppercase tracking-widest text-purple-500">
+              Inventory Intelligence
+            </p>
+            <h2
+              id="inventory-analytics-heading"
+              className="mt-1 text-2xl font-bold text-purple-950"
+            >
+              Inventory Analytics
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-500">
+              Current stock health and category distribution,
+              with stock movements for {report.periodLabel}.
+              Stock totals are a live snapshot; changing the
+              report period only changes movement history.
+            </p>
+          </div>
+
+          {/* INVENTORY SUMMARY CARDS */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {inventoryCards.map((card) => (
+              <article
+                key={card.label}
+                className={`${panel} p-5`}
+              >
+                <p className="text-sm text-gray-500">
+                  {card.label}
+                </p>
+                <p className="mt-3 text-2xl font-bold tabular-nums text-purple-800">
+                  {loading && !error ? "—" : card.value}
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-gray-500">
+                  {card.note}
+                </p>
+              </article>
+            ))}
+          </div>
+
+          {/* INVENTORY CHARTS */}
+          <div className="grid gap-5 xl:grid-cols-2">
+            {/* STOCK BY CATEGORY */}
+            <article className={`${panel} min-w-0 p-5 md:p-6`}>
+              <h3 className="text-lg font-bold text-purple-950">
+                Stock by Category
+              </h3>
+              <p className="mt-1 text-xs text-gray-500">
+                Units currently available, grouped by product category.
+              </p>
+
+              <div
+                className="mt-5"
+                style={{
+                  height: Math.max(
+                    260,
+                    categoryChartData.length * 43
+                  ),
+                }}
+              >
+                {!categoryChartData.length ? (
+                  <ChartEmpty>
+                    No inventory products have been recorded yet.
+                  </ChartEmpty>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={categoryChartData}
+                      layout="vertical"
+                      margin={{
+                        top: 6,
+                        right: 20,
+                        bottom: 6,
+                        left: 4,
+                      }}
+                    >
+                      <CartesianGrid
+                        stroke="#f0eaf5"
+                        strokeDasharray="3 3"
+                        horizontal={false}
+                      />
+                      <XAxis
+                        type="number"
+                        allowDecimals={false}
+                        tick={{
+                          fontSize: 11,
+                          fill: "#6b7280",
+                        }}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="category"
+                        width={118}
+                        tick={{
+                          fontSize: 11,
+                          fill: "#4b5563",
+                        }}
+                        tickFormatter={(value) =>
+                          value.length > 17
+                            ? `${value.slice(0, 16)}…`
+                            : value
+                        }
+                      />
+                      <Tooltip
+                        formatter={(value) => [
+                          value,
+                          "Units on hand",
+                        ]}
+                      />
+                      <Bar
+                        dataKey="units"
+                        fill="#9333ea"
+                        radius={[0, 6, 6, 0]}
+                        maxBarSize={23}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </article>
+
+            {/* PRODUCT STOCK STATUS */}
+            <article className={`${panel} min-w-0 p-5 md:p-6`}>
+              <h3 className="text-lg font-bold text-purple-950">
+                Product Stock Status
+              </h3>
+              <p className="mt-1 text-xs text-gray-500">
+                Number of products in each stock condition.
+              </p>
+
+              <div className="mt-4 h-[260px]">
+                {!inventory.snapshot.products ? (
+                  <ChartEmpty>
+                    No inventory products have been recorded yet.
+                  </ChartEmpty>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stockStatuses.filter(
+                          (item) => item.value > 0
+                        )}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={65}
+                        outerRadius={96}
+                        paddingAngle={2}
+                        stroke="#fff"
+                        strokeWidth={2}
+                      >
+                        {stockStatuses
+                          .filter((item) => item.value > 0)
+                          .map((item) => (
+                            <Cell
+                              key={item.name}
+                              fill={item.fill}
+                            />
+                          ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value) => [
+                          value,
+                          "Products",
+                        ]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 border-t border-gray-100 pt-4">
+                {stockStatuses.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-2 text-xs text-gray-600"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{
+                        backgroundColor: item.fill,
+                      }}
+                    />
+                    <span>{item.name}</span>
+                    <strong className="tabular-nums text-gray-800">
+                      {item.value}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
+
+          {/* STOCK MOVEMENT CHART */}
+          <article className={`${panel} min-w-0 p-5 md:p-6`}>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-purple-950">
+                  Stock Movement — {report.periodLabel}
+                </h3>
+                <p className="mt-1 text-xs text-gray-500">
+                  Recorded units added and removed each day,
+                  including initial stock entries.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-4 text-xs text-gray-600">
+                <span>
+                  <span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm bg-purple-600" />
+                  Stock In:{" "}
+                  <strong>{inventory.totalStockIn}</strong>
+                </span>
+                <span>
+                  <span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm bg-amber-500" />
+                  Stock Out:{" "}
+                  <strong>{inventory.totalStockOut}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-5 h-72">
+              {!hasStockMovement ? (
+                <ChartEmpty>
+                  No stock movements were recorded during this period.
+                </ChartEmpty>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={inventory.movementTrend}
+                    margin={{
+                      top: 8,
+                      right: 12,
+                      left: 0,
+                      bottom: 2,
+                    }}
+                  >
+                    <CartesianGrid
+                      stroke="#f0eaf5"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="dateLabel"
+                      interval={period === "monthly" ? 4 : 0}
+                      tick={{
+                        fontSize: 11,
+                        fill: "#6b7280",
+                      }}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{
+                        fontSize: 11,
+                        fill: "#6b7280",
+                      }}
+                    />
+                    <Tooltip
+                      formatter={(value, name) => [
+                        value,
+                        name === "stockIn"
+                          ? "Stock In"
+                          : "Stock Out",
+                      ]}
+                    />
+                    <Bar
+                      dataKey="stockIn"
+                      fill="#9333ea"
+                      radius={[5, 5, 0, 0]}
+                      maxBarSize={22}
+                    />
+                    <Bar
+                      dataKey="stockOut"
+                      fill="#f59e0b"
+                      radius={[5, 5, 0, 0]}
+                      maxBarSize={22}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </article>
+
+          {/* LOW STOCK MONITORING TABLE */}
+          <article className={`${panel} overflow-hidden`}>
+            <div className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between md:p-6">
+              <div>
+                <h3 className="text-lg font-bold text-purple-950">
+                  Stock Attention List
+                </h3>
+                <p className="mt-1 text-xs text-gray-500">
+                  Products at or below their reorder level,
+                  including zero stock.
+                </p>
+              </div>
+
+              <input
+                type="search"
+                value={attentionSearch}
+                onChange={(event) =>
+                  setAttentionSearch(event.target.value)
+                }
+                placeholder="Search products…"
+                aria-label="Search products needing stock attention"
+                className="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-purple-400 md:max-w-xs"
+              />
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[620px] text-left text-sm">
+                <thead className="border-y border-gray-100 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-6 py-4">
+                      Product
+                    </th>
+                    <th className="px-4 py-4">
+                      Category
+                    </th>
+                    <th className="px-4 py-4 text-right">
+                      Quantity
+                    </th>
+                    <th className="px-4 py-4 text-right">
+                      Reorder Level
+                    </th>
+                    <th className="px-6 py-4">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-gray-100">
+                  {!attentionItems.length ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-6 py-9 text-center text-gray-500"
+                      >
+                        {inventory.attentionItems.length
+                          ? "No products match your search."
+                          : "All products are currently above their reorder levels."}
+                      </td>
+                    </tr>
+                  ) : (
+                    attentionItems.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-purple-50/40"
+                      >
+                        <td className="px-6 py-4 font-medium text-gray-800">
+                          {item.name}
+                        </td>
+                        <td className="px-4 py-4 text-gray-500">
+                          {item.category}
+                        </td>
+                        <td className="px-4 py-4 text-right tabular-nums">
+                          {item.stock}
+                        </td>
+                        <td className="px-4 py-4 text-right tabular-nums">
+                          {item.alertLevel}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              item.status === "Out of Stock"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
         <p className="text-xs text-gray-500">
-          Report dates use Philippine time. Figures are descriptive
-          records of completed system activity; no forecasting is used.
+          Report dates use Philippine time. Sales, appointments,
+          and stock movements are historical records; inventory
+          quantities and stock status reflect current stock.
+          No forecasting is used.
         </p>
       </div>
 
