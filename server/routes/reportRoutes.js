@@ -1,3 +1,4 @@
+
 const express = require("express")
 const router = express.Router()
 const db = require("../db")
@@ -13,8 +14,13 @@ function manilaToday() {
 
 function isValidDate(value) {
   if (!DATE_PATTERN.test(String(value || ""))) return false
+
   const date = new Date(`${value}T00:00:00Z`)
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+  )
 }
 
 function isValidMonth(value) {
@@ -51,10 +57,14 @@ function resolvePeriod(query) {
   const period = ["daily", "weekly", "monthly"].includes(query.period)
     ? query.period
     : "weekly"
+
   const today = manilaToday()
 
   if (period === "daily") {
-    const startDate = isValidDate(query.date) ? query.date : today
+    const startDate = isValidDate(query.date)
+      ? query.date
+      : today
+
     return {
       period,
       startDate,
@@ -77,7 +87,9 @@ function resolvePeriod(query) {
     const selectedMonth = isValidMonth(query.month)
       ? query.month
       : today.slice(0, 7)
+
     const startDate = `${selectedMonth}-01`
+
     return {
       period,
       startDate,
@@ -85,13 +97,20 @@ function resolvePeriod(query) {
       selectedDate: today,
       selectedWeek: mondayOf(today),
       selectedMonth,
-      label: displayDate(startDate, { month: "long", year: "numeric" }),
+      label: displayDate(startDate, {
+        month: "long",
+        year: "numeric",
+      }),
     }
   }
 
-  const anchor = isValidDate(query.week) ? query.week : today
+  const anchor = isValidDate(query.week)
+    ? query.week
+    : today
+
   const startDate = mondayOf(anchor)
   const lastDate = addDays(startDate, 6)
+
   return {
     period,
     startDate,
@@ -113,39 +132,69 @@ function resolvePeriod(query) {
 router.get("/", async (req, res) => {
   const selected = resolvePeriod(req.query)
   const { startDate, endDate } = selected
+
   let connection
 
   try {
     connection = await promiseDb.getConnection()
+
     await connection.query("SET time_zone = '+08:00'")
 
     const activeAppointment = `
-      status NOT IN ('Declined', 'Cancelled', 'Rejected', 'Awaiting Payment')
+      status NOT IN (
+        'Declined',
+        'Cancelled',
+        'Rejected',
+        'Awaiting Payment'
+      )
     `
+
+    // ====================================
+    // SALES OVERVIEW
+    // ====================================
 
     const [overviewRows] = await connection.query(`
       SELECT
         COALESCE(SUM(CASE
           WHEN transaction_date >= CURDATE()
-           AND transaction_date < DATE_ADD(CURDATE(), INTERVAL 1 DAY)
-          THEN amount ELSE 0 END), 0) AS todaySales,
-        COALESCE(SUM(CASE
-          WHEN transaction_date >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
            AND transaction_date < DATE_ADD(
-             DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY),
+             CURDATE(),
+             INTERVAL 1 DAY
+           )
+          THEN amount ELSE 0 END), 0) AS todaySales,
+
+        COALESCE(SUM(CASE
+          WHEN transaction_date >= DATE_SUB(
+            CURDATE(),
+            INTERVAL WEEKDAY(CURDATE()) DAY
+          )
+           AND transaction_date < DATE_ADD(
+             DATE_SUB(
+               CURDATE(),
+               INTERVAL WEEKDAY(CURDATE()) DAY
+             ),
              INTERVAL 7 DAY
            )
           THEN amount ELSE 0 END), 0) AS weekSales,
+
         COALESCE(SUM(CASE
-          WHEN transaction_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+          WHEN transaction_date >= DATE_FORMAT(
+            CURDATE(),
+            '%Y-%m-01'
+          )
            AND transaction_date < DATE_ADD(
              DATE_FORMAT(CURDATE(), '%Y-%m-01'),
              INTERVAL 1 MONTH
            )
           THEN amount ELSE 0 END), 0) AS monthSales
+
       FROM transactions
       WHERE status = 'Paid'
     `)
+
+    // ====================================
+    // SALES FOR SELECTED PERIOD
+    // ====================================
 
     const [salesRows] = await connection.query(
       `SELECT
@@ -156,79 +205,130 @@ router.get("/", async (req, res) => {
        WHERE status = 'Paid'
          AND transaction_date >= ?
          AND transaction_date < ?`,
-      [startDate, endDate],
+      [startDate, endDate]
     )
 
+    // ====================================
+    // APPOINTMENTS FOR SELECTED PERIOD
+    // ====================================
+
     const [appointmentRows] = await connection.query(
-      `SELECT COUNT(*) AS appointments
+      `SELECT
+         COUNT(*) AS appointments
        FROM appointments
        WHERE ${activeAppointment}
          AND appointment_date >= ?
          AND appointment_date < ?`,
-      [startDate, endDate],
+      [startDate, endDate]
     )
+
+    // ====================================
+    // DAILY REPORT SUMMARY
+    // ====================================
 
     const [summary] = await connection.query(
       `WITH RECURSIVE days AS (
          SELECT DATE(?) AS report_date
+
          UNION ALL
-         SELECT DATE_ADD(report_date, INTERVAL 1 DAY)
+
+         SELECT DATE_ADD(
+           report_date,
+           INTERVAL 1 DAY
+         )
          FROM days
-         WHERE report_date < DATE_SUB(DATE(?), INTERVAL 1 DAY)
+         WHERE report_date < DATE_SUB(
+           DATE(?),
+           INTERVAL 1 DAY
+         )
        )
+
        SELECT
-         DATE_FORMAT(days.report_date, '%Y-%m-%d') AS date,
+         DATE_FORMAT(
+           days.report_date,
+           '%Y-%m-%d'
+         ) AS date,
+
          COALESCE(s.sales, 0) AS sales,
          COALESCE(s.transactions, 0) AS transactions,
          COALESCE(a.appointments, 0) AS appointments,
+
          COALESCE((
            SELECT a2.service
            FROM appointments a2
            WHERE a2.appointment_date = days.report_date
              AND a2.status NOT IN (
-               'Declined', 'Cancelled', 'Rejected', 'Awaiting Payment'
+               'Declined',
+               'Cancelled',
+               'Rejected',
+               'Awaiting Payment'
              )
            GROUP BY a2.service
            ORDER BY COUNT(*) DESC, a2.service
            LIMIT 1
          ), 'N/A') AS topService
+
        FROM days
+
        LEFT JOIN (
-         SELECT DATE(transaction_date) AS report_date,
-                SUM(amount) AS sales,
-                COUNT(*) AS transactions
+         SELECT
+           DATE(transaction_date) AS report_date,
+           SUM(amount) AS sales,
+           COUNT(*) AS transactions
          FROM transactions
          WHERE status = 'Paid'
            AND transaction_date >= ?
            AND transaction_date < ?
          GROUP BY DATE(transaction_date)
        ) s ON s.report_date = days.report_date
+
        LEFT JOIN (
-         SELECT appointment_date AS report_date,
-                COUNT(*) AS appointments
+         SELECT
+           appointment_date AS report_date,
+           COUNT(*) AS appointments
          FROM appointments
          WHERE ${activeAppointment}
            AND appointment_date >= ?
            AND appointment_date < ?
          GROUP BY appointment_date
        ) a ON a.report_date = days.report_date
+
        ORDER BY days.report_date`,
-      [startDate, endDate, startDate, endDate, startDate, endDate],
+      [
+        startDate,
+        endDate,
+        startDate,
+        endDate,
+        startDate,
+        endDate,
+      ]
     )
 
+    // ====================================
+    // APPOINTMENT STATUS ANALYTICS
+    // ====================================
+
     const [appointmentStatus] = await connection.query(
-      `SELECT status, COUNT(*) AS count
+      `SELECT
+         status,
+         COUNT(*) AS count
        FROM appointments
        WHERE appointment_date >= ?
          AND appointment_date < ?
          AND status <> 'Awaiting Payment'
        GROUP BY status
        ORDER BY count DESC, status`,
-      [startDate, endDate],
+      [startDate, endDate]
     )
 
+    // ====================================
+    // MOST REQUESTED SERVICES
+    // ====================================
+
     const [mostRequestedServices] = await connection.query(
-      `SELECT service, COUNT(*) AS count
+      `SELECT
+         service,
+         COUNT(*) AS count
        FROM appointments
        WHERE ${activeAppointment}
          AND appointment_date >= ?
@@ -236,59 +336,349 @@ router.get("/", async (req, res) => {
        GROUP BY service
        ORDER BY count DESC, service
        LIMIT 5`,
-      [startDate, endDate],
+      [startDate, endDate]
     )
 
-    const todaySales = Number(overviewRows[0]?.todaySales || 0)
-    const weekSales = Number(overviewRows[0]?.weekSales || 0)
-    const monthSales = Number(overviewRows[0]?.monthSales || 0)
+    // ====================================
+    // INVENTORY ANALYTICS
+    // ====================================
+
+    // Current inventory snapshot.
+    // These values are NOT restricted
+    // by the selected reporting period.
+
+    const [inventoryOverviewRows] = await connection.query(`
+      SELECT
+        COUNT(*) AS products,
+
+        COALESCE(
+          SUM(stock),
+          0
+        ) AS unitsOnHand,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN stock = 0 THEN 1
+              ELSE 0
+            END
+          ),
+          0
+        ) AS outOfStock,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN stock > 0
+               AND stock <= alertLevel
+              THEN 1
+              ELSE 0
+            END
+          ),
+          0
+        ) AS lowStock,
+
+        COALESCE(
+          SUM(
+            CASE
+              WHEN stock > alertLevel
+              THEN 1
+              ELSE 0
+            END
+          ),
+          0
+        ) AS inStock
+
+      FROM inventory
+    `)
+
+    // ====================================
+    // STOCK BY CATEGORY
+    // ====================================
+
+    const [inventoryCategoryRows] = await connection.query(`
+      SELECT
+        category,
+        COUNT(*) AS products,
+        COALESCE(SUM(stock), 0) AS units
+
+      FROM inventory
+
+      GROUP BY category
+
+      ORDER BY
+        units DESC,
+        category ASC
+    `)
+
+    // ====================================
+    // STOCK MOVEMENT HISTORY
+    // ====================================
+
+    // Uses the existing inventory_movements
+    // table and selected reporting period.
+
+    const [inventoryMovementRows] = await connection.query(
+      `SELECT
+         DATE_FORMAT(
+           recorded_at,
+           '%Y-%m-%d'
+         ) AS date,
+
+         COALESCE(
+           SUM(
+             CASE
+               WHEN quantity_change > 0
+               THEN quantity_change
+               ELSE 0
+             END
+           ),
+           0
+         ) AS stockIn,
+
+         COALESCE(
+           SUM(
+             CASE
+               WHEN quantity_change < 0
+               THEN -quantity_change
+               ELSE 0
+             END
+           ),
+           0
+         ) AS stockOut
+
+       FROM inventory_movements
+
+       WHERE recorded_at >= ?
+         AND recorded_at < ?
+
+       GROUP BY DATE(recorded_at)
+
+       ORDER BY DATE(recorded_at)`,
+      [startDate, endDate]
+    )
+
+    // ====================================
+    // LOW STOCK / OUT OF STOCK PRODUCTS
+    // ====================================
+
+    const [inventoryAttentionRows] = await connection.query(`
+      SELECT
+        id,
+        name,
+        category,
+        stock,
+        alertLevel,
+
+        CASE
+          WHEN stock = 0
+          THEN 'Out of Stock'
+          ELSE 'Low Stock'
+        END AS status
+
+      FROM inventory
+
+      WHERE stock <= alertLevel
+
+      ORDER BY
+        CASE
+          WHEN stock = 0 THEN 0
+          ELSE 1
+        END,
+        stock ASC,
+        name ASC
+    `)
+
+    // ====================================
+    // FORMAT INVENTORY DATA
+    // ====================================
+
+    const inventoryOverview =
+      inventoryOverviewRows[0] || {}
+
+    const movementByDate = new Map(
+      inventoryMovementRows.map((row) => [
+        String(row.date),
+        row,
+      ])
+    )
+
+    const inventoryMovementTrend = summary.map((row) => {
+      const movement =
+        movementByDate.get(String(row.date)) || {}
+
+      return {
+        date: String(row.date),
+        stockIn: Number(movement.stockIn || 0),
+        stockOut: Number(movement.stockOut || 0),
+      }
+    })
+
+    const totalStockIn = inventoryMovementTrend.reduce(
+      (total, row) => total + row.stockIn,
+      0
+    )
+
+    const totalStockOut = inventoryMovementTrend.reduce(
+      (total, row) => total + row.stockOut,
+      0
+    )
+
+    // ====================================
+    // FORMAT SALES DATA
+    // ====================================
+
+    const todaySales = Number(
+      overviewRows[0]?.todaySales || 0
+    )
+
+    const weekSales = Number(
+      overviewRows[0]?.weekSales || 0
+    )
+
+    const monthSales = Number(
+      overviewRows[0]?.monthSales || 0
+    )
+
+    // ====================================
+    // API RESPONSE
+    // ====================================
 
     res.json({
       period: selected.period,
       periodLabel: selected.label,
       periodStart: startDate,
       periodEnd: addDays(endDate, -1),
+
       selectedDate: selected.selectedDate,
       selectedWeek: selected.selectedWeek,
       selectedMonth: selected.selectedMonth,
 
+      // SALES
+
       sales: Number(salesRows[0]?.sales || 0),
-      transactions: Number(salesRows[0]?.transactions || 0),
-      averageSale: Number(salesRows[0]?.averageSale || 0),
-      appointments: Number(appointmentRows[0]?.appointments || 0),
+
+      transactions: Number(
+        salesRows[0]?.transactions || 0
+      ),
+
+      averageSale: Number(
+        salesRows[0]?.averageSale || 0
+      ),
+
+      appointments: Number(
+        appointmentRows[0]?.appointments || 0
+      ),
 
       todaySales,
       weekSales,
       monthSales,
+
       dailySales: todaySales,
       weeklySales: weekSales,
       monthlySales: monthSales,
+
+      // ====================================
+      // INVENTORY ANALYTICS RESPONSE
+      // ====================================
+
+      inventoryAnalytics: {
+        snapshot: {
+          products: Number(
+            inventoryOverview.products || 0
+          ),
+
+          unitsOnHand: Number(
+            inventoryOverview.unitsOnHand || 0
+          ),
+
+          inStock: Number(
+            inventoryOverview.inStock || 0
+          ),
+
+          lowStock: Number(
+            inventoryOverview.lowStock || 0
+          ),
+
+          outOfStock: Number(
+            inventoryOverview.outOfStock || 0
+          ),
+
+          needsAttention:
+            Number(inventoryOverview.lowStock || 0) +
+            Number(inventoryOverview.outOfStock || 0),
+        },
+
+        categoryStock: inventoryCategoryRows.map(
+          (row) => ({
+            category:
+              row.category || "Uncategorized",
+
+            products: Number(row.products || 0),
+
+            units: Number(row.units || 0),
+          })
+        ),
+
+        movementTrend: inventoryMovementTrend,
+
+        totalStockIn,
+        totalStockOut,
+
+        attentionItems: inventoryAttentionRows.map(
+          (row) => ({
+            id: row.id,
+            name: row.name,
+            category: row.category,
+            stock: Number(row.stock || 0),
+            alertLevel: Number(row.alertLevel || 0),
+            status: row.status,
+          })
+        ),
+      },
+
+      // ====================================
+      // EXISTING SALES / APPOINTMENT REPORTS
+      // ====================================
 
       salesTrend: summary.map((row) => ({
         date: row.date,
         sales: Number(row.sales || 0),
       })),
-      appointmentStatus: appointmentStatus.map((row) => ({
-        ...row,
-        count: Number(row.count || 0),
-      })),
-      mostRequestedServices: mostRequestedServices.map((row) => ({
-        ...row,
-        count: Number(row.count || 0),
-      })),
+
+      appointmentStatus: appointmentStatus.map(
+        (row) => ({
+          ...row,
+          count: Number(row.count || 0),
+        })
+      ),
+
+      mostRequestedServices:
+        mostRequestedServices.map((row) => ({
+          ...row,
+          count: Number(row.count || 0),
+        })),
+
       summary: summary
         .slice()
         .reverse()
         .map((row) => ({
           ...row,
           sales: Number(row.sales || 0),
-          transactions: Number(row.transactions || 0),
-          appointments: Number(row.appointments || 0),
+          transactions: Number(
+            row.transactions || 0
+          ),
+          appointments: Number(
+            row.appointments || 0
+          ),
         })),
     })
   } catch (error) {
     console.error("Reports error:", error)
-    res.status(500).json({ error: "Unable to generate reports." })
+
+    res.status(500).json({
+      error: "Unable to generate reports.",
+    })
   } finally {
     connection?.release()
   }
