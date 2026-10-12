@@ -452,9 +452,9 @@ router.get("/", async (req, res) => {
        WHERE recorded_at >= ?
          AND recorded_at < ?
 
-       GROUP BY DATE(recorded_at)
+       GROUP BY DATE_FORMAT(recorded_at, '%Y-%m-%d')
 
-       ORDER BY DATE(recorded_at)`,
+        ORDER BY date`,
       [startDate, endDate]
     )
 
