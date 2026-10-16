@@ -3,16 +3,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { API_URL, apiFetch } from "../lib/sessionApi";
 
 const inputClass =
-  "w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-purple-400";
+  "w-full rounded-xl border border-purple-100 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-100";
 
 const buttonClass =
-  "rounded-xl bg-purple-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-50";
+  "rounded-xl bg-purple-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-purple-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-500 disabled:cursor-not-allowed disabled:opacity-50";
 
 const secondaryButtonClass =
-  "rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50";
+  "rounded-xl border border-purple-200 bg-white px-4 py-2.5 text-sm font-semibold text-purple-700 transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50";
 
 const panelClass =
-  "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm";
+  "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm sm:p-6";
 
 const emptyProduct = {
   name: "",
@@ -113,6 +113,22 @@ function movementType(movement) {
 
   return change > 0 ? "Stock In" : "Stock Out";
 }
+
+const statusBadgeClass = (status) =>
+  status === "In Stock"
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+    : status === "Low Stock"
+    ? "bg-amber-50 text-amber-700 ring-amber-100"
+    : "bg-rose-50 text-rose-700 ring-rose-100";
+
+const movementBadgeClass = (type) =>
+  type === "Stock In"
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+    : type === "Damaged" || type === "Return to Supplier"
+    ? "bg-rose-50 text-rose-700 ring-rose-100"
+    : type === "Adjustment"
+    ? "bg-purple-50 text-purple-700 ring-purple-100"
+    : "bg-amber-50 text-amber-700 ring-amber-100";
 
 function AdminInventory() {
   const [products, setProducts] = useState([]);
@@ -598,6 +614,19 @@ function AdminInventory() {
     }
   }
 
+  const enteredQuantity = quantity.trim() === "" ? null : Number(quantity);
+  const previewChange = !adjustProduct || enteredQuantity === null ||
+    !Number.isSafeInteger(enteredQuantity) || enteredQuantity < 0
+    ? null
+    : adjustType === "Adjustment"
+    ? enteredQuantity - Number(adjustProduct.stock)
+    : adjustType === "Stock In"
+    ? enteredQuantity
+    : -enteredQuantity;
+  const previewStock = previewChange === null
+    ? null
+    : Number(adjustProduct.stock) + previewChange;
+
   const filteredProducts = products.filter((product) => {
     const term = search.trim().toLowerCase();
 
@@ -743,19 +772,16 @@ function AdminInventory() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ["Product Types", products.length],
-          ["Available Products", availableProducts],
-          ["Total Quantity Available", totalQuantity],
-          ["Needs Attention", needsAttention],
-        ].map(([label, value]) => (
-          <div key={label} className={panelClass}>
-            <p className="text-sm text-gray-500">
-              {label}
-            </p>
-
-            <p className="mt-3 text-3xl font-bold text-purple-800">
-              {value}
-            </p>
+          ["Product Types", products.length, "Products registered", "text-purple-800", "bg-purple-50"],
+          ["Available Products", availableProducts, "With stock on hand", "text-emerald-700", "bg-emerald-50"],
+          ["Total Quantity Available", totalQuantity, "Units across all products", "text-purple-800", "bg-purple-50"],
+          ["Needs Attention", needsAttention, "Low or out of stock", "text-amber-700", "bg-amber-50"],
+        ].map(([label, value, detail, color, background]) => (
+          <div key={label} className={`${panelClass} relative overflow-hidden`}>
+            <span className={`absolute right-5 top-5 h-9 w-9 rounded-xl ${background}`} aria-hidden="true" />
+            <p className="relative text-sm font-medium text-slate-500">{label}</p>
+            <p className={`relative mt-3 text-3xl font-bold ${color}`}>{value}</p>
+            <p className="relative mt-2 text-xs text-slate-400">{detail}</p>
           </div>
         ))}
       </div>
@@ -882,7 +908,7 @@ function AdminInventory() {
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            className="rounded-lg bg-purple-50 px-3 py-2 text-purple-700"
+                            className="rounded-lg bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition hover:bg-purple-100"
                             onClick={() =>
                               startEditCategory(category)
                             }
@@ -1129,9 +1155,12 @@ function AdminInventory() {
       {/* PRODUCT LIST */}
       <section className={panelClass}>
         <div className="mb-4">
-          <h2 className="text-xl font-bold text-purple-950">
-            Product List
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-bold text-purple-950">Product List</h2>
+            <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
+              {products.length} total products
+            </span>
+          </div>
 
           <p className="mt-1 text-sm text-gray-500">
             {filteredProducts.length} of {products.length} products
@@ -1205,7 +1234,7 @@ function AdminInventory() {
                   className="border-b"
                 >
                   <td className="p-3">
-                    <p className="font-semibold">
+                    <p className="font-semibold text-slate-800">
                       {product.name}
                     </p>
 
@@ -1214,7 +1243,7 @@ function AdminInventory() {
                     </p>
                   </td>
 
-                  <td className="p-3">
+                  <td className="p-3 font-semibold tabular-nums text-slate-800">
                     {product.stock}
                   </td>
 
@@ -1227,7 +1256,9 @@ function AdminInventory() {
                   </td>
 
                   <td className="p-3">
-                    {stockStatus(product)}
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${statusBadgeClass(stockStatus(product))}`}>
+                      {stockStatus(product)}
+                    </span>
                   </td>
 
                   {canManage && (
@@ -1235,7 +1266,7 @@ function AdminInventory() {
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          className="rounded-lg bg-green-50 px-3 py-2 text-green-700"
+                          className="rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
                           disabled={busy}
                           onClick={() =>
                             openAdjustment(
@@ -1260,7 +1291,7 @@ function AdminInventory() {
 
                         <button
                           type="button"
-                          className="rounded-lg px-3 py-2 text-red-600"
+                          className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-600 transition hover:bg-rose-100"
                           disabled={busy}
                           onClick={() =>
                             deleteProduct(product)
@@ -1290,24 +1321,35 @@ function AdminInventory() {
           ref={adjustmentRef}
           className={`${panelClass} scroll-mt-6`}
         >
-          <h2 className="text-xl font-bold text-purple-950">
-            Stock Adjustment
-          </h2>
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-purple-500">Inventory action</p>
+              <h2 className="mt-1 text-xl font-bold text-purple-950">Record Stock Movement</h2>
+              <p className="mt-1 text-sm text-slate-500">Every saved change is recorded in movement history.</p>
+            </div>
+            <button type="button" className={secondaryButtonClass} onClick={() => setAdjustProduct(null)} disabled={busy}>
+              Back to Product List
+            </button>
+          </div>
 
-          <p className="mb-4 mt-2 text-sm text-gray-500">
-            Product:{" "}
-            <strong>{adjustProduct.name}</strong>
-            {" · "}
-            Current Stock:{" "}
-            <strong>{adjustProduct.stock}</strong>
-          </p>
+          <div className="mb-5 grid gap-3 rounded-2xl border border-purple-100 bg-purple-50/60 p-4 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Selected product</p>
+              <p className="mt-1 font-semibold text-purple-950">{adjustProduct.name}</p>
+              <p className="text-xs text-slate-500">{adjustProduct.category}</p>
+            </div>
+            <div className="sm:text-right">
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Current stock</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-purple-900">{adjustProduct.stock} <span className="text-xs font-medium text-slate-500">units</span></p>
+            </div>
+          </div>
 
           <form
             onSubmit={submitAdjustment}
             className="space-y-4"
           >
             <label className="block">
-              <span className="mb-2 block text-sm font-medium">
+              <span className="mb-2 block text-sm font-medium text-slate-700">
                 Movement Type
               </span>
 
@@ -1326,6 +1368,13 @@ function AdminInventory() {
                 <option value="Return to Supplier">Return to Supplier</option>
                 <option value="Adjustment">Adjustment (Correct Stock Count)</option>
               </select>
+              <p className="mt-2 text-xs text-slate-500">
+                {adjustType === "Adjustment"
+                  ? "Enter the actual counted stock. The system calculates the difference."
+                  : adjustType === "Stock In"
+                  ? "Adds received units to the current stock."
+                  : "Deducts units from the current stock."}
+              </p>
             </label>
 
             <label className="block">
@@ -1345,6 +1394,18 @@ function AdminInventory() {
                 }
               />
             </label>
+
+            {previewChange !== null && (
+              <div className={`rounded-2xl border p-4 ${previewStock < 0 ? "border-rose-200 bg-rose-50" : "border-purple-100 bg-purple-50/60"}`}>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-purple-600">Stock change preview</p>
+                <div className="grid grid-cols-3 items-center gap-3 text-center">
+                  <div><p className="text-xs text-slate-500">Current</p><p className="mt-1 text-xl font-bold tabular-nums text-slate-800">{adjustProduct.stock}</p></div>
+                  <div><p className="text-xs text-slate-500">Change</p><p className={`mt-1 text-xl font-bold tabular-nums ${previewChange > 0 ? "text-emerald-700" : previewChange < 0 ? "text-rose-600" : "text-slate-700"}`}>{previewChange > 0 ? "+" : ""}{previewChange}</p></div>
+                  <div><p className="text-xs text-slate-500">New stock</p><p className={`mt-1 text-xl font-bold tabular-nums ${previewStock < 0 ? "text-rose-600" : "text-purple-800"}`}>{previewStock}</p></div>
+                </div>
+                {previewStock < 0 && <p className="mt-3 text-sm text-rose-700">Not enough stock for this movement.</p>}
+              </div>
+            )}
 
             <label className="block">
               <span className="mb-2 block text-sm font-medium">
@@ -1376,11 +1437,9 @@ function AdminInventory() {
               <button
                 type="submit"
                 className={buttonClass}
-                disabled={busy}
+                disabled={busy || previewStock === null || previewStock < 0 || previewChange === 0}
               >
-                {busy
-                  ? "Saving..."
-                  : "Save Movement"}
+                {busy ? "Saving..." : "Save Movement"}
               </button>
 
               <button
@@ -1406,12 +1465,11 @@ function AdminInventory() {
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
-            Review stock additions, deductions,
-            and damaged items.
+            Audit stock changes, corrections, returns, and who recorded each movement.
           </p>
         </div>
 
-        <div className="mb-5 grid gap-3 md:grid-cols-4">
+        <div className="mb-5 grid gap-3 rounded-2xl border border-purple-100 bg-purple-50/40 p-4 md:grid-cols-2 xl:grid-cols-4">
           <label>
             <span className="mb-1 block text-sm">
               Month
@@ -1491,7 +1549,7 @@ function AdminInventory() {
 
         <button
           type="button"
-          className="mb-4 rounded-xl border px-4 py-2 text-sm"
+          className="mb-4 rounded-xl border border-purple-200 bg-white px-4 py-2 text-sm font-medium text-purple-700 transition hover:bg-purple-50"
           onClick={() => {
             setHistoryMonth("");
             setHistoryDate("");
@@ -1503,7 +1561,7 @@ function AdminInventory() {
         </button>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[750px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-purple-50 text-purple-950">
               <tr>
                 <th className="p-3">Date</th>
@@ -1539,29 +1597,17 @@ function AdminInventory() {
                     </td>
 
                     <td className="p-3">
-                      <span
-                        className={
-                          type === "Stock In"
-                            ? "font-semibold text-green-700"
-                            : type === "Damaged" ||
-                              type === "Return to Supplier"
-                            ? "font-semibold text-red-600"
-                            : type === "Adjustment"
-                            ? "font-semibold text-purple-700"
-                            : "font-semibold text-amber-700"
-                        }
-                      >
+                      <span className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold ring-1 ${movementBadgeClass(type)}`}>
                         {type}
                       </span>
                     </td>
 
-                    <td className="p-3 font-semibold">
-                      {change > 0 ? "+" : ""}
-                      {change}
+                    <td className={`p-3 font-bold tabular-nums ${change > 0 ? "text-emerald-700" : change < 0 ? "text-rose-600" : "text-slate-700"}`}>
+                      {change > 0 ? "+" : ""}{change}
                     </td>
 
-                    <td className="p-3">{movement.reason}</td>
-                    <td className="p-3">{movement.performed_by_name || "Not recorded"}</td>
+                    <td className="max-w-[340px] break-words p-3 text-slate-600" title={movement.reason}>{movement.reason}</td>
+                    <td className="p-3"><span className="inline-flex rounded-lg bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">{movement.performed_by_name || "Not recorded"}</span></td>
                   </tr>
                 );
               })}
@@ -1576,10 +1622,10 @@ function AdminInventory() {
             )}
         </div>
 
-        <p className="mt-4 text-xs text-gray-500">
-          Showing {filteredMovements.length} of{" "}
-          {movements.length} movement records.
-        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+          <p>Showing <strong className="text-purple-800">{filteredMovements.length}</strong> of {movements.length} movement records.</p>
+          <p>Inventory changes are recorded for audit purposes.</p>
+        </div>
       </section>
     </div>
   );
