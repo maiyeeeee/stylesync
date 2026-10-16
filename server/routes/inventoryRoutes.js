@@ -145,6 +145,200 @@ function sendInventoryError(res, error) {
   });
 }
 
+/* ====================================
+   INVENTORY CATEGORY CRUD
+   ==================================== */
+
+function categoryName(value) {
+  const name = String(value ?? "").trim();
+
+  if (!name || name.length > 100) {
+    throw problem(
+      "Category name is required and must not exceed 100 characters."
+    );
+  }
+
+  return name;
+}
+
+// GET /inventory/categories
+router.get("/categories", async (req, res) => {
+  try {
+    const [rows] = await promiseDb.query(`
+      SELECT
+        c.category_id,
+        c.name,
+        COUNT(i.id) AS product_count
+      FROM inventory_categories c
+      LEFT JOIN inventory i
+        ON TRIM(i.category) = c.name
+      GROUP BY c.category_id, c.name
+      ORDER BY c.name
+    `);
+
+    res.json(rows);
+  } catch (error) {
+    sendInventoryError(res, error);
+  }
+});
+
+// POST /inventory/categories
+router.post("/categories", async (req, res) => {
+  try {
+    const name = categoryName(req.body?.name);
+
+    const [result] = await promiseDb.query(
+      `INSERT INTO inventory_categories (name)
+       VALUES (?)`,
+      [name]
+    );
+
+    res.status(201).json({
+      message: "Category added successfully.",
+      category_id: result.insertId,
+      name,
+    });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        error: "This category already exists.",
+      });
+    }
+
+    sendInventoryError(res, error);
+  }
+});
+
+// PUT /inventory/categories/:id
+router.put("/categories/:id", async (req, res) => {
+  let connection;
+  let inTransaction = false;
+
+  try {
+    const id = positiveId(req.params.id, "Category");
+    const name = categoryName(req.body?.name);
+
+    connection = await promiseDb.getConnection();
+    await connection.beginTransaction();
+    inTransaction = true;
+
+    const [existing] = await connection.query(
+      `SELECT name
+       FROM inventory_categories
+       WHERE category_id = ?
+       FOR UPDATE`,
+      [id]
+    );
+
+    if (!existing.length) {
+      throw problem("Category not found.", 404);
+    }
+
+    const oldName = existing[0].name;
+
+    await connection.query(
+      `UPDATE inventory_categories
+       SET name = ?
+       WHERE category_id = ?`,
+      [name, id]
+    );
+
+    // Keep existing inventory.category text
+    // compatible with the new category table.
+    await connection.query(
+      `UPDATE inventory
+       SET category = ?
+       WHERE TRIM(category) = ?`,
+      [name, oldName]
+    );
+
+    await connection.commit();
+    inTransaction = false;
+
+    res.json({
+      message: "Category updated successfully.",
+      category_id: id,
+      name,
+    });
+  } catch (error) {
+    if (connection && inTransaction) {
+      await connection.rollback().catch(() => {});
+    }
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        error: "This category name already exists.",
+      });
+    }
+
+    sendInventoryError(res, error);
+  } finally {
+    connection?.release();
+  }
+});
+
+// DELETE /inventory/categories/:id
+router.delete("/categories/:id", async (req, res) => {
+  let connection;
+  let inTransaction = false;
+
+  try {
+    const id = positiveId(req.params.id, "Category");
+
+    connection = await promiseDb.getConnection();
+    await connection.beginTransaction();
+    inTransaction = true;
+
+    const [categories] = await connection.query(
+      `SELECT name
+       FROM inventory_categories
+       WHERE category_id = ?
+       FOR UPDATE`,
+      [id]
+    );
+
+    if (!categories.length) {
+      throw problem("Category not found.", 404);
+    }
+
+    const [usage] = await connection.query(
+      `SELECT COUNT(*) AS total
+       FROM inventory
+       WHERE TRIM(category) = ?`,
+      [categories[0].name]
+    );
+
+    if (Number(usage[0].total) > 0) {
+      throw problem(
+        "This category is used by products. Reassign those products before deleting it.",
+        409
+      );
+    }
+
+    await connection.query(
+      `DELETE FROM inventory_categories
+       WHERE category_id = ?`,
+      [id]
+    );
+
+    await connection.commit();
+    inTransaction = false;
+
+    res.json({
+      message: "Category deleted successfully.",
+    });
+  } catch (error) {
+    if (connection && inTransaction) {
+      await connection.rollback().catch(() => {});
+    }
+
+    sendInventoryError(res, error);
+  } finally {
+    connection?.release();
+  }
+});
+
+
 // ====================================
 // GET INVENTORY MOVEMENT HISTORY
 // ====================================
