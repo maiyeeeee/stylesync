@@ -1,32 +1,24 @@
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
-
 const promiseDb = db.promise();
-
 // ====================================
 // HELPERS
 // ====================================
-
 function problem(message, status = 400) {
   const error = new Error(message);
   error.status = status;
   return error;
 }
-
 function positiveId(value, label = "Product") {
   const id = Number(value);
-
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw problem(`${label} is invalid.`);
   }
-
   return id;
 }
-
 function wholeNumber(value, label) {
   const number = Number(value);
-
   if (
     value === null ||
     value === undefined ||
@@ -38,57 +30,45 @@ function wholeNumber(value, label) {
       `${label} must be a non-negative whole number.`
     );
   }
-
   return number;
 }
-
 function priceValue(value) {
   const text = String(value ?? "").trim();
-
   if (!/^\d+(\.\d{1,2})?$/.test(text)) {
     throw problem(
       "Price must be a non-negative amount with up to two decimals."
     );
   }
-
   const price = Number(text);
-
   if (!Number.isFinite(price) || price > 99999999.99) {
     throw problem("Price is outside the allowed range.");
   }
-
   return price.toFixed(2);
 }
-
 function inventoryStatus(stock, alertLevel) {
   if (stock === 0) return "Out of Stock";
   if (stock <= alertLevel) return "Low Stock";
   return "In Stock";
 }
-
 function productPayload(body = {}) {
   const name = String(body.name || "").trim();
   const category = String(body.category || "").trim();
-
   if (!name || name.length > 150) {
     throw problem(
       "Product name is required and must not exceed 150 characters."
     );
   }
-
   if (!category || category.length > 100) {
     throw problem(
       "Category is required and must not exceed 100 characters."
     );
   }
-
   const stock = wholeNumber(body.stock, "Stock");
   const alertLevel = wholeNumber(
     body.alertLevel,
     "Reorder level"
   );
   const price = priceValue(body.price);
-
   return {
     name,
     category,
@@ -98,11 +78,9 @@ function productPayload(body = {}) {
     status: inventoryStatus(stock, alertLevel),
   };
 }
-
 // ====================================
 // DATA QUALITY: DUPLICATE PREVENTION
 // ====================================
-
 async function checkDuplicateProduct(
   name,
   excludeId = 0,
@@ -118,7 +96,6 @@ async function checkDuplicateProduct(
     `,
     [name, excludeId]
   );
-
   if (rows.length > 0) {
     throw problem(
       "This inventory product already exists. Use Stock In to add more quantity.",
@@ -126,7 +103,6 @@ async function checkDuplicateProduct(
     );
   }
 }
-
 function sendInventoryError(res, error) {
   if (error.code === "ER_DUP_ENTRY") {
     return res.status(409).json({
@@ -134,9 +110,7 @@ function sendInventoryError(res, error) {
         "This inventory product already exists.",
     });
   }
-
   console.error("Inventory operation failed:", error);
-
   return res.status(error.status || 500).json({
     error:
       error.status && error.status < 500
@@ -144,23 +118,18 @@ function sendInventoryError(res, error) {
         : "Unable to complete the inventory operation.",
   });
 }
-
 /* ====================================
    INVENTORY CATEGORY CRUD
    ==================================== */
-
 function categoryName(value) {
   const name = String(value ?? "").trim();
-
   if (!name || name.length > 100) {
     throw problem(
       "Category name is required and must not exceed 100 characters."
     );
   }
-
   return name;
 }
-
 // GET /inventory/categories
 router.get("/categories", async (req, res) => {
   try {
@@ -175,24 +144,20 @@ router.get("/categories", async (req, res) => {
       GROUP BY c.category_id, c.name
       ORDER BY c.name
     `);
-
     res.json(rows);
   } catch (error) {
     sendInventoryError(res, error);
   }
 });
-
 // POST /inventory/categories
 router.post("/categories", async (req, res) => {
   try {
     const name = categoryName(req.body?.name);
-
     const [result] = await promiseDb.query(
       `INSERT INTO inventory_categories (name)
        VALUES (?)`,
       [name]
     );
-
     res.status(201).json({
       message: "Category added successfully.",
       category_id: result.insertId,
@@ -204,24 +169,19 @@ router.post("/categories", async (req, res) => {
         error: "This category already exists.",
       });
     }
-
     sendInventoryError(res, error);
   }
 });
-
 // PUT /inventory/categories/:id
 router.put("/categories/:id", async (req, res) => {
   let connection;
   let inTransaction = false;
-
   try {
     const id = positiveId(req.params.id, "Category");
     const name = categoryName(req.body?.name);
-
     connection = await promiseDb.getConnection();
     await connection.beginTransaction();
     inTransaction = true;
-
     const [existing] = await connection.query(
       `SELECT name
        FROM inventory_categories
@@ -229,20 +189,16 @@ router.put("/categories/:id", async (req, res) => {
        FOR UPDATE`,
       [id]
     );
-
     if (!existing.length) {
       throw problem("Category not found.", 404);
     }
-
     const oldName = existing[0].name;
-
     await connection.query(
       `UPDATE inventory_categories
        SET name = ?
        WHERE category_id = ?`,
       [name, id]
     );
-
     // Keep existing inventory.category text
     // compatible with the new category table.
     await connection.query(
@@ -251,10 +207,8 @@ router.put("/categories/:id", async (req, res) => {
        WHERE TRIM(category) = ?`,
       [name, oldName]
     );
-
     await connection.commit();
     inTransaction = false;
-
     res.json({
       message: "Category updated successfully.",
       category_id: id,
@@ -264,31 +218,25 @@ router.put("/categories/:id", async (req, res) => {
     if (connection && inTransaction) {
       await connection.rollback().catch(() => {});
     }
-
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
         error: "This category name already exists.",
       });
     }
-
     sendInventoryError(res, error);
   } finally {
     connection?.release();
   }
 });
-
 // DELETE /inventory/categories/:id
 router.delete("/categories/:id", async (req, res) => {
   let connection;
   let inTransaction = false;
-
   try {
     const id = positiveId(req.params.id, "Category");
-
     connection = await promiseDb.getConnection();
     await connection.beginTransaction();
     inTransaction = true;
-
     const [categories] = await connection.query(
       `SELECT name
        FROM inventory_categories
@@ -296,34 +244,28 @@ router.delete("/categories/:id", async (req, res) => {
        FOR UPDATE`,
       [id]
     );
-
     if (!categories.length) {
       throw problem("Category not found.", 404);
     }
-
     const [usage] = await connection.query(
       `SELECT COUNT(*) AS total
        FROM inventory
        WHERE TRIM(category) = ?`,
       [categories[0].name]
     );
-
     if (Number(usage[0].total) > 0) {
       throw problem(
         "This category is used by products. Reassign those products before deleting it.",
         409
       );
     }
-
     await connection.query(
       `DELETE FROM inventory_categories
        WHERE category_id = ?`,
       [id]
     );
-
     await connection.commit();
     inTransaction = false;
-
     res.json({
       message: "Category deleted successfully.",
     });
@@ -331,49 +273,43 @@ router.delete("/categories/:id", async (req, res) => {
     if (connection && inTransaction) {
       await connection.rollback().catch(() => {});
     }
-
     sendInventoryError(res, error);
   } finally {
     connection?.release();
   }
 });
-
-
 // ====================================
 // GET INVENTORY MOVEMENT HISTORY
 // ====================================
-
 router.get("/movements", async (req, res) => {
   try {
     const [rows] = await promiseDb.query(`
       SELECT
         m.*,
-        i.name AS item_name
+        i.name AS item_name,
+        u.username AS performed_by_name
       FROM inventory_movements m
       INNER JOIN inventory i
         ON i.id = m.item_id
+      LEFT JOIN users u ON u.user_id = m.performed_by
       ORDER BY
         m.recorded_at DESC,
         m.movement_id DESC
     `);
-
     res.json(rows);
   } catch (error) {
     console.error(
       "Unable to load inventory movements:",
       error
     );
-
     res.status(500).json({
       error: "Unable to load inventory movement history.",
     });
   }
 });
-
 // ====================================
 // GET ALL INVENTORY PRODUCTS
 // ====================================
-
 router.get("/", async (req, res) => {
   try {
     const [rows] = await promiseDb.query(`
@@ -392,37 +328,29 @@ router.get("/", async (req, res) => {
       FROM inventory
       ORDER BY name, category, id
     `);
-
     res.json(rows);
   } catch (error) {
     console.error(
       "Unable to load inventory:",
       error
     );
-
     res.status(500).json({
       error: "Unable to load inventory products.",
     });
   }
 });
-
 // ====================================
 // ADD INVENTORY PRODUCT
 // DUPLICATE CHECK INCLUDED
 // ====================================
-
 router.post("/", async (req, res) => {
   let connection;
   let inTransaction = false;
-
   try {
     const product = productPayload(req.body);
-
     connection = await promiseDb.getConnection();
-
     await connection.beginTransaction();
     inTransaction = true;
-
     // DATA QUALITY:
     // Prevent duplicate product names.
     await checkDuplicateProduct(
@@ -430,7 +358,6 @@ router.post("/", async (req, res) => {
       0,
       connection
     );
-
     const [result] = await connection.query(
       `
       INSERT INTO inventory
@@ -453,7 +380,6 @@ router.post("/", async (req, res) => {
         product.status,
       ]
     );
-
     // Record initial stock in movement history.
     if (product.stock > 0) {
       await connection.query(
@@ -463,21 +389,21 @@ router.post("/", async (req, res) => {
           item_id,
           quantity_change,
           reason,
-          offline_id
+          offline_id,
+            performed_by
         )
-        VALUES (?, ?, ?, NULL)
+        VALUES (?, ?, ?, NULL, ?)
         `,
         [
           result.insertId,
           product.stock,
           "Stock In: Initial inventory quantity",
+          req.user?.user_id || null,
         ]
       );
     }
-
     await connection.commit();
     inTransaction = false;
-
     res.status(201).json({
       message: "Product added successfully.",
       id: result.insertId,
@@ -487,35 +413,29 @@ router.post("/", async (req, res) => {
     if (connection && inTransaction) {
       await connection.rollback().catch(() => {});
     }
-
     return sendInventoryError(res, error);
   } finally {
     connection?.release();
   }
 });
-
 // ====================================
 // EDIT INVENTORY PRODUCT
 // DUPLICATE CHECK INCLUDED
 // ====================================
-
 router.put("/:id", async (req, res) => {
   try {
     const id = positiveId(req.params.id);
     const product = productPayload(req.body);
-
     // DATA QUALITY:
     // Ignore this product's own ID.
     await checkDuplicateProduct(
       product.name,
       id
     );
-
     // IMPORTANT:
     // Do not update stock here.
     // Stock changes must use /:id/adjust
     // so every change appears in history.
-
     const [result] = await promiseDb.query(
       `
       UPDATE inventory
@@ -540,14 +460,12 @@ router.put("/:id", async (req, res) => {
         id,
       ]
     );
-
     if (!result.affectedRows) {
       throw problem(
         "Product not found.",
         404
       );
     }
-
     res.json({
       message: "Product updated successfully.",
     });
@@ -555,30 +473,23 @@ router.put("/:id", async (req, res) => {
     return sendInventoryError(res, error);
   }
 });
-
 // ====================================
 // STOCK IN / STOCK OUT / DAMAGED
 // ====================================
-
 router.post("/:id/adjust", async (req, res) => {
   let connection;
   let inTransaction = false;
-
   try {
     const itemId = positiveId(req.params.id);
-
     const quantityChange = Number(
       req.body?.quantity_change
     );
-
     const reason = String(
       req.body?.reason || "Inventory adjustment"
     ).trim();
-
     const offlineId = req.body?.offline_id
       ? String(req.body.offline_id)
       : null;
-
     if (
       !Number.isSafeInteger(quantityChange) ||
       quantityChange === 0
@@ -587,35 +498,24 @@ router.post("/:id/adjust", async (req, res) => {
         "Quantity change must be a non-zero whole number."
       );
     }
-
     if (!reason || reason.length > 255) {
       throw problem(
         "Adjustment reason is required and must not exceed 255 characters."
       );
     }
-    // Only Stock In and Damaged are allowed as manual adjustments.
-// POS product sales record their own Stock Out movements.
-
-    if (quantityChange > 0 && !reason.startsWith("Stock In:")) {
-    throw problem(
-        "Positive inventory adjustments must use Stock In."
-    );
+    // Audited manual adjustments; POS sales still record Stock Out.
+    const allowed = quantityChange > 0
+      ? ["Stock In:", "Adjustment:"]
+      : ["Damaged:", "Return to Supplier:", "Adjustment:"];
+    if (!allowed.some((prefix) => reason.startsWith(prefix))) {
+      throw problem("Invalid movement type for the stock change.");
     }
-
-    if (quantityChange < 0 && !reason.startsWith("Damaged:")) {
-    throw problem(
-        "Manual Stock Out is disabled. Use Damaged for damaged items."
-    );
-    }
-
     if (offlineId && offlineId.length > 64) {
       throw problem(
         "The offline adjustment identifier is too long."
       );
     }
-
     connection = await promiseDb.getConnection();
-
     // Preserve existing offline synchronization behavior.
     if (offlineId) {
       const [duplicate] = await connection.query(
@@ -627,7 +527,6 @@ router.post("/:id/adjust", async (req, res) => {
         `,
         [offlineId]
       );
-
       if (duplicate.length) {
         return res.json({
           message:
@@ -637,10 +536,8 @@ router.post("/:id/adjust", async (req, res) => {
         });
       }
     }
-
     await connection.beginTransaction();
     inTransaction = true;
-
     // Lock product while adjusting stock.
     const [products] = await connection.query(
       `
@@ -651,18 +548,15 @@ router.post("/:id/adjust", async (req, res) => {
       `,
       [itemId]
     );
-
     if (!products.length) {
       throw problem(
         "Inventory item not found.",
         404
       );
     }
-
     const newStock =
       Number(products[0].stock) +
       quantityChange;
-
     if (
       !Number.isSafeInteger(newStock) ||
       newStock < 0
@@ -672,12 +566,10 @@ router.post("/:id/adjust", async (req, res) => {
         409
       );
     }
-
     const status = inventoryStatus(
       newStock,
       Number(products[0].alertLevel)
     );
-
     await connection.query(
       `
       UPDATE inventory
@@ -686,7 +578,6 @@ router.post("/:id/adjust", async (req, res) => {
       `,
       [newStock, status, itemId]
     );
-
     const [movement] = await connection.query(
       `
       INSERT INTO inventory_movements
@@ -694,21 +585,21 @@ router.post("/:id/adjust", async (req, res) => {
         item_id,
         quantity_change,
         reason,
-        offline_id
+        offline_id,
+          performed_by
       )
-      VALUES (?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?)
       `,
       [
         itemId,
         quantityChange,
         reason,
         offlineId,
+        req.user?.user_id || null,
       ]
     );
-
     await connection.commit();
     inTransaction = false;
-
     res.status(201).json({
       message: offlineId
         ? "Offline inventory adjustment synchronized."
@@ -721,7 +612,6 @@ router.post("/:id/adjust", async (req, res) => {
     if (connection && inTransaction) {
       await connection.rollback().catch(() => {});
     }
-
     if (
       error.code === "ER_DUP_ENTRY" &&
       req.body?.offline_id
@@ -736,7 +626,6 @@ router.post("/:id/adjust", async (req, res) => {
           `,
           [String(req.body.offline_id)]
         );
-
         if (duplicate.length) {
           return res.json({
             message:
@@ -752,21 +641,17 @@ router.post("/:id/adjust", async (req, res) => {
         );
       }
     }
-
     return sendInventoryError(res, error);
   } finally {
     connection?.release();
   }
 });
-
 // ====================================
 // DELETE INVENTORY PRODUCT
 // ====================================
-
 router.delete("/:id", async (req, res) => {
   try {
     const id = positiveId(req.params.id);
-
     const [result] = await promiseDb.query(
       `
       DELETE FROM inventory
@@ -774,14 +659,12 @@ router.delete("/:id", async (req, res) => {
       `,
       [id]
     );
-
     if (!result.affectedRows) {
       throw problem(
         "Product not found.",
         404
       );
     }
-
     res.json({
       message: "Product deleted successfully.",
     });
@@ -794,9 +677,7 @@ router.delete("/:id", async (req, res) => {
           "This product has transaction or movement history and cannot be deleted. Set its stock to zero instead.",
       });
     }
-
     return sendInventoryError(res, error);
   }
 });
-
 module.exports = router;

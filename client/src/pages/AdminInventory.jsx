@@ -514,7 +514,9 @@ function AdminInventory() {
     setAdjustProduct(product);
 
     setAdjustType(
-      type === "Damaged" ? "Damaged" : "Stock In"
+      ["Stock In", "Damaged", "Return to Supplier", "Adjustment"].includes(type)
+        ? type
+        : "Stock In"
     );
 
     setQuantity("");
@@ -531,18 +533,26 @@ function AdminInventory() {
     if (!adjustProduct || !canManage || busy) return;
 
     const amount = Number(quantity);
-
-    if (!Number.isSafeInteger(amount) || amount <= 0) {
-      setError("Quantity must be a positive whole number.");
+    const isCorrection = adjustType === "Adjustment";
+    if (
+      !Number.isSafeInteger(amount) ||
+      (isCorrection ? amount < 0 : amount <= 0)
+    ) {
+      setError(isCorrection
+        ? "Enter a valid non-negative final stock quantity."
+        : "Quantity must be a positive whole number.");
       return;
     }
 
-    const quantityChange =
-      adjustType === "Stock In" ? amount : -amount;
+    const quantityChange = isCorrection
+      ? amount - Number(adjustProduct.stock)
+      : adjustType === "Stock In" ? amount : -amount;
 
-    if (
-      Number(adjustProduct.stock) + quantityChange < 0
-    ) {
+    if (quantityChange === 0) {
+      setError("Stock is already at that quantity. No adjustment needed.");
+      return;
+    }
+    if (Number(adjustProduct.stock) + quantityChange < 0) {
       setError("Not enough stock available.");
       return;
     }
@@ -1079,11 +1089,16 @@ function AdminInventory() {
             </div>
 
             {editingProduct && (
-              <p className="text-sm text-gray-500">
-                Stock quantity cannot be edited here.
-                Use the stock movement form to preserve
-                inventory history.
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-gray-500">
+                  To correct the quantity, use an audited stock adjustment with a reason.
+                </p>
+                <button type="button" className={secondaryButtonClass}
+                  onClick={() => openAdjustment(editingProduct, "Adjustment")}
+                  disabled={busy}>
+                  Correct Stock Quantity
+                </button>
+              </div>
             )}
 
             <div className="flex flex-wrap gap-2">
@@ -1229,7 +1244,7 @@ function AdminInventory() {
                             )
                           }
                         >
-                          Stock +/−
+                          Stock Movement
                         </button>
 
                         <button
@@ -1307,21 +1322,21 @@ function AdminInventory() {
                   Stock In
                 </option>
 
-                <option value="Damaged">
-                  Damaged
-                </option>
+                <option value="Damaged">Damaged</option>
+                <option value="Return to Supplier">Return to Supplier</option>
+                <option value="Adjustment">Adjustment (Correct Stock Count)</option>
               </select>
             </label>
 
             <label className="block">
               <span className="mb-2 block text-sm font-medium">
-                Quantity
+                {adjustType === "Adjustment" ? "Corrected Final Stock" : "Quantity"}
               </span>
 
               <input
                 className={inputClass}
                 type="number"
-                min="1"
+                min={adjustType === "Adjustment" ? "0" : "1"}
                 step="1"
                 required
                 value={quantity}
@@ -1344,7 +1359,11 @@ function AdminInventory() {
                 placeholder={
                   adjustType === "Stock In"
                     ? "e.g. New delivery from supplier"
-                    : "e.g. Bottle leaked during storage"
+                    : adjustType === "Damaged"
+                    ? "e.g. Bottle leaked during storage"
+                    : adjustType === "Return to Supplier"
+                    ? "e.g. Expired batch returned to supplier, reference #..."
+                    : "e.g. Physical count found 18 units; corrected from 20"
                 }
                 value={reason}
                 onChange={(event) =>
@@ -1492,6 +1511,7 @@ function AdminInventory() {
                 <th className="p-3">Movement</th>
                 <th className="p-3">Quantity</th>
                 <th className="p-3">Reason</th>
+                <th className="p-3">Performed By</th>
               </tr>
             </thead>
 
@@ -1540,9 +1560,8 @@ function AdminInventory() {
                       {change}
                     </td>
 
-                    <td className="p-3">
-                      {movement.reason}
-                    </td>
+                    <td className="p-3">{movement.reason}</td>
+                    <td className="p-3">{movement.performed_by_name || "Not recorded"}</td>
                   </tr>
                 );
               })}
