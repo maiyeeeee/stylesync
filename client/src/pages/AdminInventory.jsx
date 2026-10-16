@@ -778,7 +778,51 @@ function AdminInventory() {
           ["Needs Attention", needsAttention, "Low or out of stock", "text-amber-700", "bg-amber-50"],
         ].map(([label, value, detail, color, background]) => (
           <div key={label} className={`${panelClass} relative overflow-hidden`}>
-            <span className={`absolute right-5 top-5 h-9 w-9 rounded-xl ${background}`} aria-hidden="true" />
+            <span
+              className={`absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-xl ${background} ${color}`}
+              aria-hidden="true"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {label === "Product Types" && (
+                  <>
+                    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+                    <path d="M3 8v9l9 5 9-5V8" />
+                    <path d="M12 13v9" />
+                  </>
+                )}
+                {label === "Available Products" && (
+                  <>
+                    <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+                    <path d="M3 8v9l9 5 5-2.8" />
+                    <path d="M12 13v9" />
+                    <path d="m16 17 2 2 4-4" />
+                  </>
+                )}
+                {label === "Total Quantity Available" && (
+                  <>
+                    <path d="m12 2 9 5-9 5-9-5 9-5Z" />
+                    <path d="m3 12 9 5 9-5" />
+                    <path d="m3 17 9 5 9-5" />
+                  </>
+                )}
+                {label === "Needs Attention" && (
+                  <>
+                    <path d="M10.3 3.8 1.8 18.5A2 2 0 0 0 3.5 21h17a2 2 0 0 0 1.7-2.5L13.7 3.8a2 2 0 0 0-3.4 0Z" />
+                    <path d="M12 9v5" />
+                    <path d="M12 18h.01" />
+                  </>
+                )}
+              </svg>
+            </span>
             <p className="relative text-sm font-medium text-slate-500">{label}</p>
             <p className={`relative mt-3 text-3xl font-bold ${color}`}>{value}</p>
             <p className="relative mt-2 text-xs text-slate-400">{detail}</p>
