@@ -487,6 +487,9 @@ function AdminTransactions() {
     const [search, setSearch] =
         useState("")
 
+    const [historyPage, setHistoryPage] = useState(1)
+    const HISTORY_PAGE_SIZE = 10
+
     const [loading, setLoading] =
         useState(true)
 
@@ -1673,6 +1676,16 @@ function AdminTransactions() {
                 ),
         )
 
+    // Filter the full transaction history before paginating it.
+    const historyPageCount = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE_SIZE))
+    const currentHistoryPage = Math.min(historyPage, historyPageCount)
+    const pageStart = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE
+    const visibleTransactions = filtered.slice(pageStart, pageStart + HISTORY_PAGE_SIZE)
+
+    useEffect(() => {
+        setHistoryPage(1)
+    }, [search])
+
     const customerRecords =
         useMemo(() => {
             if (!searchTerm) {
@@ -2591,10 +2604,11 @@ function AdminTransactions() {
                 className={panel}
             >
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-                    <h2 className="text-lg font-bold text-purple-950">
-                        Transaction
-                        history
-                    </h2>
+                    <div>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-purple-500">SALES RECORDS</p>
+                        <h2 className="text-lg font-bold text-purple-950">Transaction history</h2>
+                        <p className="mt-1 text-xs text-gray-500">Search and review your recorded sales and receipts.</p>
+                    </div>
 
                     <input
                         type="search"
@@ -2778,7 +2792,7 @@ function AdminTransactions() {
 
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[1060px] text-left text-sm">
-                        <thead className="bg-gray-50 text-gray-500">
+                        <thead className="bg-purple-50/70 text-[11px] font-bold uppercase tracking-wider text-purple-800">
                             <tr>
                                 {[
                                     "Customer Record",
@@ -2809,7 +2823,7 @@ function AdminTransactions() {
                         </thead>
 
                         <tbody className="divide-y divide-gray-100">
-                            {filtered.map(
+                            {visibleTransactions.map(
                                 (
                                     row,
                                 ) => (
@@ -2817,13 +2831,11 @@ function AdminTransactions() {
                                         key={
                                             row.transaction_id
                                         }
-                                        className="hover:bg-purple-50/40"
+                                        className="transition-colors odd:bg-white even:bg-purple-50/30 hover:bg-purple-50/70"
                                     >
                                         <td className="px-3 py-4">
-                                            <p className="font-semibold">
-                                                {
-                                                    row.customer
-                                                }
+                                            <p className="font-semibold text-purple-950">
+                                                {row.customer}
                                             </p>
 
                                             <p className="mt-1 text-xs text-gray-500">
@@ -2866,10 +2878,8 @@ function AdminTransactions() {
                                             }
                                         </td>
 
-                                        <td className="whitespace-nowrap px-3 py-4">
-                                            {money(
-                                                row.amount,
-                                            )}
+                                        <td className="whitespace-nowrap px-3 py-4 font-bold text-purple-950">
+                                            {money(row.amount)}
                                         </td>
 
                                         <td className="whitespace-nowrap px-3 py-4 text-emerald-700">
@@ -2878,10 +2888,8 @@ function AdminTransactions() {
                                             )}
                                         </td>
 
-                                        <td className="whitespace-nowrap px-3 py-4">
-                                            {money(
-                                                row.balance_collected,
-                                            )}
+                                        <td className="whitespace-nowrap px-3 py-4 font-semibold text-gray-800">
+                                            {money(row.balance_collected)}
                                         </td>
 
                                         <td className="px-3 py-4 text-xs text-gray-600">
@@ -2925,9 +2933,9 @@ function AdminTransactions() {
                                         </td>
 
                                         <td className="px-3 py-4">
-                                            {row.offline_pending
-                                                ? "Pending sync"
-                                                : row.status}
+                                            <span className={`inline-flex whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${row.offline_pending ? "border-amber-200 bg-amber-50 text-amber-800" : row.status === "Paid" ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-purple-100 bg-purple-50 text-purple-700"}`}>
+                                                {row.offline_pending ? "Pending sync" : row.status}
+                                            </span>
                                         </td>
 
                                         <td className="px-3 py-4">
@@ -2945,7 +2953,7 @@ function AdminTransactions() {
                                                         },
                                                     )
                                                 }}
-                                                className="rounded-lg bg-purple-50 px-3 py-2 font-semibold text-purple-700"
+                                                className="rounded-lg border border-purple-100 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
                                             >
                                                 View
                                             </button>
@@ -2970,6 +2978,21 @@ function AdminTransactions() {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-purple-100 pt-4">
+                    <p className="text-xs text-gray-500" aria-live="polite">
+                        {filtered.length === 0
+                            ? "No matching transactions"
+                            : `Showing ${pageStart + 1}–${Math.min(pageStart + HISTORY_PAGE_SIZE, filtered.length)} of ${filtered.length} transactions`}
+                    </p>
+                    <div className="flex items-center gap-2" aria-label="Transaction history pagination">
+                        <button type="button" onClick={() => setHistoryPage(1)} disabled={currentHistoryPage === 1} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">First</button>
+                        <button type="button" onClick={() => setHistoryPage((page) => Math.max(1, page - 1))} disabled={currentHistoryPage === 1} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                        <span className="min-w-[75px] text-center text-xs font-semibold text-purple-950">{currentHistoryPage} / {historyPageCount}</span>
+                        <button type="button" onClick={() => setHistoryPage((page) => Math.min(historyPageCount, page + 1))} disabled={currentHistoryPage === historyPageCount} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                        <button type="button" onClick={() => setHistoryPage(historyPageCount)} disabled={currentHistoryPage === historyPageCount} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">Last</button>
+                    </div>
                 </div>
             </section>
         </div>
