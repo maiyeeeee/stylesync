@@ -1,17 +1,21 @@
+
 const express = require("express")
 const router = express.Router()
 const db = require("../db")
-
 const promiseDb = db.promise()
 
-// Keep the existing session and CSRF middleware in server.js.
+// Authentication and CSRF middleware remain in server.js.
 router.use((req, res, next) => {
     if (!req.user) {
-        return res.status(401).json({ error: "Please sign in again." })
+        return res.status(401).json({
+            error: "Please sign in again.",
+        })
     }
 
     if (!["owner", "admin", "user"].includes(req.user.role)) {
-        return res.status(403).json({ error: "Team member access is required." })
+        return res.status(403).json({
+            error: "Team member access is required.",
+        })
     }
 
     next()
@@ -28,13 +32,22 @@ function cents(value, label, allowZero = false) {
     const text = String(value ?? "").trim()
 
     if (!/^\d+(\.\d{1,2})?$/.test(text)) {
-        throw problem(`${label} must be a valid amount with up to two decimals.`)
+        throw problem(
+            `${label} must be a valid amount with up to two decimals.`
+        )
     }
 
     const [whole, fraction = ""] = text.split(".")
-    const result = Number(whole) * 100 + Number(fraction.padEnd(2, "0"))
 
-    if (!Number.isSafeInteger(result) || result > 9999999999 || result < (allowZero ? 0 : 1)) {
+    const result =
+        Number(whole) * 100 +
+        Number(fraction.padEnd(2, "0"))
+
+    if (
+        !Number.isSafeInteger(result) ||
+        result > 9999999999 ||
+        result < (allowZero ? 0 : 1)
+    ) {
         throw problem(`${label} is outside the allowed range.`)
     }
 
@@ -45,14 +58,25 @@ function decimal(value) {
     return (value / 100).toFixed(2)
 }
 
+function normalizeCustomerName(value) {
+    return String(value || "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLocaleLowerCase("en")
+}
+
 function historicalEpoch(value) {
     if (value == null || value === "") return null
 
-    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    if (
+        typeof value !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(value)
+    ) {
         throw problem("Choose a valid historical sale date.")
     }
 
     const [year, month, day] = value.split("-").map(Number)
+
     const check = new Date(Date.UTC(year, month - 1, day))
 
     if (
@@ -70,98 +94,396 @@ function historicalEpoch(value) {
         day: "2-digit",
     }).formatToParts(new Date())
 
-    const part = (type) => parts.find((item) => item.type === type)?.value
-    const today = part("year") + "-" + part("month") + "-" + part("day")
+    const part = (type) =>
+        parts.find((item) => item.type === type)?.value
 
-    if (value < "2000-01-01" || value >= today) {
-        throw problem("Historical sale date must be before today in Philippine time.")
+    const today =
+        part("year") +
+        "-" +
+        part("month") +
+        "-" +
+        part("day")
+
+    if (
+        value < "2000-01-01" ||
+        value >= today
+    ) {
+        throw problem(
+            "Historical sale date must be before today in Philippine time."
+        )
     }
 
-    // A neutral time stands in for the unknown time on paper records.
-    return Date.parse(value + "T12:00:00+08:00") / 1000
+    // Paper records have no exact transaction time.
+    // Use noon in Philippine time as a neutral timestamp.
+    return Date.parse(
+        value + "T12:00:00+08:00"
+    ) / 1000
 }
 
 function positiveId(value, label) {
     const result = Number(value)
 
-    if (!Number.isSafeInteger(result) || result <= 0) {
+    if (
+        !Number.isSafeInteger(result) ||
+        result <= 0
+    ) {
         throw problem(`${label} is invalid.`)
     }
 
     return result
 }
 
+// Shared transaction query.
+// Deposit information is returned alongside each transaction.
 const transactionSelect = `
-  SELECT t.*,
-         COALESCE(da.amount_applied, 0) AS deposit_applied,
-         t.amount - COALESCE(da.amount_applied, 0) AS balance_collected,
-         CASE WHEN da.application_id IS NOT NULL
-              THEN d.payment_method ELSE NULL END AS deposit_payment_method,
-         a.contact_number AS customer_contact,
-         a.email AS customer_email,
-         DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointment_date,
-         TIME_FORMAT(a.appointment_time, '%H:%i') AS appointment_time,
-         a.status AS appointment_status
-  FROM transactions t
-  LEFT JOIN booking_deposit_applications da
-    ON da.transaction_id = t.transaction_id
-  LEFT JOIN booking_deposits d
-    ON d.deposit_id = da.deposit_id
-  LEFT JOIN appointments a
-    ON a.id = t.appointment_id
+    SELECT
+        t.*,
+
+        COALESCE(
+            da.amount_applied,
+            0
+        ) AS deposit_applied,
+
+        t.amount - COALESCE(
+            da.amount_applied,
+            0
+        ) AS balance_collected,
+
+        CASE
+            WHEN da.application_id IS NOT NULL
+            THEN d.payment_method
+            ELSE NULL
+        END AS deposit_payment_method,
+
+        COALESCE(
+            NULLIF(TRIM(t.customer_contact), ''),
+            a.contact_number
+        ) AS customer_contact,
+
+        a.email AS customer_email,
+
+        DATE_FORMAT(
+            a.appointment_date,
+            '%Y-%m-%d'
+        ) AS appointment_date,
+
+        TIME_FORMAT(
+            a.appointment_time,
+            '%H:%i'
+        ) AS appointment_time,
+
+        a.status AS appointment_status
+
+    FROM transactions t
+
+    LEFT JOIN booking_deposit_applications da
+        ON da.transaction_id = t.transaction_id
+
+    LEFT JOIN booking_deposits d
+        ON d.deposit_id = da.deposit_id
+
+    LEFT JOIN appointments a
+        ON a.id = t.appointment_id
 `
+
+// ============================================
+// GET ALL TRANSACTIONS
+// ============================================
 
 router.get("/", async (req, res) => {
     try {
         const [rows] = await promiseDb.query(`
-      ${transactionSelect}
-      ORDER BY t.transaction_date DESC, t.transaction_id DESC
-    `)
+            ${transactionSelect}
+            ORDER BY
+                t.transaction_date DESC,
+                t.transaction_id DESC
+        `)
 
-        res.json(rows)
+        return res.json(rows)
     } catch (error) {
-        res.status(500).json({ error: error.message })
+        console.error(
+            "Transaction history error:",
+            error
+        )
+
+        return res.status(500).json({
+            error: "Unable to load transactions.",
+        })
     }
 })
 
-// Only eligible, not-yet-checked-out appointments appear here.
-// No booking access tokens or receiving-account details are exposed.
+//
+// ============================================
+// PART 2 — APPOINTMENT CHECKOUT LOOKUP
+// ============================================
+//
+
+// Only approved/completed appointments that have not
+// already been checked out should appear in the POS.
+
 router.get("/checkout-appointments", async (req, res) => {
     try {
         const [rows] = await promiseDb.query(`
-      SELECT
-        a.id,
-        a.customer_name,
-        a.contact_number,
-        a.service,
-        a.service_id,
-        DATE_FORMAT(a.appointment_date, '%Y-%m-%d') AS appointment_date,
-        TIME_FORMAT(a.appointment_time, '%H:%i') AS appointment_time,
-        a.status,
-        COALESCE(d.service_total, s.price) AS service_total,
-        d.payment_status,
-        CASE WHEN d.payment_status = 'Verified'
-             THEN d.verified_amount ELSE 0 END AS verified_deposit
-      FROM appointments a
-      LEFT JOIN services s ON s.service_id = a.service_id
-      LEFT JOIN booking_deposits d ON d.appointment_id = a.id
-      WHERE a.status IN ('Approved', 'Completed')
-        AND NOT EXISTS (
-          SELECT 1 FROM transactions t
-          WHERE t.appointment_id = a.id
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM booking_deposit_applications da
-          WHERE da.deposit_id = d.deposit_id
-        )
-      ORDER BY a.appointment_date DESC, a.appointment_time DESC
-    `)
+            SELECT
+                a.id,
+                a.customer_name,
+                a.contact_number,
+                a.service,
+                a.service_id,
 
-        res.json(rows)
+                DATE_FORMAT(
+                    a.appointment_date,
+                    '%Y-%m-%d'
+                ) AS appointment_date,
+
+                TIME_FORMAT(
+                    a.appointment_time,
+                    '%H:%i'
+                ) AS appointment_time,
+
+                a.status,
+
+                COALESCE(
+                    d.service_total,
+                    s.price
+                ) AS service_total,
+
+                d.payment_status,
+
+                CASE
+                    WHEN d.payment_status = 'Verified'
+                    THEN d.verified_amount
+                    ELSE 0
+                END AS verified_deposit
+
+            FROM appointments a
+
+            LEFT JOIN services s
+                ON s.service_id = a.service_id
+
+            LEFT JOIN booking_deposits d
+                ON d.appointment_id = a.id
+
+            WHERE a.status IN (
+                'Approved',
+                'Completed'
+            )
+
+            AND NOT EXISTS (
+                SELECT 1
+                FROM transactions t
+                WHERE t.appointment_id = a.id
+            )
+
+            AND NOT EXISTS (
+                SELECT 1
+                FROM booking_deposit_applications da
+                WHERE da.deposit_id = d.deposit_id
+            )
+
+            ORDER BY
+                a.appointment_date DESC,
+                a.appointment_time DESC
+        `)
+
+        return res.json(rows)
     } catch (error) {
-        res.status(500).json({ error: error.message })
+        console.error(
+            "Appointment checkout lookup error:",
+            error
+        )
+
+        return res.status(500).json({
+            error: "Unable to load checkout appointments.",
+        })
     }
 })
+
+//
+// ============================================
+// OWNER-ISSUED LOYALTY REWARD PREVIEW
+// ============================================
+//
+// This endpoint is read-only.
+//
+// Staff can VIEW an available owner-issued reward,
+// but cannot issue, change, or redeem one here.
+//
+// Redemption happens only inside POST /transactions.
+//
+
+router.get("/loyalty-preview", async (req, res) => {
+    try {
+        const appointmentId = req.query.appointment_id
+            ? positiveId(
+                  req.query.appointment_id,
+                  "Appointment"
+              )
+            : null
+
+        const inputContact = String(
+            req.query.customer_contact || ""
+        ).trim()
+
+        // A booked appointment must use the contact
+        // saved on the appointment, not a POS override.
+        let contact = inputContact
+        let appointmentCustomerName = null
+
+        if (appointmentId) {
+            const [[appointment]] = await promiseDb.query(
+                `
+                SELECT
+                    customer_name,
+                    contact_number
+                FROM appointments
+                WHERE id = ?
+                `,
+                [appointmentId]
+            )
+
+            if (!appointment) {
+                throw problem(
+                    "Appointment not found.",
+                    404
+                )
+            }
+
+            contact = String(
+                appointment.contact_number || ""
+            ).trim()
+
+            appointmentCustomerName =
+                appointment.customer_name
+        }
+
+        if (
+            !contact ||
+            contact.length < 7 ||
+            contact.length > 30
+        ) {
+            return res.json({
+                available: false,
+                reward: null,
+                reason: "Valid customer contact required.",
+            })
+        }
+
+        // Never select an arbitrary customer when
+        // duplicate phone numbers exist.
+        const [customers] = await promiseDb.query(
+            `
+            SELECT
+                customer_id,
+                customer_name
+            FROM customers
+            WHERE TRIM(contact_number) = ?
+            LIMIT 2
+            `,
+            [contact]
+        )
+
+        if (customers.length !== 1) {
+            return res.json({
+                available: false,
+                reward: null,
+                reason:
+                    customers.length > 1
+                        ? "Duplicate customer profiles."
+                        : "Customer profile not found.",
+            })
+        }
+
+        // A booked appointment must belong to the
+        // matching registered customer.
+        if (
+            appointmentCustomerName &&
+            normalizeCustomerName(
+                appointmentCustomerName
+            ) !==
+                normalizeCustomerName(
+                    customers[0].customer_name
+                )
+        ) {
+            return res.json({
+                available: false,
+                reward: null,
+                reason:
+                    "Appointment and registered customer details do not match.",
+            })
+        }
+
+        const [[policy]] = await promiseDb.query(`
+            SELECT enabled
+            FROM ig_loyalty_policy
+            WHERE policy_id = 1
+        `)
+
+        if (!policy || !Number(policy.enabled)) {
+            return res.json({
+                available: false,
+                reward: null,
+                reason: "Loyalty rewards are disabled.",
+            })
+        }
+
+        const [rewards] = await promiseDb.query(
+            `
+            SELECT
+                reward_id,
+                reward_percent
+            FROM ig_loyalty_rewards
+            WHERE customer_id = ?
+              AND reward_status = 'issued'
+            ORDER BY reward_id DESC
+            LIMIT 2
+            `,
+            [customers[0].customer_id]
+        )
+
+        // More than one issued reward is ambiguous.
+        // The owner must resolve that first.
+        if (rewards.length !== 1) {
+            return res.json({
+                available: false,
+                reward: null,
+                reason:
+                    rewards.length > 1
+                        ? "Multiple issued rewards require owner review."
+                        : "No issued reward.",
+            })
+        }
+
+        return res.json({
+            available: true,
+            reward: {
+                reward_id: rewards[0].reward_id,
+                reward_percent: Number(
+                    rewards[0].reward_percent
+                ),
+            },
+        })
+    } catch (error) {
+        console.error(
+            "Loyalty preview error:",
+            error
+        )
+
+        return res.status(
+            error.status || 500
+        ).json({
+            error: error.status
+                ? error.message
+                : "Unable to check loyalty reward.",
+        })
+    }
+})
+
+//
+// ============================================
+// PART 3 — CREATE TRANSACTION
+// ============================================
+//
 
 router.post("/", async (req, res) => {
     let connection
@@ -169,300 +491,1113 @@ router.post("/", async (req, res) => {
 
     try {
         const body = req.body || {}
+
         const appointmentId =
-            body.appointment_id == null || body.appointment_id === ""
+            body.appointment_id == null ||
+            body.appointment_id === ""
                 ? null
-                : positiveId(body.appointment_id, "Appointment")
+                : positiveId(
+                      body.appointment_id,
+                      "Appointment"
+                  )
 
-        const saleType = body.sale_type || "Service"
+        const saleType =
+            body.sale_type || "Service"
 
-        if (!["Service", "Product"].includes(saleType)) {
-            throw problem("Select Service or Product.")
+        if (
+            !["Service", "Product"].includes(saleType)
+        ) {
+            throw problem(
+                "Select Service or Product."
+            )
         }
 
-        const saleEpoch = historicalEpoch(body.historical_date)
+        const saleEpoch = historicalEpoch(
+            body.historical_date
+        )
 
-        if (saleEpoch != null && (appointmentId || saleType !== "Service")) {
-            throw problem("Historical dates are available for walk-in service sales only.")
+        if (
+            saleEpoch != null &&
+            (
+                appointmentId ||
+                saleType !== "Service"
+            )
+        ) {
+            throw problem(
+                "Historical dates are available for walk-in service sales only."
+            )
         }
 
-        const payment = String(body.payment || "")
+        const payment = String(
+            body.payment || ""
+        )
 
         if (
             !["Cash", "GCash"].includes(payment) &&
-            !(saleEpoch != null && payment === "Not recorded")
+            !(
+                saleEpoch != null &&
+                payment === "Not recorded"
+            )
         ) {
-            throw problem("Select Cash or GCash, or use Not recorded for a historical sale.")
+            throw problem(
+                "Select Cash or GCash, or use Not recorded for a historical sale."
+            )
         }
 
-        const status = body.status || "Paid"
+        const status =
+            body.status || "Paid"
 
-        if (!["Paid", "Pending"].includes(status)) {
-            throw problem("Invalid payment status.")
+        if (
+            !["Paid", "Pending"].includes(status)
+        ) {
+            throw problem(
+                "Invalid payment status."
+            )
         }
 
-        if (appointmentId && (saleType !== "Service" || status !== "Paid")) {
-            throw problem("Appointment checkout must be a paid service transaction.")
+        // Booked appointments can only be checked out
+        // as paid service transactions.
+        if (
+            appointmentId &&
+            (
+                saleType !== "Service" ||
+                status !== "Paid"
+            )
+        ) {
+            throw problem(
+                "Appointment checkout must be a paid service transaction."
+            )
         }
 
-        const quantity = Number(body.quantity ?? 1)
+        const quantity = Number(
+            body.quantity ?? 1
+        )
 
-        if (!Number.isSafeInteger(quantity) || quantity < 1) {
-            throw problem("Quantity must be a positive whole number.")
+        if (
+            !Number.isSafeInteger(quantity) ||
+            quantity < 1
+        ) {
+            throw problem(
+                "Quantity must be a positive whole number."
+            )
         }
 
-        if (appointmentId && quantity !== 1) {
-            throw problem("Check out one appointment at a time.")
+        if (
+            appointmentId &&
+            quantity !== 1
+        ) {
+            throw problem(
+                "Check out one appointment at a time."
+            )
         }
 
-        const total = cents(body.amount, "Final sale total")
-        const offlineId = body.offline_id ? String(body.offline_id) : null
+        // The subtotal arrives from POS.
+        // Discount calculation will be performed
+        // by the server, not by the cashier.
+        const subtotal = cents(
+            body.amount,
+            "Sale subtotal"
+        )
 
-        if (offlineId && offlineId.length > 64) {
-            throw problem("The transaction identifier is too long.")
+        let total = subtotal
+
+        const offlineId = body.offline_id
+            ? String(body.offline_id)
+            : null
+
+        if (
+            offlineId &&
+            offlineId.length > 64
+        ) {
+            throw problem(
+                "The transaction identifier is too long."
+            )
         }
 
-        let customer = String(body.customer || "").trim()
-        let service = String(body.service || "").trim()
+        let customer = String(
+            body.customer || ""
+        ).trim()
+
+        let service = String(
+            body.service || ""
+        ).trim()
+
         let depositAmount = 0
         let depositId = null
         let itemId = null
 
-        connection = await promiseDb.getConnection()
+        const customerContactInput = String(
+            body.customer_contact || ""
+        ).trim()
+
+        if (
+            customerContactInput.length > 30
+        ) {
+            throw problem(
+                "Customer contact is too long."
+            )
+        }
+
+        let customerContact =
+            customerContactInput || null
+
+        // Staff cannot directly supply discount
+        // percentages or approval decisions.
+        const rewardId =
+            body.loyalty_reward_id == null ||
+            body.loyalty_reward_id === ""
+                ? null
+                : positiveId(
+                      body.loyalty_reward_id,
+                      "Loyalty reward"
+                  )
+
+        if (
+            body.discount_decision != null ||
+            body.discount_percent != null ||
+            body.discount_amount != null ||
+            body.discount_approved_by != null
+        ) {
+            throw problem(
+                "POS discounts must use an owner-issued loyalty reward."
+            )
+        }
+
+        if (
+            rewardId &&
+            (
+                saleEpoch != null ||
+                status !== "Paid" ||
+                saleType !== "Service"
+            )
+        ) {
+            throw problem(
+                "Loyalty rewards apply only to current paid service checkouts."
+            )
+        }
+
+        // Offline-queued transactions cannot carry
+        // a loyalty reward for automatic redemption.
+        if (
+            body.offline_queued === true &&
+            rewardId
+        ) {
+            throw problem(
+                "Offline queued transactions cannot redeem loyalty rewards."
+            )
+        }
+
+        // These variables will be populated only
+        // after the reward is verified by the database.
+        let discountPercent = 0
+        let discountAmount = 0
+        let discountReason = null
+
+        let redeemedRewardId = null
+        let rewardIssuedBy = null
+        let rewardCustomerId = null
+
+        connection =
+            await promiseDb.getConnection()
+
         await connection.beginTransaction()
         inTransaction = true
 
-        // Also supports the existing Emergency Mode synchronization.
+        // ============================================
+        // EMERGENCY MODE IDEMPOTENCY
+        // ============================================
+        //
+        // Re-sending the same queued transaction
+        // must not create another sale.
+
         if (offlineId) {
-            const [duplicates] = await connection.query(
-                "SELECT transaction_id FROM transactions WHERE offline_id = ?",
-                [offlineId],
-            )
+            const [duplicates] =
+                await connection.query(
+                    `
+                    SELECT transaction_id
+                    FROM transactions
+                    WHERE offline_id = ?
+                    `,
+                    [offlineId]
+                )
 
             if (duplicates.length) {
                 await connection.rollback()
                 inTransaction = false
 
                 return res.json({
-                    message: "Transaction already saved.",
-                    id: duplicates[0].transaction_id,
+                    message:
+                        "Transaction already saved.",
+                    id:
+                        duplicates[0].transaction_id,
                     duplicate: true,
                 })
             }
         }
 
+        // ============================================
+        // BOOKED APPOINTMENT CHECKOUT
+        // ============================================
+
         if (appointmentId) {
-            // Serialize checkout attempts for the same appointment.
-            const [appointments] = await connection.query(
-                "SELECT * FROM appointments WHERE id = ? FOR UPDATE",
-                [appointmentId],
-            )
+            const [appointments] =
+                await connection.query(
+                    `
+                    SELECT *
+                    FROM appointments
+                    WHERE id = ?
+                    FOR UPDATE
+                    `,
+                    [appointmentId]
+                )
 
             if (!appointments.length) {
-                throw problem("Appointment not found.", 404)
+                throw problem(
+                    "Appointment not found.",
+                    404
+                )
             }
 
-            const appointment = appointments[0]
+            const appointment =
+                appointments[0]
 
-            if (!["Approved", "Completed"].includes(appointment.status)) {
-                throw problem("Only approved or completed appointments can be checked out.", 409)
+            if (
+                !["Approved", "Completed"].includes(
+                    appointment.status
+                )
+            ) {
+                throw problem(
+                    "Only approved or completed appointments can be checked out.",
+                    409
+                )
             }
 
-            const [existing] = await connection.query(
-                "SELECT transaction_id FROM transactions WHERE appointment_id = ? FOR UPDATE",
-                [appointmentId],
-            )
+            // Prevent duplicate checkout.
+            const [existing] =
+                await connection.query(
+                    `
+                    SELECT transaction_id
+                    FROM transactions
+                    WHERE appointment_id = ?
+                    FOR UPDATE
+                    `,
+                    [appointmentId]
+                )
 
             if (existing.length) {
                 throw problem(
                     "This appointment already has a transaction. Refresh the history.",
-                    409,
+                    409
                 )
             }
 
-            customer = appointment.customer_name
-            service = appointment.service
+            // The appointment record is authoritative.
+            customer =
+                appointment.customer_name
 
-            const [deposits] = await connection.query(
-                "SELECT * FROM booking_deposits WHERE appointment_id = ? FOR UPDATE",
-                [appointmentId],
-            )
+            service =
+                appointment.service
+
+            customerContact = String(
+                appointment.contact_number || ""
+            ).trim() || null
+
+            // ========================================
+            // VERIFIED BOOKING DEPOSIT
+            // ========================================
+
+            const [deposits] =
+                await connection.query(
+                    `
+                    SELECT *
+                    FROM booking_deposits
+                    WHERE appointment_id = ?
+                    FOR UPDATE
+                    `,
+                    [appointmentId]
+                )
 
             if (deposits.length) {
-                const deposit = deposits[0]
+                const deposit =
+                    deposits[0]
 
                 if (
-                    deposit.payment_status === "Awaiting Verification" ||
-                    deposit.payment_status === "Awaiting Payment"
+                    deposit.payment_status ===
+                        "Awaiting Verification" ||
+                    deposit.payment_status ===
+                        "Awaiting Payment"
                 ) {
-                    throw problem("Resolve this booking's payment status before checkout.", 409)
+                    throw problem(
+                        "Resolve this booking's payment status before checkout.",
+                        409
+                    )
                 }
 
-                const [applications] = await connection.query(
-                    "SELECT application_id FROM booking_deposit_applications WHERE deposit_id = ? FOR UPDATE",
-                    [deposit.deposit_id],
-                )
+                const [applications] =
+                    await connection.query(
+                        `
+                        SELECT application_id
+                        FROM booking_deposit_applications
+                        WHERE deposit_id = ?
+                        FOR UPDATE
+                        `,
+                        [deposit.deposit_id]
+                    )
 
                 if (applications.length) {
-                    throw problem("This deposit has already been applied.", 409)
+                    throw problem(
+                        "This deposit has already been applied.",
+                        409
+                    )
                 }
 
-                if (deposit.payment_status === "Verified") {
-                    depositAmount = cents(deposit.verified_amount, "Verified deposit")
-                    depositId = deposit.deposit_id
+                if (
+                    deposit.payment_status ===
+                    "Verified"
+                ) {
+                    depositAmount = cents(
+                        deposit.verified_amount,
+                        "Verified deposit"
+                    )
+
+                    depositId =
+                        deposit.deposit_id
                 }
             }
 
-            // Reject a stale preview instead of silently changing the amount due.
-            const expectedDeposit = cents(body.expected_deposit_amount, "Displayed deposit", true)
-
-            if (expectedDeposit !== depositAmount) {
-                throw problem("The deposit changed. Refresh and select the appointment again.", 409)
-            }
-
-            if (depositAmount > total) {
-                throw problem(
-                    "The verified deposit exceeds the final total. Resolve the excess payment before checkout.",
-                    409,
-                )
-            }
-        } else if (saleType === "Product") {
-            itemId = positiveId(body.item_id, "Product")
-
-            const [products] = await connection.query(
-                "SELECT name, stock, alertLevel FROM inventory WHERE id = ? FOR UPDATE",
-                [itemId],
+            // Reject stale frontend deposit values.
+            const expectedDeposit = cents(
+                body.expected_deposit_amount,
+                "Displayed deposit",
+                true
             )
 
-            if (!products.length) throw problem("Product not found.", 404)
+            if (
+                expectedDeposit !== depositAmount
+            ) {
+                throw problem(
+                    "The deposit changed. Refresh and select the appointment again.",
+                    409
+                )
+            }
 
-            const product = products[0]
+            if (
+                depositAmount > total
+            ) {
+                throw problem(
+                    "The verified deposit exceeds the sale subtotal.",
+                    409
+                )
+            }
 
-            if (Number(product.stock) < quantity) {
-                throw problem("Not enough stock available.", 409)
+        } else if (
+            saleType === "Product"
+        ) {
+            // ========================================
+            // PRODUCT SALE AND STOCK DEDUCTION
+            // ========================================
+
+            itemId = positiveId(
+                body.item_id,
+                "Product"
+            )
+
+            const [products] =
+                await connection.query(
+                    `
+                    SELECT
+                        name,
+                        stock,
+                        alertLevel
+                    FROM inventory
+                    WHERE id = ?
+                    FOR UPDATE
+                    `,
+                    [itemId]
+                )
+
+            if (!products.length) {
+                throw problem(
+                    "Product not found.",
+                    404
+                )
+            }
+
+            const product =
+                products[0]
+
+            if (
+                Number(product.stock) <
+                quantity
+            ) {
+                throw problem(
+                    "Not enough stock available.",
+                    409
+                )
             }
 
             service = product.name
-            const newStock = Number(product.stock) - quantity
-           const stockStatus =
-    newStock === 0
-        ? "Out of Stock"
-        : newStock <= Number(product.alertLevel)
-          ? "Low Stock"
-          : "In Stock"
 
-            await connection.query("UPDATE inventory SET stock = ?, status = ? WHERE id = ?", [
-                newStock,
-                stockStatus,
-                itemId,
-            ])
+            const newStock =
+                Number(product.stock) -
+                quantity
+
+            const stockStatus =
+                newStock === 0
+                    ? "Out of Stock"
+                    : newStock <=
+                      Number(product.alertLevel)
+                        ? "Low Stock"
+                        : "In Stock"
+
+            await connection.query(
+                `
+                UPDATE inventory
+                SET
+                    stock = ?,
+                    status = ?
+                WHERE id = ?
+                `,
+                [
+                    newStock,
+                    stockStatus,
+                    itemId,
+                ]
+            )
         }
 
-      if (!customer || customer.length > 100 || !service || service.length > 150) {
-    throw problem("Enter a valid customer and item/service name.")
-}
+        // ============================================
+        // PART 4 — OWNER-ISSUED LOYALTY REWARD
+        // ============================================
+        //
+        // A customer with an issued reward cannot
+        // silently be checked out at full price.
+        //
+        // The cashier cannot choose the percentage.
+        // Only the owner's issued reward is accepted.
+        //
+        // Historical sales, product sales, and pending
+        // payments do not redeem loyalty rewards.
+        //
+        // IMPORTANT:
+        // An offline-queued paid service with an issued
+        // reward will be rejected during synchronization
+        // rather than silently skipping that reward.
+        // ============================================
 
-const [result] = await connection.query(
-    `INSERT INTO transactions
-     (appointment_id, customer, service, amount, payment, status,
-      sale_type, item_id, quantity, offline_id, transaction_date, historical_date_only)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${saleEpoch == null ? "CURRENT_TIMESTAMP" : "FROM_UNIXTIME(?)"}, ?)`,
-    [
-        appointmentId,
-        customer,
-        service,
-        decimal(total),
-        payment,
-        status,
-        saleType,
-        itemId,
-        quantity,
-        offlineId,
-        ...(saleEpoch == null ? [] : [saleEpoch]),
-        saleEpoch == null ? 0 : 1,
-    ],
-)
+        const loyaltyEligible =
+            saleType === "Service" &&
+            saleEpoch == null &&
+            status === "Paid"
 
-// ============================================
-// AUTOMATIC POS INVENTORY MOVEMENT RECORD
-// ============================================
-// Product stock was already deducted earlier.
-// This records the deduction in Inventory History
-// without deducting stock a second time.
-//
-// The movement is saved in the same database
-// transaction as the POS sale.
-// ============================================
+        let matchedCustomerId = null
 
-if (saleType === "Product") {
-    await connection.query(
-        `INSERT INTO inventory_movements
-         (item_id, quantity_change, reason, offline_id)
-         VALUES (?, ?, ?, NULL)`,
-        [
-            itemId,
-            -quantity,
-            `POS product sale #${result.insertId}`,
-        ],
-    )
-}
+        if (loyaltyEligible && customerContact) {
+            if (
+                customerContact.length < 7 ||
+                customerContact.length > 30
+            ) {
+                throw problem(
+                    "A valid customer contact is required for loyalty checkout.",
+                    409
+                )
+            }
 
-// ============================================
-// EXISTING BOOKING DEPOSIT APPLICATION
-// ============================================
+            const [matchingProfiles] =
+                await connection.query(
+                    `
+                    SELECT
+                        customer_id,
+                        customer_name
+                    FROM customers
+                    WHERE TRIM(contact_number) = ?
+                    LIMIT 2
+                    `,
+                    [customerContact]
+                )
 
-if (depositId) {
-    const userId = positiveId(req.user.user_id, "Signed-in user")
+            if (matchingProfiles.length > 1) {
+                throw problem(
+                    "Multiple registered customers use this contact number. Ask the owner to resolve the duplicate before checkout.",
+                    409
+                )
+            }
 
-    await connection.query(
-        `INSERT INTO booking_deposit_applications
-         (deposit_id, transaction_id, amount_applied, applied_by)
-         VALUES (?, ?, ?, ?)`,
-        [depositId, result.insertId, decimal(depositAmount), userId],
-    )
-}
+            if (matchingProfiles.length === 1) {
+                const matchedProfile =
+                    matchingProfiles[0]
+
+                matchedCustomerId =
+                    matchedProfile.customer_id
+
+                // A matching phone number alone is not
+                // enough to apply someone else's reward.
+                if (
+                    normalizeCustomerName(customer) !==
+                    normalizeCustomerName(
+                        matchedProfile.customer_name
+                    )
+                ) {
+                    throw problem(
+                        "The customer name and contact do not match the registered customer profile. Verify the details before checkout.",
+                        409
+                    )
+                }
+
+                // Lock the customer before reading rewards.
+                // Owner issuance/edit/revocation must use
+                // the same lock order to avoid races.
+                const [lockedCustomers] =
+                    await connection.query(
+                        `
+                        SELECT customer_id
+                        FROM customers
+                        WHERE customer_id = ?
+                        FOR UPDATE
+                        `,
+                        [matchedCustomerId]
+                    )
+
+                if (lockedCustomers.length !== 1) {
+                    throw problem(
+                        "Customer profile no longer exists.",
+                        409
+                    )
+                }
+
+                // Only enforce rewards while the
+                // loyalty program is enabled.
+                const [[policy]] =
+                    await connection.query(
+                        `
+                        SELECT
+                            enabled,
+                            max_override_percent
+                        FROM ig_loyalty_policy
+                        WHERE policy_id = 1
+                        `
+                    )
+
+                if (policy && Number(policy.enabled)) {
+                    const [issuedRewards] =
+                        await connection.query(
+                            `
+                            SELECT
+                                reward_id,
+                                reward_percent,
+                                issued_by
+                            FROM ig_loyalty_rewards
+                            WHERE customer_id = ?
+                              AND reward_status = 'issued'
+                            ORDER BY reward_id DESC
+                            FOR UPDATE
+                            `,
+                            [matchedCustomerId]
+                        )
+
+                    if (issuedRewards.length > 1) {
+                        throw problem(
+                            "Multiple issued loyalty rewards require owner review.",
+                            409
+                        )
+                    }
+
+                    if (issuedRewards.length === 1) {
+                        const reward = issuedRewards[0]
+
+                        // The POS must send the exact
+                        // reward shown in its preview.
+                        if (!rewardId) {
+                            throw problem(
+                                "An owner-issued loyalty reward is available. Refresh checkout to apply it automatically.",
+                                409
+                            )
+                        }
+
+                        if (
+                            Number(reward.reward_id) !==
+                            rewardId
+                        ) {
+                            throw problem(
+                                "The loyalty reward changed. Refresh checkout.",
+                                409
+                            )
+                        }
+
+                        const percent = Number(
+                            reward.reward_percent
+                        )
+
+                        const maximumPercent = Number(
+                            policy.max_override_percent
+                        )
+
+                        if (
+                            !Number.isFinite(percent) ||
+                            !Number.isFinite(maximumPercent) ||
+                            percent <= 0 ||
+                            percent > maximumPercent ||
+                            percent > 100
+                        ) {
+                            throw problem(
+                                "The owner-issued reward percentage is invalid.",
+                                409
+                            )
+                        }
+
+                        // Work in centavos and basis points.
+                        discountPercent = percent
+
+                        const basisPoints = Math.round(
+                            percent * 100
+                        )
+
+                        discountAmount = Math.round(
+                            subtotal * basisPoints / 10000
+                        )
+
+                        total =
+                            subtotal - discountAmount
+
+                        if (total < 1) {
+                            throw problem(
+                                "The discounted sale total must remain positive.",
+                                409
+                            )
+                        }
+
+                        redeemedRewardId =
+                            Number(reward.reward_id)
+
+                        rewardIssuedBy =
+                            reward.issued_by
+
+                        rewardCustomerId =
+                            matchedCustomerId
+
+                        discountReason =
+                            "Owner-issued one-time loyalty reward"
+                    } else if (rewardId) {
+                        throw problem(
+                            "The loyalty reward is no longer available. Refresh checkout.",
+                            409
+                        )
+                    }
+                } else if (rewardId) {
+                    throw problem(
+                        "Loyalty rewards are currently disabled.",
+                        409
+                    )
+                }
+            } else if (rewardId) {
+                throw problem(
+                    "The registered loyalty customer could not be found.",
+                    409
+                )
+            }
+        }
+
+        // Never accept a reward for an ineligible sale
+        // or a missing registered customer contact.
+        if (rewardId && !redeemedRewardId) {
+            throw problem(
+                "This loyalty reward cannot be applied to the transaction.",
+                409
+            )
+        }
+
+        // Offline-queued sales must not redeem rewards.
+        // This is a synchronization rule, not a trusted
+        // authorization boundary. An offline sale with an
+        // issued reward is held for staff resolution.
+        if (
+            body.offline_queued === true &&
+            redeemedRewardId
+        ) {
+            throw problem(
+                "This offline sale has an issued loyalty reward. Resolve the checkout online before synchronizing.",
+                409
+            )
+        }
+
+        // Recheck after the discount has been calculated.
+        // A verified deposit must never exceed the total.
+        if (depositAmount > total) {
+            throw problem(
+                "The verified deposit exceeds the discounted total. Resolve the excess payment before checkout.",
+                409
+            )
+        }
+
+        if (
+            !customer ||
+            customer.length > 100 ||
+            !service ||
+            service.length > 150
+        ) {
+            throw problem(
+                "Enter a valid customer and item/service name."
+            )
+        }
+
+        // ============================================
+        // PART 5 — SAVE TRANSACTION
+        // ============================================
+        //
+        // The transaction amount is the discounted
+        // final total, before subtracting a verified
+        // booking deposit.
+        //
+        // The booking deposit is recorded separately
+        // so the receipt can show the balance collected.
+        // ============================================
+
+        const [result] = await connection.query(
+            `
+            INSERT INTO transactions (
+                appointment_id,
+                customer,
+                service,
+                amount,
+                payment,
+                status,
+                sale_type,
+                item_id,
+                quantity,
+                offline_id,
+                transaction_date,
+                historical_date_only,
+                customer_contact,
+                subtotal,
+                discount_type,
+                discount_percent,
+                discount_amount,
+                discount_decision,
+                discount_reason,
+                discount_approved_by
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ${
+                    saleEpoch == null
+                        ? "CURRENT_TIMESTAMP"
+                        : "FROM_UNIXTIME(?)"
+                },
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            `,
+            [
+                appointmentId,
+                customer,
+                service,
+                decimal(total),
+                payment,
+                status,
+                saleType,
+                itemId,
+                quantity,
+                offlineId,
+
+                ...(saleEpoch == null
+                    ? []
+                    : [saleEpoch]),
+
+                saleEpoch == null ? 0 : 1,
+                customerContact,
+                decimal(subtotal),
+
+                redeemedRewardId
+                    ? "loyalty"
+                    : null,
+
+                redeemedRewardId
+                    ? discountPercent.toFixed(2)
+                    : null,
+
+                decimal(discountAmount),
+
+                redeemedRewardId
+                    ? "apply"
+                    : null,
+
+                redeemedRewardId
+                    ? discountReason
+                    : null,
+
+                redeemedRewardId
+                    ? rewardIssuedBy
+                    : null,
+            ]
+        )
+
+        // ============================================
+        // AUTOMATIC POS INVENTORY MOVEMENT RECORD
+        // ============================================
+        //
+        // Product stock was already deducted in Part 3.
+        // Do NOT deduct stock a second time.
+        //
+        // This entry is saved in the same SQL transaction
+        // as the POS sale.
+        // ============================================
+
+        if (saleType === "Product") {
+            await connection.query(
+                `
+                INSERT INTO inventory_movements (
+                    item_id,
+                    quantity_change,
+                    reason,
+                    offline_id
+                )
+                VALUES (?, ?, ?, NULL)
+                `,
+                [
+                    itemId,
+                    -quantity,
+                    `POS product sale #${result.insertId}`,
+                ]
+            )
+        }
+
+        // ============================================
+        // VERIFIED BOOKING DEPOSIT APPLICATION
+        // ============================================
+        //
+        // The deposit is applied once to the sale.
+        // It is not deducted from the transaction.amount
+        // column because transaction.amount stores the
+        // final service price after the loyalty discount.
+        // ============================================
+
+        if (depositId) {
+            const userId = positiveId(
+                req.user.user_id,
+                "Signed-in user"
+            )
+
+            await connection.query(
+                `
+                INSERT INTO booking_deposit_applications (
+                    deposit_id,
+                    transaction_id,
+                    amount_applied,
+                    applied_by
+                )
+                VALUES (?, ?, ?, ?)
+                `,
+                [
+                    depositId,
+                    result.insertId,
+                    decimal(depositAmount),
+                    userId,
+                ]
+            )
+        }
+
+        // ============================================
+        // PART 6 — REDEEM OWNER-ISSUED LOYALTY REWARD
+        // ============================================
+        //
+        // Redeem only after the transaction has been
+        // inserted successfully.
+        //
+        // This UPDATE is inside the same SQL transaction
+        // as the sale, inventory movement, and deposit.
+        //
+        // If anything fails before COMMIT, the rollback
+        // restores the reward to its previous state.
+        // ============================================
+
+        if (redeemedRewardId) {
+            const [redemption] =
+                await connection.query(
+                    `
+                    UPDATE ig_loyalty_rewards
+                    SET
+                        reward_status = 'redeemed',
+                        redeemed_transaction_id = ?,
+                        redeemed_at = CURRENT_TIMESTAMP
+                    WHERE reward_id = ?
+                      AND customer_id = ?
+                      AND reward_status = 'issued'
+                      AND redeemed_transaction_id IS NULL
+                    `,
+                    [
+                        result.insertId,
+                        redeemedRewardId,
+                        rewardCustomerId,
+                    ]
+                )
+
+            if (redemption.affectedRows !== 1) {
+                throw problem(
+                    "The loyalty reward is no longer available. Refresh checkout.",
+                    409
+                )
+            }
+        }
+
+        // ============================================
+        // COMMIT THE COMPLETE CHECKOUT
+        // ============================================
+        //
+        // The following operations succeed together:
+        //
+        // 1. POS transaction
+        // 2. Product inventory movement, if applicable
+        // 3. Booking deposit application, if applicable
+        // 4. One-time loyalty redemption, if applicable
+        // ============================================
 
         await connection.commit()
         inTransaction = false
 
-        res.status(201).json({
-            message: "Transaction saved successfully.",
+        // ============================================
+        // SUCCESS RESPONSE
+        // ============================================
+
+        return res.status(201).json({
+            message:
+                "Transaction saved successfully.",
+
             id: result.insertId,
-            deposit_applied: decimal(depositAmount),
-            balance_collected: decimal(total - depositAmount),
+
+            subtotal: decimal(subtotal),
+
+            // Discount authorized by the owner-issued
+            // reward, not by cashier input.
+            discount_amount:
+                decimal(discountAmount),
+
+            discount_decision:
+                redeemedRewardId
+                    ? "apply"
+                    : null,
+
+            discount_percent:
+                redeemedRewardId
+                    ? discountPercent
+                    : 0,
+
+            // Deposit is already paid and verified.
+            deposit_applied:
+                decimal(depositAmount),
+
+            // Amount still collected at checkout.
+            balance_collected:
+                decimal(total - depositAmount),
+
+            // Final transaction amount, including
+            // any loyalty discount but before deposit.
+            amount: decimal(total),
+
+            // Loyalty reward details.
+            reward_id:
+                redeemedRewardId,
+
+            reward_status:
+                redeemedRewardId
+                    ? "redeemed"
+                    : null,
         })
+
     } catch (error) {
+        // ============================================
+        // ROLLBACK ON FAILURE
+        // ============================================
+
         if (connection && inTransaction) {
-            await connection.rollback().catch(() => {})
+            await connection
+                .rollback()
+                .catch((rollbackError) => {
+                    console.error(
+                        "Transaction rollback error:",
+                        rollbackError
+                    )
+                })
+
             inTransaction = false
         }
 
-        if (error.code === "ER_DUP_ENTRY" && req.body?.offline_id && connection) {
+        // ============================================
+        // EMERGENCY MODE DUPLICATE HANDLING
+        // ============================================
+        //
+        // A queued offline transaction may be retried.
+        // If its offline_id was already saved, return
+        // the existing transaction rather than creating
+        // a duplicate.
+        // ============================================
+
+        if (
+            error.code === "ER_DUP_ENTRY" &&
+            req.body?.offline_id &&
+            connection
+        ) {
             try {
-                const [duplicates] = await connection.query(
-                    "SELECT transaction_id FROM transactions WHERE offline_id = ?",
-                    [String(req.body.offline_id)],
-                )
+                const [duplicates] =
+                    await connection.query(
+                        `
+                        SELECT transaction_id
+                        FROM transactions
+                        WHERE offline_id = ?
+                        `,
+                        [
+                            String(
+                                req.body.offline_id
+                            ),
+                        ]
+                    )
 
                 if (duplicates.length) {
                     return res.json({
-                        message: "Transaction already saved.",
-                        id: duplicates[0].transaction_id,
+                        message:
+                            "Transaction already saved.",
+
+                        id:
+                            duplicates[0]
+                                .transaction_id,
+
                         duplicate: true,
                     })
                 }
-            } catch {
-                // Fall through to the error response.
+            } catch (lookupError) {
+                console.error(
+                    "Offline duplicate lookup error:",
+                    lookupError
+                )
             }
         }
 
-        res.status(error.status || (error.code === "ER_DUP_ENTRY" ? 409 : 500)).json({
+        // ============================================
+        // SAFE ERROR RESPONSE
+        // ============================================
+
+        console.error(
+            "Transaction checkout error:",
+            error
+        )
+
+        const statusCode =
+            error.status ||
+            (
+                error.code === "ER_DUP_ENTRY"
+                    ? 409
+                    : 500
+            )
+
+        return res.status(statusCode).json({
             error:
                 error.code === "ER_DUP_ENTRY"
                     ? "This payment or transaction has already been recorded. Refresh the history."
-                    : error.message,
+                    : error.status
+                        ? error.message
+                        : "Unable to save the transaction. Please try again.",
         })
+
     } finally {
+        // Always release the pooled connection.
         connection?.release()
     }
 })
