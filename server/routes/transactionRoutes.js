@@ -1276,15 +1276,17 @@ router.post("/", async (req, res) => {
                 discount_reason,
                 discount_approved_by
             )
-            VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ${
-                    saleEpoch == null
-                        ? "CURRENT_TIMESTAMP"
-                        : "FROM_UNIXTIME(?)"
-                },
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
+
+VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ${
+        saleEpoch == null
+            ? "CURRENT_TIMESTAMP"
+            : "FROM_UNIXTIME(?)"
+    },
+    ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+
             `,
             [
                 appointmentId,
