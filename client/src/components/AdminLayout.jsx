@@ -98,6 +98,12 @@ const menuGroups = [
                 LuCreditCard,
             ],
 
+             [
+            "Customers",
+            "/admin/customers",
+            LuUsers,
+        ],
+
             [
                 "Inventory",
                 "/admin/inventory",
@@ -219,42 +225,46 @@ function Sidebar({
             ? "/admin/appointments"
             : "/admin"
 
-    const visibleMenuGroups =
-        user
-            ? menuGroups
-                  .map(
-                      (
-                          group,
-                      ) => ({
-                          ...group,
 
-                          items:
+const visibleMenuGroups =
+    user
+        ? menuGroups
+              .map((group) => ({
+                  ...group,
+
+                  items: group.items.filter(
+                      ([, path]) => {
+                          // Customers: OWNER ONLY
+                          if (
+                              path ===
+                              "/admin/customers"
+                          ) {
+                              return (
+                                  user.role ===
+                                  "owner"
+                              )
+                          }
+
+                          // Keep existing staff restrictions
+                          if (
                               user.role ===
                               "user"
-                                  ? group.items.filter(
-                                        (
-                                            [
-                                                ,
-                                                path,
-                                            ],
-                                        ) =>
-                                            staffPaths.has(
-                                                path,
-                                            ),
-                                    )
-                                  : group.items,
-                      }),
-                  )
-                  .filter(
-                      (
-                          group,
-                      ) =>
-                          group
-                              .items
-                              .length >
-                          0,
-                  )
-            : []
+                          ) {
+                              return staffPaths.has(
+                                  path,
+                              )
+                          }
+
+                          // Other existing menu items
+                          return true
+                      },
+                  ),
+              }))
+              .filter(
+                  (group) =>
+                      group.items.length > 0,
+              )
+        : []
 
     return (
         <>

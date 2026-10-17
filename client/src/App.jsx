@@ -42,6 +42,9 @@ const AdminServices = lazy(() =>
 const AdminTransactions = lazy(() =>
     import("./pages/AdminTransactions"),
 )
+const AdminCustomers = lazy(() =>
+    import("./pages/AdminCustomers"),
+)
 const AdminReports = lazy(() =>
     import("./pages/AdminReports"),
 )
@@ -111,6 +114,11 @@ const adminPages = [
         Page: AdminTransactions,
         roles: ["owner", "admin", "user"],
     },
+    {
+    path: "/admin/customers",
+    Page: AdminCustomers,
+    roles: ["owner"],
+},
     {
         path: "/admin/reports",
         Page: AdminReports,
