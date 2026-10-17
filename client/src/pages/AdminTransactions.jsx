@@ -447,6 +447,7 @@ function freshForm() {
     return {
         mode: "Walk-in",
         customer: "",
+        customerContact: "",
         sale_type: "Service",
         selectedId: "",
         appointmentId: "",
@@ -480,6 +481,11 @@ function AdminTransactions() {
 
     const [form, setForm] =
         useState(freshForm)
+
+    const [loyalty, setLoyalty] = useState(null)
+    const [loyaltyLoading, setLoyaltyLoading] = useState(false)
+    const [loyaltyError, setLoyaltyError] = useState("")
+    const [loyaltyPolicy, setLoyaltyPolicy] = useState(null)
 
     const [receipt, setReceipt] =
         useState(null)
@@ -851,6 +857,43 @@ function AdminTransactions() {
                 String(row.id) ===
                 form.appointmentId,
         )
+
+    const loyaltyContact = booked
+        ? String(appointment?.contact_number || "").trim()
+        : form.customerContact.trim()
+
+    useEffect(() => {
+        const controller = new AbortController()
+        setLoyalty(null)
+        setLoyaltyError("")
+        if (!navigator.onLine || loyaltyContact.length < 7) {
+            setLoyaltyLoading(false)
+            return () => controller.abort()
+        }
+        setLoyaltyLoading(true)
+        const timer = setTimeout(async () => {
+            try {
+                const result = await request(
+                    `/discounts/loyalty/recommendation?contact=${encodeURIComponent(loyaltyContact)}`,
+                    { signal: controller.signal },
+                )
+                if (!controller.signal.aborted) setLoyalty(result)
+            } catch (err) {
+                if (!controller.signal.aborted) setLoyaltyError(err.message)
+            } finally {
+                if (!controller.signal.aborted) setLoyaltyLoading(false)
+            }
+        }, 350)
+        return () => { clearTimeout(timer); controller.abort() }
+    }, [loyaltyContact])
+
+    useEffect(() => {
+        const controller = new AbortController()
+        request("/discounts/policy", { signal: controller.signal })
+            .then((data) => { if (!controller.signal.aborted) setLoyaltyPolicy(data) })
+            .catch(() => {})
+        return () => controller.abort()
+    }, [])
 
     const items = productSale
         ? products
@@ -2104,6 +2147,18 @@ function AdminTransactions() {
                                         />
                                     </Field>
 
+                                    <Field label="Customer contact (optional — for loyalty lookup)">
+                                        <input
+                                            type="tel"
+                                            maxLength={40}
+                                            autoComplete="tel"
+                                            placeholder="e.g. 09XXXXXXXXX"
+                                            className={input}
+                                            value={form.customerContact}
+                                            onChange={(event) => change("customerContact", event.target.value)}
+                                        />
+                                    </Field>
+
                                     <Field label="Sale type">
                                         <select
                                             className={
@@ -2292,6 +2347,44 @@ function AdminTransactions() {
                                     )}
                                 </>
                             )}
+
+                            <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 text-sm">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <h3 className="font-bold text-purple-950">Loyalty discount recommendation</h3>
+                                    <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-purple-700">Advisory only</span>
+                                </div>
+                                <p className="mt-2 text-xs text-gray-600">
+                                    {loyaltyPolicy?.enabled
+                                        ? `Policy: ${loyaltyPolicy.min_paid_visits} paid visits for a suggested ${Number(loyaltyPolicy.suggested_percent || 0)}% discount.`
+                                        : "Discount eligibility is subject to the salon's loyalty policy."}
+                                </p>
+                                {!navigator.onLine ? (
+                                    <p className="mt-3 text-amber-700">Unavailable in Emergency Mode. No discount will be deducted.</p>
+                                ) : !loyaltyContact ? (
+                                    <p className="mt-3 text-gray-600">{booked ? "Select an appointment to check eligibility." : "Enter the customer's contact number to check prior paid visits."}</p>
+                                ) : loyaltyContact.length < 7 ? (
+                                    <p className="mt-3 text-gray-600">Enter a valid contact number to check eligibility.</p>
+                                ) : loyaltyLoading ? (
+                                    <p className="mt-3 text-gray-600">Checking recorded visits…</p>
+                                ) : loyaltyError ? (
+                                    <p className="mt-3 text-amber-700">Loyalty lookup unavailable: {loyaltyError}. Checkout is unchanged.</p>
+                                ) : loyalty ? (
+                                    <div className="mt-3 space-y-2">
+                                        <p className="font-semibold text-purple-900">{loyalty.paid_visits} previous paid visit(s)</p>
+                                        <p className={loyalty.eligible ? "font-semibold text-emerald-700" : "text-gray-600"}>
+                                            {loyalty.eligible
+                                                ? `Eligible for a suggested ${Number(loyalty.recommended_percent || 0)}% loyalty discount — owner approval required.`
+                                                : "Not yet eligible for a loyalty discount."}
+                                        </p>
+                                        {loyalty.eligible && (
+                                            <p className="text-xs text-gray-600">Illustrative saving on current total: {money(Math.round(toCents(form.amount) * Number(loyalty.recommended_percent || 0) / 100) / 100)}. This is not deducted at checkout.</p>
+                                        )}
+                                    </div>
+                                ) : null}
+                                <p className="mt-3 border-t border-purple-100 pt-3 text-xs text-gray-500">
+                                    Apply / Edit / Skip will be enabled after owner-authorized backend discount saving is implemented. The current bill and receipt remain unchanged.
+                                </p>
+                            </div>
 
                             <Field label="Final sale total before deposit deduction (₱)">
                                 <input
