@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+
+import {
+    useCallback,
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    useState,
+} from "react"
 import { API_URL, apiFetch } from "../lib/sessionApi"
 
-const panel = "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6"
+const panel =
+    "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6"
 
 const input =
     "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
@@ -15,12 +24,15 @@ const money = (value) =>
         currency: "PHP",
     })
 
-const toCents = (value) => Math.round(Number(value || 0) * 100)
+const toCents = (value) =>
+    Math.round(Number(value || 0) * 100)
 
 function dateLabel(value, dateOnly = false) {
     const date = new Date(value)
 
-    if (!value || Number.isNaN(date.getTime())) return "Date unavailable"
+    if (!value || Number.isNaN(date.getTime())) {
+        return "Date unavailable"
+    }
 
     return date.toLocaleString("en-PH", {
         timeZone: "Asia/Manila",
@@ -37,7 +49,8 @@ function philippineDate() {
         day: "2-digit",
     }).formatToParts(new Date())
 
-    const part = (type) => parts.find((item) => item.type === type)?.value
+    const part = (type) =>
+        parts.find((item) => item.type === type)?.value
 
     return `${part("year")}-${part("month")}-${part("day")}`
 }
@@ -45,7 +58,9 @@ function philippineDate() {
 function dayKey(value) {
     const date = new Date(value)
 
-    if (Number.isNaN(date.getTime())) return ""
+    if (Number.isNaN(date.getTime())) {
+        return ""
+    }
 
     return new Intl.DateTimeFormat("en-CA", {
         timeZone: "Asia/Manila",
@@ -56,19 +71,29 @@ function dayKey(value) {
 }
 
 async function request(path, options) {
-    const response = await apiFetch(`${API_URL}${path}`, options)
+    const response = await apiFetch(
+        `${API_URL}${path}`,
+        options,
+    )
 
-    const data = await response.json().catch(() => null)
+    const data = await response
+        .json()
+        .catch(() => null)
 
     if (!response.ok) {
-        throw new Error(data?.error || "Request failed.")
+        throw new Error(
+            data?.error || "Request failed.",
+        )
     }
 
     return data
 }
 
-const OFFLINE_CACHE_KEY = "stylesync-pos-cache-v1"
-const OFFLINE_QUEUE_KEY = "stylesync-pos-queue-v1"
+const OFFLINE_CACHE_KEY =
+    "stylesync-pos-cache-v1"
+
+const OFFLINE_QUEUE_KEY =
+    "stylesync-pos-queue-v1"
 
 function readLocal(key, fallback) {
     try {
@@ -114,42 +139,65 @@ function saveOfflineQueue(queue) {
 function pendingRow(entry) {
     const payload = entry.payload
 
-    const amount =
-        Number(payload.amount || 0)
+    const amount = Number(
+        payload.amount || 0,
+    )
 
-    const deposit =
-        Number(
-            payload.expected_deposit_amount ||
-                0,
-        )
+    const deposit = Number(
+        payload.expected_deposit_amount || 0,
+    )
 
     return {
-        transaction_id: `offline-${entry.offline_id}`,
+        transaction_id:
+            `offline-${entry.offline_id}`,
+
         appointment_id:
             payload.appointment_id,
-        customer: payload.customer,
-        customer_contact: "",
+
+        customer:
+            payload.customer,
+
+        customer_contact:
+            payload.customer_contact || "",
+
         customer_email: "",
-        service: payload.service,
-        sale_type: payload.sale_type,
-        item_id: payload.item_id,
-        quantity: payload.quantity,
-        amount: amount.toFixed(2),
-        payment: payload.payment,
+
+        service:
+            payload.service,
+
+        sale_type:
+            payload.sale_type,
+
+        item_id:
+            payload.item_id,
+
+        quantity:
+            payload.quantity,
+
+        amount:
+            amount.toFixed(2),
+
+        payment:
+            payload.payment,
+
         deposit_applied:
             deposit.toFixed(2),
+
         balance_collected:
             Math.max(
                 0,
                 amount - deposit,
             ).toFixed(2),
+
         deposit_payment_method: null,
+
         status: "Paid",
+
         offline_pending: true,
+
         historical_date_only:
-            Boolean(
-                payload.historical_date,
-            ),
+            Boolean(payload.historical_date),
+
         transaction_date:
             payload.historical_date
                 ? `${payload.historical_date}T12:00:00+08:00`
@@ -167,8 +215,7 @@ function applyQueuedProductStock(
         const payload = entry.payload
 
         if (
-            payload.sale_type !==
-                "Product" ||
+            payload.sale_type !== "Product" ||
             !payload.item_id
         ) {
             continue
@@ -181,9 +228,7 @@ function applyQueuedProductStock(
         reserved.set(
             id,
             (reserved.get(id) || 0) +
-                Number(
-                    payload.quantity || 1,
-                ),
+                Number(payload.quantity || 1),
         )
     }
 
@@ -195,6 +240,7 @@ function applyQueuedProductStock(
 
         return {
             ...product,
+
             stock: Math.max(
                 0,
                 Number(product.stock || 0) -
@@ -285,8 +331,7 @@ function SearchSelect({
                 aria-expanded={open}
                 aria-controls={`${id}-list`}
                 aria-activedescendant={
-                    open &&
-                    matches[active]
+                    open && matches[active]
                         ? `${id}-${active}`
                         : undefined
                 }
@@ -295,8 +340,7 @@ function SearchSelect({
                 value={
                     open
                         ? query
-                        : selected?.label ||
-                          ""
+                        : selected?.label || ""
                 }
                 placeholder="Type to search, then select…"
                 className={input}
@@ -306,10 +350,7 @@ function SearchSelect({
                     setOpen(true)
                 }}
                 onChange={(event) => {
-                    setQuery(
-                        event.target.value,
-                    )
-
+                    setQuery(event.target.value)
                     setActive(0)
                     setOpen(true)
 
@@ -318,62 +359,45 @@ function SearchSelect({
                     }
                 }}
                 onKeyDown={(event) => {
-                    if (
-                        event.key ===
-                        "Escape"
-                    ) {
+                    if (event.key === "Escape") {
                         setOpen(false)
                     }
 
-                    if (
-                        event.key ===
-                        "ArrowDown"
-                    ) {
+                    if (event.key === "ArrowDown") {
                         event.preventDefault()
-
                         setOpen(true)
 
-                        setActive(
-                            (previous) =>
-                                Math.min(
-                                    previous +
-                                        1,
-                                    matches.length -
-                                        1,
-                                ),
-                        )
-                    }
-
-                    if (
-                        event.key ===
-                        "ArrowUp"
-                    ) {
-                        event.preventDefault()
-
-                        setActive(
-                            (previous) =>
+                        setActive((previous) =>
+                            Math.min(
+                                previous + 1,
                                 Math.max(
                                     0,
-                                    previous -
-                                        1,
+                                    matches.length - 1,
                                 ),
+                            ),
+                        )
+                    }
+
+                    if (event.key === "ArrowUp") {
+                        event.preventDefault()
+
+                        setActive((previous) =>
+                            Math.max(
+                                0,
+                                previous - 1,
+                            ),
                         )
                     }
 
                     if (
-                        event.key ===
-                            "Enter" &&
+                        event.key === "Enter" &&
                         open
                     ) {
                         event.preventDefault()
 
-                        if (
-                            matches[active]
-                        ) {
+                        if (matches[active]) {
                             select(
-                                matches[
-                                    active
-                                ],
+                                matches[active],
                             )
                         }
                     }
@@ -386,53 +410,37 @@ function SearchSelect({
                     role="listbox"
                     className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-purple-100 bg-white p-1 shadow-lg"
                 >
-                    {matches.length ===
-                    0 ? (
+                    {matches.length === 0 ? (
                         <li className="p-3 text-sm text-gray-500">
-                            No matches
-                            found.
+                            No matches found.
                         </li>
                     ) : (
                         matches.map(
-                            (
-                                option,
-                                index,
-                            ) => (
+                            (option, index) => (
                                 <li
-                                    key={
-                                        option.value
-                                    }
+                                    key={option.value}
                                     id={`${id}-${index}`}
                                     role="option"
                                     aria-selected={
                                         option.value ===
                                         value
                                     }
-                                    onMouseDown={(
-                                        event,
-                                    ) =>
+                                    onMouseDown={(event) =>
                                         event.preventDefault()
                                     }
                                     onMouseEnter={() =>
-                                        setActive(
-                                            index,
-                                        )
+                                        setActive(index)
                                     }
                                     onClick={() =>
-                                        select(
-                                            option,
-                                        )
+                                        select(option)
                                     }
                                     className={`cursor-pointer rounded-lg p-3 text-sm ${
-                                        index ===
-                                        active
+                                        index === active
                                             ? "bg-purple-50 text-purple-900"
                                             : "text-gray-700"
                                     }`}
                                 >
-                                    {
-                                        option.label
-                                    }
+                                    {option.label}
                                 </li>
                             ),
                         )
@@ -459,282 +467,190 @@ function freshForm() {
 }
 
 function AdminTransactions() {
-    const [
-        transactions,
-        setTransactions,
-    ] = useState([])
+    const [transactions, setTransactions] = useState([])
+    const [services, setServices] = useState([])
+    const [products, setProducts] = useState([])
+    const [appointments, setAppointments] = useState([])
 
-    const [
-        services,
-        setServices,
-    ] = useState([])
-
-    const [
-        products,
-        setProducts,
-    ] = useState([])
-
-    const [
-        appointments,
-        setAppointments,
-    ] = useState([])
-
-    const [form, setForm] =
-        useState(freshForm)
+    const [form, setForm] = useState(freshForm)
 
     const [loyalty, setLoyalty] = useState(null)
     const [loyaltyLoading, setLoyaltyLoading] = useState(false)
     const [loyaltyError, setLoyaltyError] = useState("")
-    const [loyaltyPolicy, setLoyaltyPolicy] = useState(null)
 
-    const [receipt, setReceipt] =
-        useState(null)
-
-    const [search, setSearch] =
-        useState("")
-
+    const [receipt, setReceipt] = useState(null)
+    const [search, setSearch] = useState("")
     const [historyPage, setHistoryPage] = useState(1)
+
     const HISTORY_PAGE_SIZE = 10
 
-    const [loading, setLoading] =
-        useState(true)
-
-    const [busy, setBusy] =
-        useState(false)
-
-    const [
-        loadError,
-        setLoadError,
-    ] = useState("")
-
-    const [error, setError] =
-        useState("")
-
-    const [message, setMessage] =
-        useState("")
-
-    const [clock, setClock] =
-        useState(() => new Date())
+    const [loading, setLoading] = useState(true)
+    const [busy, setBusy] = useState(false)
+    const [loadError, setLoadError] = useState("")
+    const [error, setError] = useState("")
+    const [message, setMessage] = useState("")
+    const [clock, setClock] = useState(() => new Date())
 
     const lock = useRef(false)
-
     const version = useRef(0)
-
     const retry = useRef(null)
 
-    const load = useCallback(
-        async (signal) => {
-            const current =
-                ++version.current
+    const load = useCallback(async (signal) => {
+        const current = ++version.current
 
-            setLoading(true)
-            setLoadError("")
+        setLoading(true)
+        setLoadError("")
 
-            const restoreCache =
-                () => {
-                    const cache =
-                        readLocal(
-                            OFFLINE_CACHE_KEY,
-                            null,
-                        )
+        const restoreCache = () => {
+            const cache = readLocal(
+                OFFLINE_CACHE_KEY,
+                null,
+            )
 
-                    if (!cache) {
-                        return false
-                    }
+            if (!cache) {
+                return false
+            }
 
-                    const queue =
-                        getOfflineQueue()
+            const queue = getOfflineQueue()
+            const pending = queue.map(pendingRow)
 
-                    const pending =
-                        queue.map(
-                            pendingRow,
-                        )
+            setTransactions([
+                ...pending,
+                ...(Array.isArray(cache.transactions)
+                    ? cache.transactions
+                    : []),
+            ])
 
-                    setTransactions([
-                        ...pending,
-                        ...(Array.isArray(
-                            cache.transactions,
-                        )
-                            ? cache.transactions
-                            : []),
-                    ])
+            setServices(
+                Array.isArray(cache.services)
+                    ? cache.services
+                    : [],
+            )
 
-                    setServices(
-                        Array.isArray(
-                            cache.services,
-                        )
-                            ? cache.services
-                            : [],
-                    )
+            const cachedProducts =
+                Array.isArray(cache.products)
+                    ? cache.products
+                    : []
 
-                    const cachedProducts =
-                        Array.isArray(
-                            cache.products,
-                        )
-                            ? cache.products
-                            : []
+            setProducts(
+                applyQueuedProductStock(
+                    cachedProducts,
+                    queue,
+                ),
+            )
 
-                    setProducts(
-                        applyQueuedProductStock(
-                            cachedProducts,
-                            queue,
-                        ),
-                    )
+            setAppointments(
+                Array.isArray(cache.appointments)
+                    ? cache.appointments
+                    : [],
+            )
 
-                    setAppointments(
-                        Array.isArray(
-                            cache.appointments,
-                        )
-                            ? cache.appointments
-                            : [],
-                    )
+            return true
+        }
 
-                    return true
-                }
+        if (!navigator.onLine) {
+            const restored = restoreCache()
 
-            if (!navigator.onLine) {
-                const restored =
-                    restoreCache()
+            if (!restored) {
+                setLoadError(
+                    "No offline POS data is cached yet. Connect to the internet once before using Emergency Mode.",
+                )
+            } else {
+                setMessage(
+                    "Emergency Mode active. Using the last saved POS data.",
+                )
+            }
 
-                if (!restored) {
-                    setLoadError(
-                        "No offline POS data is cached yet. Connect to the internet once before using Emergency Mode.",
+            setLoading(false)
+            return null
+        }
+
+        try {
+            const data = await Promise.all([
+                request("/transactions", { signal }),
+                request("/services", { signal }),
+                request("/inventory", { signal }),
+                request(
+                    "/transactions/checkout-appointments",
+                    { signal },
+                ),
+            ])
+
+            if (!data.every(Array.isArray)) {
+                throw new Error(
+                    "Unexpected server response.",
+                )
+            }
+
+            if (
+                signal?.aborted ||
+                current !== version.current
+            ) {
+                return null
+            }
+
+            writeLocal(OFFLINE_CACHE_KEY, {
+                transactions: data[0],
+                services: data[1],
+                products: data[2],
+                appointments: data[3],
+                savedAt: Date.now(),
+            })
+
+            const queue = getOfflineQueue()
+            const pending = queue.map(pendingRow)
+
+            setTransactions([
+                ...pending,
+                ...data[0],
+            ])
+
+            setServices(data[1])
+
+            setProducts(
+                applyQueuedProductStock(
+                    data[2],
+                    queue,
+                ),
+            )
+
+            setAppointments(data[3])
+
+            return data[0]
+        } catch (err) {
+            if (
+                !signal?.aborted &&
+                current === version.current
+            ) {
+                const restored = restoreCache()
+
+                if (restored) {
+                    setMessage(
+                        "Emergency Mode active. Using locally cached POS data.",
                     )
                 } else {
-                    setMessage(
-                        "Emergency Mode active. Using the last saved POS data.",
-                    )
+                    setLoadError(err.message)
                 }
+            }
 
+            return null
+        } finally {
+            if (
+                !signal?.aborted &&
+                current === version.current
+            ) {
                 setLoading(false)
-
-                return null
             }
+        }
+    }, [])
 
-            try {
-                const data =
-                    await Promise.all([
-                        request(
-                            "/transactions",
-                            { signal },
-                        ),
-                        request(
-                            "/services",
-                            { signal },
-                        ),
-                        request(
-                            "/inventory",
-                            { signal },
-                        ),
-                        request(
-                            "/transactions/checkout-appointments",
-                            { signal },
-                        ),
-                    ])
-
-                if (
-                    !data.every(
-                        Array.isArray,
-                    )
-                ) {
-                    throw new Error(
-                        "Unexpected server response.",
-                    )
-                }
-
-                if (
-                    signal?.aborted ||
-                    current !==
-                        version.current
-                ) {
-                    return null
-                }
-
-                writeLocal(
-                    OFFLINE_CACHE_KEY,
-                    {
-                        transactions:
-                            data[0],
-                        services:
-                            data[1],
-                        products:
-                            data[2],
-                        appointments:
-                            data[3],
-                        savedAt:
-                            Date.now(),
-                    },
-                )
-
-                const queue =
-                    getOfflineQueue()
-
-                const pending =
-                    queue.map(
-                        pendingRow,
-                    )
-
-                setTransactions([
-                    ...pending,
-                    ...data[0],
-                ])
-
-                setServices(data[1])
-
-                setProducts(
-                    applyQueuedProductStock(
-                        data[2],
-                        queue,
-                    ),
-                )
-
-                setAppointments(
-                    data[3],
-                )
-
-                return data[0]
-            } catch (err) {
-                if (
-                    !signal?.aborted &&
-                    current ===
-                        version.current
-                ) {
-                    const restored =
-                        restoreCache()
-
-                    if (restored) {
-                        setMessage(
-                            "Emergency Mode active. Using locally cached POS data.",
-                        )
-                    } else {
-                        setLoadError(
-                            err.message,
-                        )
-                    }
-                }
-
-                return null
-            } finally {
-                if (
-                    !signal?.aborted &&
-                    current ===
-                        version.current
-                ) {
-                    setLoading(false)
-                }
-            }
-        },
-        [],
-    )
-
-    const syncOfflineTransactions =
-        useCallback(async () => {
+    const syncOfflineTransactions = useCallback(
+        async () => {
             if (!navigator.onLine) {
                 return
             }
 
-            let queue =
-                getOfflineQueue()
+            let queue = getOfflineQueue()
 
             if (!queue.length) {
                 return
@@ -742,46 +658,46 @@ function AdminTransactions() {
 
             let synced = 0
 
-            for (const entry of [
-                ...queue,
-            ]) {
+            for (const entry of [...queue]) {
                 try {
-                    await request(
-                        "/transactions",
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type":
-                                    "application/json",
-                            },
-                            body: JSON.stringify(
-                                {
-                                    ...entry.payload,
-                                    offline_id:
-                                        entry.offline_id,
-                                },
-                            ),
-                        },
-                    )
-
-                    queue =
-                        queue.filter(
-                            (item) =>
-                                item.offline_id !==
-                                entry.offline_id,
+                    // Never redeem a loyalty reward
+                    // through a queued offline sale.
+                    if (
+                        entry.payload?.loyalty_reward_id ||
+                        entry.payload?.discount_decision
+                    ) {
+                        console.error(
+                            "Offline queue contains a discount request requiring review.",
+                            entry.offline_id,
                         )
+                        break
+                    }
 
-                    saveOfflineQueue(
-                        queue,
+                    await request("/transactions", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            ...entry.payload,
+                            offline_id: entry.offline_id,
+                            offline_queued: true,
+                        }),
+                    })
+
+                    queue = queue.filter(
+                        (item) =>
+                            item.offline_id !==
+                            entry.offline_id,
                     )
 
+                    saveOfflineQueue(queue)
                     synced += 1
                 } catch (err) {
                     console.error(
                         "Offline transaction sync failed:",
                         err,
                     )
-
                     break
                 }
             }
@@ -789,33 +705,28 @@ function AdminTransactions() {
             if (synced > 0) {
                 setMessage(
                     `${synced} offline transaction${
-                        synced === 1
-                            ? ""
-                            : "s"
+                        synced === 1 ? "" : "s"
                     } synced successfully.`,
                 )
 
                 await load()
             }
-        }, [load])
+        },
+        [load],
+    )
 
     useEffect(() => {
-        const controller =
-            new AbortController()
+        const controller = new AbortController()
 
         load(controller.signal)
 
         const timer = setInterval(
-            () =>
-                setClock(
-                    new Date(),
-                ),
+            () => setClock(new Date()),
             60000,
         )
 
         return () => {
             controller.abort()
-
             clearInterval(timer)
         }
     }, [load])
@@ -842,87 +753,178 @@ function AdminTransactions() {
         }
     }, [syncOfflineTransactions])
 
-    const booked =
-        form.mode === "Appointment"
+    const booked = form.mode === "Appointment"
+    const productSale = form.sale_type === "Product"
+    const disabled = loading || busy
 
-    const productSale =
-        form.sale_type === "Product"
-
-    const disabled =
-        loading || busy
-
-    const appointment =
-        appointments.find(
-            (row) =>
-                String(row.id) ===
-                form.appointmentId,
-        )
+    const appointment = appointments.find(
+        (row) =>
+            String(row.id) ===
+            form.appointmentId,
+    )
 
     const loyaltyContact = booked
-        ? String(appointment?.contact_number || "").trim()
+        ? String(
+              appointment?.contact_number || "",
+          ).trim()
         : form.customerContact.trim()
 
-    useEffect(() => {
-        const controller = new AbortController()
-        setLoyalty(null)
-        setLoyaltyError("")
-        if (!navigator.onLine || loyaltyContact.length < 7) {
-            setLoyaltyLoading(false)
-            return () => controller.abort()
-        }
-        setLoyaltyLoading(true)
-        const timer = setTimeout(async () => {
-            try {
-                const result = await request(
-                    `/discounts/loyalty/recommendation?contact=${encodeURIComponent(loyaltyContact)}`,
-                    { signal: controller.signal },
-                )
-                if (!controller.signal.aborted) setLoyalty(result)
-            } catch (err) {
-                if (!controller.signal.aborted) setLoyaltyError(err.message)
-            } finally {
-                if (!controller.signal.aborted) setLoyaltyLoading(false)
-            }
-        }, 350)
-        return () => { clearTimeout(timer); controller.abort() }
-    }, [loyaltyContact])
+    const rewardApplicable =
+        !productSale &&
+        !form.historicalDate &&
+        (!booked || Boolean(appointment))
+
+    // Identify exactly which checkout this lookup belongs to.
+    // Prevents a reward fetched for a previous customer
+    // from appearing when the cashier switches customers.
+    const rewardLookupKey = rewardApplicable
+        ? booked
+            ? appointment
+                ? `appointment:${appointment.id}:${loyaltyContact}`
+                : ""
+            : loyaltyContact.length >= 7
+              ? `walkin:${loyaltyContact}`
+              : ""
+        : ""
+
+    const [rewardLookup, setRewardLookup] =
+        useState(null)
+
+    const activeReward =
+        navigator.onLine &&
+        rewardLookupKey &&
+        rewardLookup?.key === rewardLookupKey &&
+        rewardLookup?.data?.available === true
+            ? rewardLookup.data.reward
+            : null
+
+    const rewardCheckPending =
+        Boolean(
+            navigator.onLine &&
+            rewardLookupKey &&
+            rewardLookup?.key !== rewardLookupKey,
+        )
 
     useEffect(() => {
         const controller = new AbortController()
-        request("/discounts/policy", { signal: controller.signal })
-            .then((data) => { if (!controller.signal.aborted) setLoyaltyPolicy(data) })
-            .catch(() => {})
-        return () => controller.abort()
-    }, [])
+
+        setLoyalty(null)
+        setLoyaltyError("")
+        setRewardLookup(null)
+
+        if (
+            !navigator.onLine ||
+            !rewardApplicable ||
+            !rewardLookupKey ||
+            loyaltyContact.length < 7
+        ) {
+            setLoyaltyLoading(false)
+
+            return () => controller.abort()
+        }
+
+        setLoyaltyLoading(true)
+
+        const timer = setTimeout(async () => {
+            try {
+                const params =
+                    new URLSearchParams()
+
+                if (booked && appointment) {
+                    params.set(
+                        "appointment_id",
+                        String(appointment.id),
+                    )
+                } else {
+                    params.set(
+                        "customer_contact",
+                        loyaltyContact,
+                    )
+                }
+
+                const result = await request(
+                    `/transactions/loyalty-preview?${params.toString()}`,
+                    {
+                        signal: controller.signal,
+                    },
+                )
+
+                if (!controller.signal.aborted) {
+                    setLoyalty(result)
+
+                    setRewardLookup({
+                        key: rewardLookupKey,
+                        data: result,
+                    })
+                }
+            } catch (err) {
+                if (!controller.signal.aborted) {
+                    setLoyaltyError(err.message)
+                }
+            } finally {
+                if (!controller.signal.aborted) {
+                    setLoyaltyLoading(false)
+                }
+            }
+        }, 350)
+
+        return () => {
+            clearTimeout(timer)
+            controller.abort()
+        }
+    }, [
+        loyaltyContact,
+        rewardApplicable,
+        rewardLookupKey,
+        booked,
+        appointment?.id,
+    ])
 
     const items = productSale
         ? products
         : services
 
-    const selectedItem =
-        items.find(
-            (row) =>
-                String(
-                    productSale
-                        ? row.id
-                        : row.service_id,
-                ) ===
-                form.selectedId,
-        )
+    const selectedItem = items.find(
+        (row) =>
+            String(
+                productSale
+                    ? row.id
+                    : row.service_id,
+            ) === form.selectedId,
+    )
 
     const deposit =
         booked &&
         appointment?.payment_status ===
             "Verified"
             ? Number(
-                  appointment.verified_deposit ||
-                      0,
+                  appointment.verified_deposit || 0,
               )
             : 0
 
+    const subtotalCents = toCents(form.amount)
+
+    const approvedPercent = activeReward
+        ? Number(activeReward.reward_percent)
+        : 0
+
+    const discountCents =
+        activeReward &&
+        Number.isFinite(approvedPercent) &&
+        approvedPercent > 0 &&
+        approvedPercent <= 100
+            ? Math.round(
+                  subtotalCents *
+                      approvedPercent /
+                      100,
+              )
+            : 0
+
+    const netCents =
+        subtotalCents - discountCents
+
     const balanceCents =
-        toCents(form.amount) -
-        toCents(deposit)
+        netCents - toCents(deposit)
 
     const unresolved =
         booked &&
@@ -937,227 +939,208 @@ function AdminTransactions() {
                 "Verified" &&
                 !(deposit > 0)))
 
-    const itemOptions =
-        items
-            .filter((row) =>
+    const itemOptions = items
+        .filter((row) =>
+            productSale
+                ? Number(row.stock) > 0
+                : row.status === "Available",
+        )
+        .map((row) => ({
+            value: String(
                 productSale
-                    ? Number(
-                          row.stock,
-                      ) > 0
-                    : row.status ===
-                      "Available",
-            )
-            .map((row) => ({
-                value: String(
-                    productSale
-                        ? row.id
-                        : row.service_id,
-                ),
-                label: `${
-                    productSale
-                        ? row.name
-                        : row.service
-                } — ${money(
-                    row.price,
-                )}${
-                    productSale
-                        ? ` · ${row.stock} in stock`
-                        : ""
-                }`,
-            }))
+                    ? row.id
+                    : row.service_id,
+            ),
 
-    const appointmentOptions =
-        appointments.map(
-            (row) => ({
-                value: String(
-                    row.id,
-                ),
-                label: `#${row.id} · ${row.customer_name} · ${row.contact_number} · ${row.service} · ${row.appointment_date} ${row.appointment_time}`,
-            }),
-        )
+            label: `${
+                productSale
+                    ? row.name
+                    : row.service
+            } — ${money(row.price)}${
+                productSale
+                    ? ` · ${row.stock} in stock`
+                    : ""
+            }`,
+        }))
 
-    function change(
-        name,
-        value,
-    ) {
-        setForm(
-            (previous) => ({
-                ...previous,
-                [name]: value,
-            }),
-        )
+    const appointmentOptions = appointments.map(
+        (row) => ({
+            value: String(row.id),
+
+            label:
+                `#${row.id} · ` +
+                `${row.customer_name} · ` +
+                `${row.contact_number} · ` +
+                `${row.service} · ` +
+                `${row.appointment_date} ` +
+                `${row.appointment_time}`,
+        }),
+    )
+
+    function change(name, value) {
+        setForm((previous) => ({
+            ...previous,
+            [name]: value,
+        }))
     }
 
-    function selectAppointment(
-        id,
-    ) {
-        const row =
-            appointments.find(
-                (item) =>
-                    String(
-                        item.id,
-                    ) === id,
-            )
-
-        setForm(
-            (previous) => ({
-                ...previous,
-                appointmentId:
-                    id,
-                customer:
-                    row?.customer_name ||
-                    "",
-                amount:
-                    row?.service_total ??
-                    "",
-                quantity: "1",
-                sale_type:
-                    "Service",
-            }),
+    function selectAppointment(id) {
+        const row = appointments.find(
+            (item) =>
+                String(item.id) === id,
         )
+
+        setForm((previous) => ({
+            ...previous,
+            appointmentId: id,
+            customer:
+                row?.customer_name || "",
+            amount:
+                row?.service_total ?? "",
+            quantity: "1",
+            sale_type: "Service",
+        }))
     }
 
     function selectItem(id) {
-        const row =
-            items.find(
-                (item) =>
-                    String(
-                        productSale
-                            ? item.id
-                            : item.service_id,
-                    ) === id,
-            )
-
-        setForm(
-            (previous) => ({
-                ...previous,
-                selectedId: id,
-                quantity: "1",
-                amount: row
-                    ? Number(
-                          row.price,
-                      ).toFixed(2)
-                    : "",
-            }),
+        const row = items.find(
+            (item) =>
+                String(
+                    productSale
+                        ? item.id
+                        : item.service_id,
+                ) === id,
         )
+
+        setForm((previous) => ({
+            ...previous,
+            selectedId: id,
+            quantity: "1",
+            amount: row
+                ? Number(row.price).toFixed(2)
+                : "",
+        }))
     }
 
     async function save(event) {
         event.preventDefault()
 
-        if (lock.current) {
-            return
-        }
+        if (lock.current) return
 
         setError("")
         setMessage("")
 
-        if (
-            !navigator.onLine &&
-            booked
-        ) {
+        if (!navigator.onLine && booked) {
             setError(
-                "Existing appointment checkout requires an internet connection. Emergency Mode supports walk-in service and product transactions.",
+                "Existing appointment checkout requires an internet connection. Emergency Mode supports walk-in service and product transactions."
             )
-
             return
         }
 
         if (
-            !(
-                Number(
-                    form.amount,
-                ) > 0
-            ) ||
-            !Number.isFinite(
-                Number(
-                    form.amount,
-                ),
-            ) ||
+            !(Number(form.amount) > 0) ||
+            !Number.isFinite(Number(form.amount)) ||
             (booked
                 ? !appointment
-                : !selectedItem ||
-                  !form.customer.trim())
+                : !selectedItem || !form.customer.trim())
         ) {
             setError(
-                "Select the booking or item and enter a valid final total.",
+                "Select the booking or item and enter a valid sale subtotal."
             )
-
             return
         }
 
-        if (
-            unresolved ||
-            balanceCents < 0
-        ) {
+        if (unresolved || balanceCents < 0) {
             setError(
-                "Resolve the deposit or excess payment before checkout.",
+                "Resolve the deposit or excess payment before checkout."
             )
-
             return
         }
 
         const quantity =
-            productSale &&
-            !booked
-                ? Number(
-                      form.quantity,
-                  )
+            productSale && !booked
+                ? Number(form.quantity)
                 : 1
 
         if (
-            !Number.isInteger(
-                quantity,
-            ) ||
+            !Number.isInteger(quantity) ||
             quantity < 1
         ) {
             setError(
-                "Enter a valid whole-number quantity.",
+                "Enter a valid whole-number quantity."
             )
-
             return
         }
 
         if (
             !booked &&
             productSale &&
-            quantity >
-                Number(
-                    selectedItem.stock,
-                )
+            quantity > Number(selectedItem.stock)
         ) {
             setError(
-                "The selected quantity exceeds available stock.",
+                "The selected quantity exceeds available stock."
             )
-
             return
         }
 
         if (
             form.historicalDate &&
-            form.historicalDate >=
-                philippineDate()
+            form.historicalDate >= philippineDate()
         ) {
             setError(
-                "Choose a past Philippine date for a historical sale.",
+                "Choose a past Philippine date for a historical sale."
             )
-
             return
         }
 
         if (
-            form.payment ===
-                "Not recorded" &&
+            form.payment === "Not recorded" &&
             (!form.historicalDate ||
                 booked ||
                 productSale)
         ) {
             setError(
-                "An unrecorded payment method is allowed only for a historical service sale.",
+                "An unrecorded payment method is allowed only for a historical service sale."
             )
-
             return
         }
+
+        // Do not charge the regular price while an
+        // eligible customer's reward status is unknown.
+        if (
+            navigator.onLine &&
+            rewardLookupKey &&
+            (
+                rewardCheckPending ||
+                loyaltyLoading ||
+                loyaltyError
+            )
+        ) {
+            setError(
+                "Please wait for the loyalty lookup or resolve its error before checkout."
+            )
+            return
+        }
+
+        if (
+            activeReward &&
+            (
+                !navigator.onLine ||
+                !Number.isSafeInteger(
+                    Number(activeReward.reward_id)
+                )
+            )
+        ) {
+            setError(
+                "The issued loyalty reward could not be verified."
+            )
+            return
+        }
+
+        // Online reward redemption must never be queued
+        // as an Emergency Mode transaction.
+        const redeemingReward =
+            Boolean(activeReward)
 
         const payload = {
             appointment_id:
@@ -1168,54 +1151,61 @@ function AdminTransactions() {
             customer:
                 form.customer.trim(),
 
-            service: booked
-                ? appointment.service
-                : productSale
-                  ? selectedItem.name
-                  : selectedItem.service,
+            service:
+                booked
+                    ? appointment.service
+                    : productSale
+                      ? selectedItem.name
+                      : selectedItem.service,
 
-            sale_type: booked
-                ? "Service"
-                : form.sale_type,
+            sale_type:
+                booked
+                    ? "Service"
+                    : form.sale_type,
 
             item_id:
-                !booked &&
-                productSale
+                !booked && productSale
                     ? selectedItem.id
                     : null,
 
             quantity,
 
+            // This is the ORIGINAL subtotal.
+            // The server calculates the actual discount.
             amount: Number(
-                form.amount,
+                form.amount
             ).toFixed(2),
 
             payment:
                 form.payment,
 
             historical_date:
-                !booked &&
-                !productSale
-                    ? form.historicalDate ||
-                      null
+                !booked && !productSale
+                    ? form.historicalDate || null
                     : null,
 
             status: "Paid",
+
+            customer_contact:
+                booked
+                    ? loyaltyContact
+                    : form.customerContact.trim(),
+
+            loyalty_reward_id:
+                redeemingReward
+                    ? Number(activeReward.reward_id)
+                    : null,
 
             expected_deposit_amount:
                 deposit.toFixed(2),
         }
 
         const fingerprint =
-            JSON.stringify(
-                payload,
-            )
+            JSON.stringify(payload)
 
         if (
             !retry.current ||
-            retry.current
-                .fingerprint !==
-                fingerprint
+            retry.current.fingerprint !== fingerprint
         ) {
             retry.current = {
                 fingerprint,
@@ -1224,265 +1214,209 @@ function AdminTransactions() {
         }
 
         lock.current = true
-
         setBusy(true)
 
         try {
-            const offlineId =
-                retry.current.id
+            const offlineId = retry.current.id
 
-            if (
-                !navigator.onLine
-            ) {
-                const queue =
-                    getOfflineQueue()
-
-                const exists =
-                    queue.some(
-                        (entry) =>
-                            entry.offline_id ===
-                            offlineId,
+            if (!navigator.onLine) {
+                if (redeemingReward) {
+                    throw new Error(
+                        "Loyalty rewards cannot be redeemed in Emergency Mode."
                     )
+                }
+
+                const queue = getOfflineQueue()
+
+                const exists = queue.some(
+                    (entry) =>
+                        entry.offline_id === offlineId
+                )
 
                 if (!exists) {
                     queue.push({
-                        offline_id:
-                            offlineId,
+                        offline_id: offlineId,
                         payload,
                         queued_at:
                             new Date().toISOString(),
                     })
 
-                    saveOfflineQueue(
-                        queue,
-                    )
+                    saveOfflineQueue(queue)
                 }
 
-                const localReceipt =
-                    pendingRow({
-                        offline_id:
-                            offlineId,
-                        payload,
-                    })
+                const localReceipt = pendingRow({
+                    offline_id: offlineId,
+                    payload,
+                })
 
-                setTransactions(
-                    (previous) => [
-                        localReceipt,
-                        ...previous.filter(
-                            (row) =>
-                                row.transaction_id !==
-                                localReceipt.transaction_id,
-                        ),
-                    ],
-                )
+                setTransactions((previous) => [
+                    localReceipt,
+                    ...previous.filter(
+                        (row) =>
+                            row.transaction_id !==
+                            localReceipt.transaction_id
+                    ),
+                ])
 
                 if (
                     productSale &&
                     payload.item_id
                 ) {
-                    setProducts(
-                        (previous) =>
-                            previous.map(
-                                (
-                                    product,
-                                ) =>
-                                    String(
-                                        product.id,
-                                    ) ===
-                                    String(
-                                        payload.item_id,
-                                    )
-                                        ? {
-                                              ...product,
-                                              stock: Math.max(
-                                                  0,
-                                                  Number(
-                                                      product.stock ||
-                                                          0,
-                                                  ) -
-                                                      quantity,
-                                              ),
-                                          }
-                                        : product,
-                            ),
+                    setProducts((previous) =>
+                        previous.map((product) =>
+                            String(product.id) ===
+                            String(payload.item_id)
+                                ? {
+                                      ...product,
+                                      stock: Math.max(
+                                          0,
+                                          Number(
+                                              product.stock || 0
+                                          ) - quantity
+                                      ),
+                                  }
+                                : product
+                        )
                     )
                 }
 
-                setReceipt(
-                    localReceipt,
-                )
-
-                setForm(
-                    freshForm(),
-                )
-
+                setReceipt(localReceipt)
+                setForm(freshForm())
                 retry.current = null
 
                 setMessage(
-                    "Transaction saved in Emergency Mode. It will sync automatically when internet returns.",
+                    "Transaction saved in Emergency Mode. It will sync automatically when internet returns."
                 )
 
                 return
             }
 
-            const result =
-                await request(
-                    "/transactions",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type":
-                                "application/json",
-                        },
-                        body: JSON.stringify(
-                            {
-                                ...payload,
-                                offline_id:
-                                    offlineId,
-                            },
-                        ),
+            const result = await request(
+                "/transactions",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json",
                     },
-                )
-
-            retry.current = null
-
-            setForm(
-                freshForm(),
+                    body: JSON.stringify({
+                        ...payload,
+                        offline_id: offlineId,
+                    }),
+                }
             )
 
+            retry.current = null
+            setForm(freshForm())
+            setLoyalty(null)
+            setRewardLookup(null)
             setReceipt(null)
 
             setMessage(
-                "Transaction saved successfully.",
+                result.reward_status === "redeemed"
+                    ? "Transaction saved! Owner-issued loyalty reward redeemed successfully."
+                    : "Transaction saved successfully."
             )
 
-            const rows =
-                await load()
+            const rows = await load()
 
-            const saved =
-                rows?.find(
-                    (row) =>
-                        String(
-                            row.transaction_id,
-                        ) ===
-                        String(
-                            result.id,
-                        ),
-                )
+            const saved = rows?.find(
+                (row) =>
+                    String(row.transaction_id) ===
+                    String(result.id)
+            )
 
             if (saved) {
                 setReceipt(saved)
             } else {
                 setMessage(
-                    "Saved successfully. Refresh the history to view the receipt.",
+                    "Saved successfully. Refresh the history to view the receipt."
                 )
             }
         } catch (err) {
+            // Preserve existing Emergency Mode fallback
+            // for ordinary walk-in and product sales.
+            //
+            // NEVER queue a transaction containing
+            // an owner-issued loyalty reward.
             if (
-                !navigator.onLine
+                !navigator.onLine &&
+                !redeemingReward &&
+                !booked
             ) {
                 const offlineId =
                     retry.current?.id
 
                 if (offlineId) {
-                    const queue =
-                        getOfflineQueue()
+                    const queue = getOfflineQueue()
 
-                    const exists =
-                        queue.some(
-                            (entry) =>
-                                entry.offline_id ===
-                                offlineId,
-                        )
+                    const exists = queue.some(
+                        (entry) =>
+                            entry.offline_id === offlineId
+                    )
 
                     if (!exists) {
                         queue.push({
-                            offline_id:
-                                offlineId,
+                            offline_id: offlineId,
                             payload,
                             queued_at:
                                 new Date().toISOString(),
                         })
 
-                        saveOfflineQueue(
-                            queue,
-                        )
+                        saveOfflineQueue(queue)
                     }
 
-                    const localReceipt =
-                        pendingRow({
-                            offline_id:
-                                offlineId,
-                            payload,
-                        })
+                    const localReceipt = pendingRow({
+                        offline_id: offlineId,
+                        payload,
+                    })
 
-                    setTransactions(
-                        (previous) => [
-                            localReceipt,
-                            ...previous.filter(
-                                (row) =>
-                                    row.transaction_id !==
-                                    localReceipt.transaction_id,
-                            ),
-                        ],
-                    )
+                    setTransactions((previous) => [
+                        localReceipt,
+                        ...previous.filter(
+                            (row) =>
+                                row.transaction_id !==
+                                localReceipt.transaction_id
+                        ),
+                    ])
 
                     if (
                         productSale &&
                         payload.item_id
                     ) {
-                        setProducts(
-                            (previous) =>
-                                previous.map(
-                                    (
-                                        product,
-                                    ) =>
-                                        String(
-                                            product.id,
-                                        ) ===
-                                        String(
-                                            payload.item_id,
-                                        )
-                                            ? {
-                                                  ...product,
-                                                  stock: Math.max(
-                                                      0,
-                                                      Number(
-                                                          product.stock ||
-                                                              0,
-                                                      ) -
-                                                          quantity,
-                                                  ),
-                                              }
-                                            : product,
-                                ),
+                        setProducts((previous) =>
+                            previous.map((product) =>
+                                String(product.id) ===
+                                String(payload.item_id)
+                                    ? {
+                                          ...product,
+                                          stock: Math.max(
+                                              0,
+                                              Number(
+                                                  product.stock || 0
+                                              ) - quantity
+                                          ),
+                                      }
+                                    : product
+                            )
                         )
                     }
 
-                    setReceipt(
-                        localReceipt,
-                    )
-
-                    setForm(
-                        freshForm(),
-                    )
-
+                    setReceipt(localReceipt)
+                    setForm(freshForm())
                     retry.current = null
 
                     setMessage(
-                        "Connection was lost. Transaction was saved in Emergency Mode and will sync automatically.",
+                        "Connection was lost. Transaction was saved in Emergency Mode and will sync automatically."
                     )
 
                     return
                 }
             }
 
-            setError(
-                err.message,
-            )
+            setError(err.message)
         } finally {
             lock.current = false
-
             setBusy(false)
         }
     }
@@ -1490,153 +1424,161 @@ function AdminTransactions() {
     function printReceipt() {
         if (
             !receipt ||
-            receipt.status !==
-                "Paid"
+            receipt.status !== "Paid"
         ) {
             return
         }
 
-        const popup =
-            window.open(
-                "",
-                "_blank",
-                "width=460,height=700",
-            )
+        const popup = window.open(
+            "",
+            "_blank",
+            "width=460,height=700"
+        )
 
         if (!popup) {
             setError(
-                "Allow pop-ups to print the receipt.",
+                "Allow pop-ups to print the receipt."
             )
-
             return
         }
 
-        const doc =
-            popup.document
+        const doc = popup.document
 
-        doc.title = `Receipt ${receipt.transaction_id}`
+        doc.title =
+            `Receipt ${receipt.transaction_id}`
 
         const style =
-            doc.createElement(
-                "style",
-            )
+            doc.createElement("style")
 
         style.textContent = `
-      body { max-width:360px; margin:24px auto; padding:16px; font:14px Arial; }
-      h1 { font-size:20px; }
-      p { line-height:1.6; overflow-wrap:anywhere; }
-      button { padding:10px; }
-      @media print { button { display:none; } }
-    `
+            body {
+                max-width: 360px;
+                margin: 24px auto;
+                padding: 16px;
+                font: 14px Arial;
+            }
+            h1 { font-size: 20px; }
+            p {
+                line-height: 1.6;
+                overflow-wrap: anywhere;
+            }
+            button { padding: 10px; }
+            @media print {
+                button { display: none; }
+            }
+        `
 
-        doc.head.appendChild(
-            style,
-        )
+        doc.head.appendChild(style)
 
-        function line(
-            tag,
-            text,
-        ) {
+        function line(tag, text) {
             const element =
-                doc.createElement(
-                    tag,
-                )
+                doc.createElement(tag)
 
-            element.textContent =
-                text
-
-            doc.body.appendChild(
-                element,
-            )
+            element.textContent = text
+            doc.body.appendChild(element)
 
             return element
         }
 
         line(
             "h1",
-            "Dahling’s Salon & Spa",
+            "Dahling’s Salon & Spa"
         )
 
         line(
             "p",
-            `Receipt #${receipt.transaction_id}`,
+            `Receipt #${receipt.transaction_id}`
         )
 
         line(
             "p",
             dateLabel(
                 receipt.transaction_date,
-                receipt.historical_date_only,
-            ),
+                receipt.historical_date_only
+            )
         )
 
         line(
             "p",
-            `Customer: ${receipt.customer}`,
+            `Customer: ${receipt.customer}`
         )
 
-        if (
-            receipt.appointment_id
-        ) {
+        if (receipt.appointment_id) {
             line(
                 "p",
-                `Booking: #${receipt.appointment_id}`,
+                `Booking: #${receipt.appointment_id}`
             )
         }
 
         line(
             "p",
-            `Item / service: ${receipt.service}`,
+            `Item / service: ${receipt.service}`
         )
 
         line(
             "p",
-            `Quantity: ${
-                receipt.quantity ??
-                1
-            }`,
+            `Quantity: ${receipt.quantity ?? 1}`
         )
+
+        if (
+            Number(receipt.discount_amount || 0) > 0
+        ) {
+            line(
+                "p",
+                `Subtotal: ${money(
+                    receipt.subtotal ?? receipt.amount
+                )}`
+            )
+
+            line(
+                "p",
+                `Loyalty discount: −${money(
+                    receipt.discount_amount
+                )}`
+            )
+        }
 
         line(
             "p",
             `Final sale total: ${money(
-                receipt.amount,
-            )}`,
+                receipt.amount
+            )}`
         )
 
         line(
             "p",
             `Deposit previously paid: ${money(
-                receipt.deposit_applied,
-            )}`,
+                receipt.deposit_applied
+            )}`
         )
 
         line(
             "p",
             `Balance collected: ${money(
-                receipt.balance_collected,
-            )}`,
+                receipt.balance_collected
+            )}`
         )
 
         if (
-            Number(
-                receipt.deposit_applied,
-            ) > 0
+            Number(receipt.deposit_applied) > 0
         ) {
             line(
                 "p",
-                `Deposit method: ${receipt.deposit_payment_method}`,
+                `Deposit method: ${
+                    receipt.deposit_payment_method ||
+                    "Recorded"
+                }`
             )
         }
 
         if (
-            Number(
-                receipt.balance_collected,
-            ) > 0
+            Number(receipt.balance_collected) > 0
         ) {
             line(
                 "p",
-                `Balance payment method: ${receipt.payment}`,
+                `Balance payment method: ${
+                    receipt.payment
+                }`
             )
         }
 
@@ -1646,234 +1588,182 @@ function AdminTransactions() {
                 receipt.offline_pending
                     ? "Pending sync"
                     : receipt.status
-            }`,
+            }`
         )
 
         line(
             "p",
-            "Thank you for visiting!",
+            "Thank you for visiting!"
         )
 
         const print = line(
             "button",
-            "Print",
+            "Print"
         )
 
-        print.onclick =
-            () => popup.print()
-
+        print.onclick = () => popup.print()
         popup.focus()
     }
 
-    const todayRows =
-        transactions.filter(
-            (row) =>
-                dayKey(
-                    row.transaction_date,
-                ) ===
-                dayKey(clock),
-        )
+    const todayRows = transactions.filter(
+        (row) =>
+            dayKey(row.transaction_date) ===
+            dayKey(clock)
+    )
 
-    const paidToday =
-        todayRows.filter(
-            (row) =>
-                row.status ===
-                "Paid",
-        )
+    const paidToday = todayRows.filter(
+        (row) => row.status === "Paid"
+    )
 
-    const salesToday =
-        paidToday.reduce(
-            (sum, row) =>
-                sum +
-                Number(
-                    row.amount,
-                ),
-            0,
-        )
+    const salesToday = paidToday.reduce(
+        (sum, row) =>
+            sum + Number(row.amount || 0),
+        0
+    )
 
     const searchTerm =
-        search
-            .trim()
-            .toLowerCase()
+        search.trim().toLowerCase()
 
-    const filtered =
-        transactions.filter(
-            (row) =>
-                [
-                    row.customer,
-                    row.customer_contact,
-                    row.customer_email,
-                    row.service,
-                    row.transaction_id,
-                    row.appointment_id,
-                    row.payment,
-                    row.status,
-                ].some((value) =>
-                    String(
-                        value ?? "",
-                    )
-                        .toLowerCase()
-                        .includes(
-                            searchTerm,
-                        ),
-                ),
+    const filtered = transactions.filter(
+        (row) =>
+            [
+                row.customer,
+                row.customer_contact,
+                row.customer_email,
+                row.service,
+                row.transaction_id,
+                row.appointment_id,
+                row.payment,
+                row.status,
+            ].some((value) =>
+                String(value ?? "")
+                    .toLowerCase()
+                    .includes(searchTerm)
+            )
+    )
+
+    const historyPageCount = Math.max(
+        1,
+        Math.ceil(
+            filtered.length / HISTORY_PAGE_SIZE
         )
+    )
 
-    // Filter the full transaction history before paginating it.
-    const historyPageCount = Math.max(1, Math.ceil(filtered.length / HISTORY_PAGE_SIZE))
-    const currentHistoryPage = Math.min(historyPage, historyPageCount)
-    const pageStart = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE
-    const visibleTransactions = filtered.slice(pageStart, pageStart + HISTORY_PAGE_SIZE)
+    const currentHistoryPage = Math.min(
+        historyPage,
+        historyPageCount
+    )
+
+    const pageStart =
+        (currentHistoryPage - 1) *
+        HISTORY_PAGE_SIZE
+
+    const visibleTransactions =
+        filtered.slice(
+            pageStart,
+            pageStart + HISTORY_PAGE_SIZE
+        )
 
     useEffect(() => {
         setHistoryPage(1)
     }, [search])
 
-    const customerRecords =
-        useMemo(() => {
-            if (!searchTerm) {
-                return []
-            }
+    const customerRecords = useMemo(() => {
+        if (!searchTerm) return []
 
-            const matches =
-                transactions.filter(
-                    (row) =>
-                        [
-                            row.customer,
-                            row.customer_contact,
-                            row.customer_email,
-                        ].some(
-                            (
-                                value,
-                            ) =>
-                                String(
-                                    value ??
-                                        "",
-                                )
-                                    .toLowerCase()
-                                    .includes(
-                                        searchTerm,
-                                    ),
-                        ),
-                )
-
-            const grouped =
-                new Map()
-
-            for (const row of matches) {
-                const key =
-                    String(
-                        row.customer_contact ||
-                            "",
-                    ).trim() ||
-                    String(
-                        row.customer_email ||
-                            "",
-                    )
-                        .trim()
-                        .toLowerCase() ||
-                    String(
-                        row.customer ||
-                            "",
-                    )
-                        .trim()
+        const matches = transactions.filter(
+            (row) =>
+                [
+                    row.customer,
+                    row.customer_contact,
+                    row.customer_email,
+                ].some((value) =>
+                    String(value ?? "")
                         .toLowerCase()
+                        .includes(searchTerm)
+                )
+        )
 
-                if (
-                    !grouped.has(
-                        key,
-                    )
-                ) {
-                    grouped.set(
-                        key,
-                        {
-                            key,
-                            customer:
-                                row.customer,
-                            contact:
-                                row.customer_contact ||
-                                "Not recorded",
-                            email:
-                                row.customer_email ||
-                                "Not recorded",
-                            transactions:
-                                0,
-                            totalPaid:
-                                0,
-                            depositPaid:
-                                0,
-                            services:
-                                new Set(),
-                            latestVisit:
-                                row.transaction_date,
-                            latestVisitDateOnly:
-                                row.historical_date_only,
-                        },
-                    )
-                }
+        const grouped = new Map()
 
-                const record =
-                    grouped.get(
-                        key,
-                    )
+        for (const row of matches) {
+            const key =
+                String(
+                    row.customer_contact || ""
+                ).trim() ||
+                String(
+                    row.customer_email || ""
+                ).trim().toLowerCase() ||
+                String(
+                    row.customer || ""
+                ).trim().toLowerCase()
 
-                record.transactions +=
-                    1
-
-                if (
-                    row.status ===
-                    "Paid"
-                ) {
-                    record.totalPaid +=
-                        Number(
-                            row.amount ||
-                                0,
-                        )
-
-                    record.depositPaid +=
-                        Number(
-                            row.deposit_applied ||
-                                0,
-                        )
-                }
-
-                if (
-                    row.service
-                ) {
-                    record.services.add(
-                        row.service,
-                    )
-                }
-
-                if (
-                    new Date(
+            if (!grouped.has(key)) {
+                grouped.set(key, {
+                    key,
+                    customer: row.customer,
+                    contact:
+                        row.customer_contact ||
+                        "Not recorded",
+                    email:
+                        row.customer_email ||
+                        "Not recorded",
+                    transactions: 0,
+                    totalPaid: 0,
+                    depositPaid: 0,
+                    services: new Set(),
+                    latestVisit:
                         row.transaction_date,
-                    ).getTime() >
-                    new Date(
-                        record.latestVisit,
-                    ).getTime()
-                ) {
-                    record.latestVisit =
-                        row.transaction_date
-
-                    record.latestVisitDateOnly =
-                        row.historical_date_only
-                }
+                    latestVisitDateOnly:
+                        row.historical_date_only,
+                })
             }
 
-            return Array.from(
-                grouped.values(),
-            ).map((record) => ({
-                ...record,
-                services:
-                    Array.from(
-                        record.services,
-                    ),
-            }))
-        }, [
-            searchTerm,
-            transactions,
-        ])
+            const record = grouped.get(key)
+
+            record.transactions += 1
+
+            if (row.status === "Paid") {
+                record.totalPaid +=
+                    Number(row.amount || 0)
+
+                record.depositPaid +=
+                    Number(
+                        row.deposit_applied || 0
+                    )
+            }
+
+            if (row.service) {
+                record.services.add(
+                    row.service
+                )
+            }
+
+            if (
+                new Date(
+                    row.transaction_date
+                ).getTime() >
+                new Date(
+                    record.latestVisit
+                ).getTime()
+            ) {
+                record.latestVisit =
+                    row.transaction_date
+
+                record.latestVisitDateOnly =
+                    row.historical_date_only
+            }
+        }
+
+        return Array.from(
+            grouped.values()
+        ).map((record) => ({
+            ...record,
+            services: Array.from(
+                record.services
+            ),
+        }))
+    }, [searchTerm, transactions])
 
     return (
         <div className="min-w-0 space-y-6">
@@ -1884,24 +1774,15 @@ function AdminTransactions() {
                     </h1>
 
                     <p className="mt-2 text-sm text-gray-500">
-                        Record a sale or
-                        check out an
-                        existing
-                        appointment.
+                        Record a sale or check out
+                        an existing appointment.
                     </p>
                 </div>
 
                 <button
-                    disabled={
-                        loading ||
-                        busy
-                    }
-                    onClick={() =>
-                        load()
-                    }
-                    className={
-                        button
-                    }
+                    disabled={loading || busy}
+                    onClick={() => load()}
+                    className={button}
                 >
                     {loading
                         ? "Refreshing…"
@@ -1914,9 +1795,8 @@ function AdminTransactions() {
                     role="alert"
                     className="rounded-xl bg-red-50 p-4 text-red-700"
                 >
-                    {loadError} Use
-                    Refresh to try
-                    again.
+                    {loadError} Use Refresh
+                    to try again.
                 </p>
             )}
 
@@ -1942,9 +1822,7 @@ function AdminTransactions() {
                 {[
                     [
                         "Paid sales recorded today",
-                        money(
-                            salesToday,
-                        ),
+                        money(salesToday),
                     ],
                     [
                         "Transactions today",
@@ -1954,98 +1832,54 @@ function AdminTransactions() {
                         "Payment options",
                         "Cash / GCash",
                     ],
-                ].map(
-                    (
-                        [
-                            label,
-                            value,
-                        ],
-                        index,
-                    ) => (
-                        <div
-                            key={
-                                label
-                            }
-                            className={
-                                panel
-                            }
-                        >
-                            <p className="text-sm text-gray-500">
-                                {
-                                    label
-                                }
-                            </p>
+                ].map(([label, value], index) => (
+                    <div
+                        key={label}
+                        className={panel}
+                    >
+                        <p className="text-sm text-gray-500">
+                            {label}
+                        </p>
 
-                            <p className="mt-3 text-2xl font-bold text-purple-800">
-                                {index <
-                                    2 &&
-                                (loading ||
-                                    loadError)
-                                    ? "—"
-                                    : value}
-                            </p>
-                        </div>
-                    ),
-                )}
+                        <p className="mt-3 text-2xl font-bold text-purple-800">
+                            {index < 2 &&
+                            (loading || loadError)
+                                ? "—"
+                                : value}
+                        </p>
+                    </div>
+                ))}
             </div>
 
             <div className="grid items-start gap-6 xl:grid-cols-2">
-                <section
-                    className={
-                        panel
-                    }
-                >
+                <section className={panel}>
                     <h2 className="mb-5 text-lg font-bold text-purple-950">
-                        Record a
-                        transaction
+                        Record a transaction
                     </h2>
 
-                    <form
-                        onSubmit={
-                            save
-                        }
-                    >
+                    <form onSubmit={save}>
                         <fieldset
-                            disabled={
-                                disabled
-                            }
+                            disabled={disabled}
                             className="space-y-4"
                         >
                             <Field label="Transaction source">
                                 <select
-                                    className={
-                                        input
-                                    }
-                                    value={
-                                        form.mode
-                                    }
-                                    onChange={(
-                                        event,
-                                    ) => {
-                                        setForm(
-                                            {
-                                                ...freshForm(),
-                                                mode: event
-                                                    .target
-                                                    .value,
-                                            },
-                                        )
-
-                                        setError(
-                                            "",
-                                        )
+                                    className={input}
+                                    value={form.mode}
+                                    onChange={(event) => {
+                                        setForm({
+                                            ...freshForm(),
+                                            mode:
+                                                event.target.value,
+                                        })
+                                        setError("")
                                     }}
                                 >
                                     <option value="Walk-in">
-                                        Walk-in
-                                        /
-                                        Product
-                                        sale
+                                        Walk-in / Product sale
                                     </option>
-
                                     <option value="Appointment">
-                                        Existing
-                                        appointment
+                                        Existing appointment
                                     </option>
                                 </select>
                             </Field>
@@ -2055,65 +1889,37 @@ function AdminTransactions() {
                                     <SearchSelect
                                         key="appointment"
                                         label="Find the customer’s appointment"
-                                        options={
-                                            appointmentOptions
-                                        }
-                                        value={
-                                            form.appointmentId
-                                        }
-                                        onChange={
-                                            selectAppointment
-                                        }
-                                        disabled={
-                                            disabled
-                                        }
+                                        options={appointmentOptions}
+                                        value={form.appointmentId}
+                                        onChange={selectAppointment}
+                                        disabled={disabled}
                                     />
 
                                     <p className="text-xs text-gray-500">
-                                        Search
-                                        by
-                                        name,
-                                        contact,
-                                        booking
-                                        number,
-                                        or
-                                        service.
-                                        Only
-                                        approved/completed
-                                        bookings
-                                        without
-                                        a
-                                        transaction
-                                        appear.
+                                        Search by name, contact,
+                                        booking number, or service.
+                                        Only eligible bookings
+                                        appear here.
                                     </p>
 
                                     {appointment && (
                                         <div className="rounded-xl bg-purple-50 p-4 text-sm text-purple-900">
                                             <p className="font-semibold">
-                                                {
-                                                    appointment.customer_name
-                                                }
+                                                {appointment.customer_name}
                                             </p>
 
                                             <p className="mt-1">
-                                                {
-                                                    appointment.service
-                                                }
+                                                {appointment.service}
                                             </p>
 
                                             <p className="mt-1">
-                                                {
-                                                    appointment.appointment_date
-                                                }{" "}
-                                                ·{" "}
-                                                {
-                                                    appointment.appointment_time
-                                                }
+                                                {appointment.appointment_date}
+                                                {" · "}
+                                                {appointment.appointment_time}
                                             </p>
 
                                             <p className="mt-2">
-                                                Deposit
-                                                status:{" "}
+                                                Deposit status:{" "}
                                                 {appointment.payment_status ||
                                                     "No deposit recorded"}
                                             </p>
@@ -2125,23 +1931,13 @@ function AdminTransactions() {
                                     <Field label="Customer name">
                                         <input
                                             required
-                                            maxLength={
-                                                100
-                                            }
-                                            className={
-                                                input
-                                            }
-                                            value={
-                                                form.customer
-                                            }
-                                            onChange={(
-                                                event,
-                                            ) =>
+                                            maxLength={100}
+                                            className={input}
+                                            value={form.customer}
+                                            onChange={(event) =>
                                                 change(
                                                     "customer",
-                                                    event
-                                                        .target
-                                                        .value,
+                                                    event.target.value
                                                 )
                                             }
                                         />
@@ -2150,148 +1946,84 @@ function AdminTransactions() {
                                     <Field label="Customer contact (optional — for loyalty lookup)">
                                         <input
                                             type="tel"
-                                            maxLength={40}
+                                            maxLength={30}
                                             autoComplete="tel"
                                             placeholder="e.g. 09XXXXXXXXX"
                                             className={input}
                                             value={form.customerContact}
-                                            onChange={(event) => change("customerContact", event.target.value)}
+                                            onChange={(event) =>
+                                                change(
+                                                    "customerContact",
+                                                    event.target.value
+                                                )
+                                            }
                                         />
                                     </Field>
 
                                     <Field label="Sale type">
                                         <select
-                                            className={
-                                                input
-                                            }
-                                            value={
-                                                form.sale_type
-                                            }
-                                            onChange={(
-                                                event,
-                                            ) => {
-                                                setForm(
-                                                    (
-                                                        previous,
-                                                    ) => ({
-                                                        ...previous,
-                                                        sale_type:
-                                                            event
-                                                                .target
-                                                                .value,
-                                                        historicalDate:
-                                                            "",
-                                                        payment:
-                                                            "Cash",
-                                                        selectedId:
-                                                            "",
-                                                        quantity:
-                                                            "1",
-                                                        amount:
-                                                            "",
-                                                    }),
-                                                )
+                                            className={input}
+                                            value={form.sale_type}
+                                            onChange={(event) => {
+                                                setForm((previous) => ({
+                                                    ...previous,
+                                                    sale_type:
+                                                        event.target.value,
+                                                    historicalDate: "",
+                                                    payment: "Cash",
+                                                    selectedId: "",
+                                                    quantity: "1",
+                                                    amount: "",
+                                                }))
                                             }}
                                         >
-                                            <option>
+                                            <option value="Service">
                                                 Service
                                             </option>
-
-                                            <option>
+                                            <option value="Product">
                                                 Product
                                             </option>
                                         </select>
                                     </Field>
 
                                     <SearchSelect
-                                        key={
-                                            form.sale_type
-                                        }
+                                        key={form.sale_type}
                                         label={
                                             productSale
                                                 ? "Find and select a product"
                                                 : "Find and select a service"
                                         }
-                                        options={
-                                            itemOptions
-                                        }
-                                        value={
-                                            form.selectedId
-                                        }
-                                        onChange={
-                                            selectItem
-                                        }
-                                        disabled={
-                                            disabled
-                                        }
+                                        options={itemOptions}
+                                        value={form.selectedId}
+                                        onChange={selectItem}
+                                        disabled={disabled}
                                     />
 
                                     {!productSale && (
                                         <Field label="Historical sale date (optional)">
                                             <input
                                                 type="date"
-                                                className={
-                                                    input
-                                                }
+                                                className={input}
                                                 max={philippineDate()}
-                                                value={
-                                                    form.historicalDate
-                                                }
-                                                onChange={(
-                                                    event,
-                                                ) =>
-                                                    setForm(
-                                                        (
-                                                            previous,
-                                                        ) => ({
-                                                            ...previous,
-                                                            historicalDate:
-                                                                event
-                                                                    .target
-                                                                    .value,
-                                                            payment:
-                                                                event
-                                                                    .target
-                                                                    .value
-                                                                    ? "Not recorded"
-                                                                    : "Cash",
-                                                        }),
-                                                    )
+                                                value={form.historicalDate}
+                                                onChange={(event) =>
+                                                    setForm((previous) => ({
+                                                        ...previous,
+                                                        historicalDate:
+                                                            event.target.value,
+                                                        payment:
+                                                            event.target.value
+                                                                ? "Not recorded"
+                                                                : "Cash",
+                                                    }))
                                                 }
                                             />
 
                                             <span className="mt-1 block text-xs text-gray-500">
-                                                Leave
-                                                blank
-                                                for
-                                                a
-                                                sale
-                                                made
-                                                now.
-                                                For
-                                                an
-                                                older
-                                                walk-in
-                                                service,
-                                                choose
-                                                its
-                                                original
-                                                Philippine
-                                                date.
-                                                The
-                                                paper
-                                                sheet
-                                                has
-                                                no
-                                                exact
-                                                time,
-                                                so
-                                                history
-                                                will
-                                                display
-                                                the
-                                                date
-                                                only.
+                                                Leave blank for a sale
+                                                made now. Historical
+                                                sales do not redeem
+                                                loyalty rewards.
                                             </span>
                                         </Field>
                                     )}
@@ -2303,44 +2035,26 @@ function AdminTransactions() {
                                                 required
                                                 min="1"
                                                 step="1"
-                                                max={
-                                                    selectedItem?.stock
-                                                }
-                                                className={
-                                                    input
-                                                }
-                                                value={
-                                                    form.quantity
-                                                }
-                                                onChange={(
-                                                    event,
-                                                ) => {
+                                                max={selectedItem?.stock}
+                                                className={input}
+                                                value={form.quantity}
+                                                onChange={(event) => {
                                                     const quantity =
-                                                        event
-                                                            .target
-                                                            .value
+                                                        event.target.value
 
-                                                    setForm(
-                                                        (
-                                                            previous,
-                                                        ) => ({
-                                                            ...previous,
-                                                            quantity,
-                                                            amount:
-                                                                selectedItem
-                                                                    ? (
-                                                                          Number(
-                                                                              selectedItem.price,
-                                                                          ) *
-                                                                          Number(
-                                                                              quantity,
-                                                                          )
-                                                                      ).toFixed(
-                                                                          2,
-                                                                      )
-                                                                    : "",
-                                                        }),
-                                                    )
+                                                    setForm((previous) => ({
+                                                        ...previous,
+                                                        quantity,
+                                                        amount:
+                                                            selectedItem
+                                                                ? (
+                                                                      Number(
+                                                                          selectedItem.price
+                                                                      ) *
+                                                                      Number(quantity)
+                                                                  ).toFixed(2)
+                                                                : "",
+                                                    }))
                                                 }}
                                             />
                                         </Field>
@@ -2350,62 +2064,109 @@ function AdminTransactions() {
 
                             <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 text-sm">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <h3 className="font-bold text-purple-950">Loyalty discount recommendation</h3>
-                                    <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-purple-700">Advisory only</span>
+                                    <h3 className="font-bold text-purple-950">
+                                        Owner-issued loyalty reward
+                                    </h3>
+
+                                    <span className="rounded-full bg-white px-2 py-1 text-xs font-medium text-purple-700">
+                                        Automatic checkout
+                                    </span>
                                 </div>
-                                <p className="mt-2 text-xs text-gray-600">
-                                    {loyaltyPolicy?.enabled
-                                        ? `Policy: ${loyaltyPolicy.min_paid_visits} paid visits for a suggested ${Number(loyaltyPolicy.suggested_percent || 0)}% discount.`
-                                        : "Discount eligibility is subject to the salon's loyalty policy."}
-                                </p>
+
                                 {!navigator.onLine ? (
-                                    <p className="mt-3 text-amber-700">Unavailable in Emergency Mode. No discount will be deducted.</p>
+                                    <p className="mt-3 text-amber-700">
+                                        Loyalty rewards cannot be redeemed
+                                        in Emergency Mode.
+                                    </p>
+                                ) : !rewardApplicable ? (
+                                    <p className="mt-3 text-gray-600">
+                                        Rewards apply only to current
+                                        service checkouts.
+                                    </p>
                                 ) : !loyaltyContact ? (
-                                    <p className="mt-3 text-gray-600">{booked ? "Select an appointment to check eligibility." : "Enter the customer's contact number to check prior paid visits."}</p>
+                                    <p className="mt-3 text-gray-600">
+                                        {booked
+                                            ? "Select an appointment to check its issued reward."
+                                            : "Enter the customer's contact number to check for an issued reward."}
+                                    </p>
                                 ) : loyaltyContact.length < 7 ? (
-                                    <p className="mt-3 text-gray-600">Enter a valid contact number to check eligibility.</p>
-                                ) : loyaltyLoading ? (
-                                    <p className="mt-3 text-gray-600">Checking recorded visits…</p>
-                                ) : loyaltyError ? (
-                                    <p className="mt-3 text-amber-700">Loyalty lookup unavailable: {loyaltyError}. Checkout is unchanged.</p>
-                                ) : loyalty ? (
-                                    <div className="mt-3 space-y-2">
-                                        <p className="font-semibold text-purple-900">{loyalty.paid_visits} previous paid visit(s)</p>
-                                        <p className={loyalty.eligible ? "font-semibold text-emerald-700" : "text-gray-600"}>
-                                            {loyalty.eligible
-                                                ? `Eligible for a suggested ${Number(loyalty.recommended_percent || 0)}% loyalty discount — owner approval required.`
-                                                : "Not yet eligible for a loyalty discount."}
-                                        </p>
-                                        {loyalty.eligible && (
-                                            <p className="text-xs text-gray-600">Illustrative saving on current total: {money(Math.round(toCents(form.amount) * Number(loyalty.recommended_percent || 0) / 100) / 100)}. This is not deducted at checkout.</p>
+                                    <p className="mt-3 text-gray-600">
+                                        Enter a valid contact number
+                                        to check issued rewards.
+                                    </p>
+                                ) : (
+                                    <>
+                                        {(loyaltyLoading ||
+                                            rewardCheckPending) && (
+                                            <p className="mt-3 text-gray-600">
+                                                Checking owner-issued rewards…
+                                            </p>
                                         )}
-                                    </div>
-                                ) : null}
-                                <p className="mt-3 border-t border-purple-100 pt-3 text-xs text-gray-500">
-                                    Apply / Edit / Skip will be enabled after owner-authorized backend discount saving is implemented. The current bill and receipt remain unchanged.
-                                </p>
+
+                                        {loyaltyError && (
+                                            <p className="mt-3 text-red-700">
+                                                Reward lookup failed:{" "}
+                                                {loyaltyError}
+                                            </p>
+                                        )}
+
+                                        {!loyaltyLoading &&
+                                            !rewardCheckPending &&
+                                            !loyaltyError &&
+                                            activeReward && (
+                                                <div className="mt-3 space-y-2">
+                                                    <p className="font-bold text-emerald-700">
+                                                        Approved reward available!
+                                                    </p>
+
+                                                    <p className="text-purple-900">
+                                                        Owner-issued discount:{" "}
+                                                        <strong>
+                                                            {approvedPercent}%
+                                                        </strong>
+                                                    </p>
+
+                                                    <p className="text-purple-900">
+                                                        Savings:{" "}
+                                                        <strong>
+                                                            {money(discountCents / 100)}
+                                                        </strong>
+                                                    </p>
+
+                                                    <p className="text-xs text-gray-600">
+                                                        Reward #{activeReward.reward_id}
+                                                        {" "}will be redeemed only
+                                                        after successful checkout.
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                        {!loyaltyLoading &&
+                                            !rewardCheckPending &&
+                                            !loyaltyError &&
+                                            !activeReward && (
+                                                <p className="mt-3 text-gray-600">
+                                                    {loyalty?.reason ||
+                                                        "No active owner-issued reward."}
+                                                    {" "}Regular price applies.
+                                                </p>
+                                            )}
+                                    </>
+                                )}
                             </div>
 
-                            <Field label="Final sale total before deposit deduction (₱)">
+                            <Field label="Sale subtotal before loyalty discount and deposit (₱)">
                                 <input
                                     required
                                     type="number"
                                     min="0.01"
                                     step="0.01"
-                                    className={
-                                        input
-                                    }
-                                    value={
-                                        form.amount
-                                    }
-                                    onChange={(
-                                        event,
-                                    ) =>
+                                    className={input}
+                                    value={form.amount}
+                                    onChange={(event) =>
                                         change(
                                             "amount",
-                                            event
-                                                .target
-                                                .value,
+                                            event.target.value
                                         )
                                     }
                                 />
@@ -2413,113 +2174,86 @@ function AdminTransactions() {
 
                             <div className="space-y-3 rounded-xl bg-gray-50 p-4 text-sm">
                                 <div className="flex justify-between gap-3">
-                                    <span>
-                                        Final
-                                        sale
-                                        total
-                                    </span>
-
+                                    <span>Subtotal</span>
                                     <strong>
-                                        {money(
-                                            form.amount,
-                                        )}
+                                        {money(form.amount)}
+                                    </strong>
+                                </div>
+
+                                <div className="flex justify-between gap-3 text-purple-700">
+                                    <span>
+                                        Loyalty discount{" "}
+                                        {approvedPercent > 0
+                                            ? `(${approvedPercent}%)`
+                                            : ""}
+                                    </span>
+                                    <strong>
+                                        − {money(discountCents / 100)}
+                                    </strong>
+                                </div>
+
+                                <div className="flex justify-between gap-3 font-semibold">
+                                    <span>Final sale total</span>
+                                    <strong>
+                                        {money(netCents / 100)}
                                     </strong>
                                 </div>
 
                                 <div className="flex justify-between gap-3 text-emerald-700">
-                                    <span>
-                                        Verified
-                                        deposit
-                                    </span>
-
+                                    <span>Verified deposit</span>
                                     <strong>
-                                        −{" "}
-                                        {money(
-                                            deposit,
-                                        )}
+                                        − {money(deposit)}
                                     </strong>
                                 </div>
 
                                 <div className="flex justify-between gap-3 border-t border-gray-200 pt-3 text-lg font-bold text-purple-900">
                                     <span>
-                                        Balance
-                                        to
-                                        collect
+                                        Balance to collect
                                     </span>
-
-                                    <span>
-                                        {money(
-                                            balanceCents /
-                                                100,
-                                        )}
-                                    </span>
+                                    <strong>
+                                        {money(balanceCents / 100)}
+                                    </strong>
                                 </div>
                             </div>
 
                             {unresolved && (
                                 <p className="text-sm text-amber-700">
-                                    This
-                                    deposit
-                                    needs
-                                    payment
-                                    review
-                                    before
-                                    checkout.
+                                    This deposit needs payment review
+                                    before checkout.
                                 </p>
                             )}
 
-                            {balanceCents <
-                                0 && (
+                            {balanceCents < 0 && (
                                 <p className="text-sm text-red-700">
-                                    The
-                                    deposit
-                                    exceeds
-                                    the
-                                    final
-                                    bill.
-                                    Resolve
-                                    the
-                                    excess
-                                    before
-                                    saving.
+                                    The deposit exceeds the final bill.
+                                    Resolve the excess before saving.
                                 </p>
                             )}
 
-                            {balanceCents >
-                                0 && (
+                            {balanceCents > 0 && (
                                 <Field label="Payment method for the remaining balance">
                                     <select
-                                        className={
-                                            input
-                                        }
-                                        value={
-                                            form.payment
-                                        }
-                                        onChange={(
-                                            event,
-                                        ) =>
+                                        className={input}
+                                        value={form.payment}
+                                        onChange={(event) =>
                                             change(
                                                 "payment",
-                                                event
-                                                    .target
-                                                    .value,
+                                                event.target.value
                                             )
                                         }
                                     >
-                                        <option>
+                                        <option value="Cash">
                                             Cash
                                         </option>
-
-                                        <option>
+                                        <option value="GCash">
                                             GCash
                                         </option>
 
                                         {!booked &&
                                             !productSale &&
                                             form.historicalDate && (
-                                                <option>
-                                                    Not
-                                                    recorded
+                                                <option value="Not recorded">
+                                                    Not recorded
                                                 </option>
                                             )}
                                     </select>
@@ -2527,8 +2261,7 @@ function AdminTransactions() {
                             )}
 
                             <p className="text-xs leading-relaxed text-gray-500">
-                                {balanceCents ===
-                                    0 &&
+                                {balanceCents === 0 &&
                                 appointment
                                     ? "The verified deposit covers the final bill. No additional payment is due."
                                     : "Save only after the displayed balance has been received."}
@@ -2538,11 +2271,17 @@ function AdminTransactions() {
                                 type="submit"
                                 disabled={
                                     disabled ||
+                                    Boolean(unresolved) ||
+                                    balanceCents < 0 ||
                                     Boolean(
-                                        unresolved,
-                                    ) ||
-                                    balanceCents <
-                                        0
+                                        navigator.onLine &&
+                                        rewardLookupKey &&
+                                        (
+                                            loyaltyLoading ||
+                                            rewardCheckPending ||
+                                            loyaltyError
+                                        )
+                                    )
                                 }
                                 className={`${button} w-full`}
                             >
@@ -2554,46 +2293,28 @@ function AdminTransactions() {
                     </form>
                 </section>
 
-                <section
-                    className={
-                        panel
-                    }
-                >
+                <section className={panel}>
                     <h2 className="text-lg font-bold text-purple-950">
-                        Saved
-                        receipt
+                        Saved receipt
                     </h2>
 
                     {!receipt ? (
                         <p className="mt-5 rounded-xl border border-dashed border-purple-200 p-10 text-center text-sm text-gray-500">
-                            Save
-                            a
-                            transaction
-                            or
-                            select
-                            View
-                            in
-                            the
-                            history.
+                            Save a transaction or select View
+                            in the history.
                         </p>
                     ) : (
                         <div className="mt-5 space-y-4 text-sm">
                             <p className="font-bold text-purple-800">
-                                Dahling’s
-                                Salon
-                                &
-                                Spa
+                                Dahling’s Salon & Spa
                             </p>
 
                             <p className="text-gray-500">
-                                Receipt
-                                #{
-                                    receipt.transaction_id
-                                }{" "}
-                                ·{" "}
+                                Receipt #{receipt.transaction_id}
+                                {" · "}
                                 {dateLabel(
                                     receipt.transaction_date,
-                                    receipt.historical_date_only,
+                                    receipt.historical_date_only
                                 )}
                             </p>
 
@@ -2612,30 +2333,46 @@ function AdminTransactions() {
                                     "Service / item",
                                     receipt.service,
                                 ],
+                                ...(Number(
+                                    receipt.discount_amount || 0
+                                ) > 0
+                                    ? [
+                                          [
+                                              "Subtotal",
+                                              money(
+                                                  receipt.subtotal ??
+                                                      receipt.amount
+                                              ),
+                                          ],
+                                          [
+                                              "Loyalty discount",
+                                              `−${money(
+                                                  receipt.discount_amount
+                                              )}`,
+                                          ],
+                                      ]
+                                    : []),
                                 [
                                     "Final total",
-                                    money(
-                                        receipt.amount,
-                                    ),
+                                    money(receipt.amount),
                                 ],
                                 [
                                     "Deposit applied",
                                     money(
-                                        receipt.deposit_applied,
+                                        receipt.deposit_applied
                                     ),
                                 ],
                                 [
                                     "Balance collected",
                                     money(
-                                        receipt.balance_collected,
+                                        receipt.balance_collected
                                     ),
                                 ],
                                 [
                                     "Balance payment",
                                     Number(
-                                        receipt.balance_collected,
-                                    ) >
-                                    0
+                                        receipt.balance_collected
+                                    ) > 0
                                         ? receipt.payment
                                         : "No additional payment",
                                 ],
@@ -2645,120 +2382,87 @@ function AdminTransactions() {
                                         ? "Pending sync"
                                         : receipt.status,
                                 ],
-                            ].map(
-                                (
-                                    [
-                                        label,
-                                        value,
-                                    ],
-                                ) => (
-                                    <div
-                                        key={
-                                            label
-                                        }
-                                        className="flex justify-between gap-4 border-b border-gray-100 pb-3"
-                                    >
-                                        <span className="text-gray-500">
-                                            {
-                                                label
-                                            }
-                                        </span>
+                            ].map(([label, value]) => (
+                                <div
+                                    key={label}
+                                    className="flex justify-between gap-4 border-b border-gray-100 pb-3"
+                                >
+                                    <span className="text-gray-500">
+                                        {label}
+                                    </span>
 
-                                        <span className="text-right font-medium">
-                                            {
-                                                value
-                                            }
-                                        </span>
-                                    </div>
-                                ),
-                            )}
+                                    <span className="text-right font-medium">
+                                        {value}
+                                    </span>
+                                </div>
+                            ))}
 
                             <button
-                                onClick={
-                                    printReceipt
-                                }
+                                onClick={printReceipt}
                                 disabled={
-                                    receipt.status !==
-                                    "Paid"
+                                    receipt.status !== "Paid"
                                 }
-                                className={
-                                    button
-                                }
+                                className={button}
                             >
-                                Print
-                                receipt
+                                Print receipt
                             </button>
                         </div>
                     )}
                 </section>
             </div>
 
-            <section
-                className={panel}
-            >
+            <section className={panel}>
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
                     <div>
-                        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-purple-500">SALES RECORDS</p>
-                        <h2 className="text-lg font-bold text-purple-950">Transaction history</h2>
-                        <p className="mt-1 text-xs text-gray-500">Search and review your recorded sales and receipts.</p>
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-purple-500">
+                            SALES RECORDS
+                        </p>
+
+                        <h2 className="text-lg font-bold text-purple-950">
+                            Transaction history
+                        </h2>
+
+                        <p className="mt-1 text-xs text-gray-500">
+                            Search and review recorded sales
+                            and receipts.
+                        </p>
                     </div>
 
                     <input
                         type="search"
                         aria-label="Search transaction history"
                         placeholder="Search name, contact, email, booking, or service…"
-                        value={
-                            search
-                        }
-                        onChange={(
-                            event,
-                        ) =>
-                            setSearch(
-                                event
-                                    .target
-                                    .value,
-                            )
+                        value={search}
+                        onChange={(event) =>
+                            setSearch(event.target.value)
                         }
                         className={`${input} md:max-w-sm`}
                     />
                 </div>
 
                 {searchTerm &&
-                    customerRecords.length >
-                        0 && (
+                    customerRecords.length > 0 && (
                         <div className="mb-6">
                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                                 <div>
                                     <h3 className="font-bold text-purple-950">
-                                        Customer
-                                        record
-                                        {customerRecords.length >
-                                        1
+                                        Customer record
+                                        {customerRecords.length > 1
                                             ? "s"
                                             : ""}
                                     </h3>
 
                                     <p className="mt-1 text-xs text-gray-500">
-                                        Complete
-                                        recorded
-                                        transaction
-                                        and
-                                        service
-                                        history
-                                        matching
-                                        your
-                                        search.
+                                        Recorded transaction and
+                                        service history matching
+                                        your search.
                                     </p>
                                 </div>
 
                                 <span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700">
-                                    {
-                                        customerRecords.length
-                                    }{" "}
-                                    customer
-                                    match
-                                    {customerRecords.length >
-                                    1
+                                    {customerRecords.length}
+                                    {" "}customer match
+                                    {customerRecords.length > 1
                                         ? "es"
                                         : ""}
                                 </span>
@@ -2766,46 +2470,35 @@ function AdminTransactions() {
 
                             <div className="grid gap-3 lg:grid-cols-2">
                                 {customerRecords.map(
-                                    (
-                                        record,
-                                    ) => (
+                                    (record) => (
                                         <article
-                                            key={
-                                                record.key
-                                            }
+                                            key={record.key}
                                             className="rounded-xl border border-purple-100 bg-purple-50/40 p-4"
                                         >
                                             <div className="flex flex-wrap items-start justify-between gap-3">
                                                 <div>
                                                     <p className="font-bold text-purple-950">
-                                                        {
-                                                            record.customer
-                                                        }
+                                                        {record.customer}
                                                     </p>
 
                                                     <p className="mt-1 text-xs text-gray-600">
                                                         Contact:{" "}
-                                                        {
-                                                            record.contact
-                                                        }
+                                                        {record.contact}
                                                     </p>
 
                                                     <p className="mt-1 text-xs text-gray-600">
                                                         Email:{" "}
-                                                        {
-                                                            record.email
-                                                        }
+                                                        {record.email}
                                                     </p>
                                                 </div>
 
                                                 <p className="text-right text-xs text-gray-500">
-                                                    Latest
-                                                    visit
+                                                    Latest visit
 
                                                     <span className="mt-1 block font-semibold text-gray-700">
                                                         {dateLabel(
                                                             record.latestVisit,
-                                                            record.latestVisitDateOnly,
+                                                            record.latestVisitDateOnly
                                                         )}
                                                     </span>
                                                 </p>
@@ -2818,21 +2511,18 @@ function AdminTransactions() {
                                                     </p>
 
                                                     <p className="mt-1 font-bold text-purple-900">
-                                                        {
-                                                            record.transactions
-                                                        }
+                                                        {record.transactions}
                                                     </p>
                                                 </div>
 
                                                 <div>
                                                     <p className="text-xs text-gray-500">
-                                                        Total
-                                                        paid
+                                                        Total paid
                                                     </p>
 
                                                     <p className="mt-1 font-bold text-purple-900">
                                                         {money(
-                                                            record.totalPaid,
+                                                            record.totalPaid
                                                         )}
                                                     </p>
                                                 </div>
@@ -2844,7 +2534,7 @@ function AdminTransactions() {
 
                                                     <p className="mt-1 font-bold text-emerald-700">
                                                         {money(
-                                                            record.depositPaid,
+                                                            record.depositPaid
                                                         )}
                                                     </p>
                                                 </div>
@@ -2852,32 +2542,24 @@ function AdminTransactions() {
 
                                             <div className="mt-3">
                                                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                                                    Services
-                                                    /
-                                                    items
+                                                    Services / items
                                                 </p>
 
                                                 <div className="mt-2 flex flex-wrap gap-2">
                                                     {record.services.map(
-                                                        (
-                                                            service,
-                                                        ) => (
+                                                        (service) => (
                                                             <span
-                                                                key={
-                                                                    service
-                                                                }
-                                                                className="rounded-full bg-white px-3 py-1 text-xs text-purple-800 shadow-sm"
+                                                                key={service}
+                                                                className="rounded-full bg-white px-3 py-2 text-xs text-purple-800 shadow-sm"
                                                             >
-                                                                {
-                                                                    service
-                                                                }
+                                                                {service}
                                                             </span>
-                                                        ),
+                                                        )
                                                     )}
                                                 </div>
                                             </div>
                                         </article>
-                                    ),
+                                    )
                                 )}
                             </div>
                         </div>
@@ -2896,34 +2578,22 @@ function AdminTransactions() {
                                     "Payment",
                                     "Status",
                                     "Receipt",
-                                ].map(
-                                    (
-                                        title,
-                                    ) => (
-                                        <th
-                                            key={
-                                                title
-                                            }
-                                            className="px-3 py-4"
-                                        >
-                                            {
-                                                title
-                                            }
-                                        </th>
-                                    ),
-                                )}
+                                ].map((title) => (
+                                    <th
+                                        key={title}
+                                        className="px-3 py-4"
+                                    >
+                                        {title}
+                                    </th>
+                                ))}
                             </tr>
                         </thead>
 
                         <tbody className="divide-y divide-gray-100">
                             {visibleTransactions.map(
-                                (
-                                    row,
-                                ) => (
+                                (row) => (
                                     <tr
-                                        key={
-                                            row.transaction_id
-                                        }
+                                        key={row.transaction_id}
                                         className="transition-colors odd:bg-white even:bg-purple-50/30 hover:bg-purple-50/70"
                                     >
                                         <td className="px-3 py-4">
@@ -2934,41 +2604,32 @@ function AdminTransactions() {
                                             <p className="mt-1 text-xs text-gray-500">
                                                 {dateLabel(
                                                     row.transaction_date,
-                                                    row.historical_date_only,
+                                                    row.historical_date_only
                                                 )}
                                             </p>
 
                                             {row.appointment_id && (
                                                 <p className="mt-1 text-xs text-purple-600">
-                                                    Booking
-                                                    #
-                                                    {
-                                                        row.appointment_id
-                                                    }
+                                                    Booking #
+                                                    {row.appointment_id}
                                                 </p>
                                             )}
 
                                             {row.customer_contact && (
                                                 <p className="mt-1 text-xs text-gray-500">
-                                                    {
-                                                        row.customer_contact
-                                                    }
+                                                    {row.customer_contact}
                                                 </p>
                                             )}
 
                                             {row.customer_email && (
                                                 <p className="mt-1 text-xs text-gray-500">
-                                                    {
-                                                        row.customer_email
-                                                    }
+                                                    {row.customer_email}
                                                 </p>
                                             )}
                                         </td>
 
                                         <td className="px-3 py-4">
-                                            {
-                                                row.service
-                                            }
+                                            {row.service}
                                         </td>
 
                                         <td className="whitespace-nowrap px-3 py-4 font-bold text-purple-950">
@@ -2977,19 +2638,20 @@ function AdminTransactions() {
 
                                         <td className="whitespace-nowrap px-3 py-4 text-emerald-700">
                                             {money(
-                                                row.deposit_applied,
+                                                row.deposit_applied
                                             )}
                                         </td>
 
                                         <td className="whitespace-nowrap px-3 py-4 font-semibold text-gray-800">
-                                            {money(row.balance_collected)}
+                                            {money(
+                                                row.balance_collected
+                                            )}
                                         </td>
 
                                         <td className="px-3 py-4 text-xs text-gray-600">
                                             {Number(
-                                                row.deposit_applied,
-                                            ) >
-                                                0 && (
+                                                row.deposit_applied
+                                            ) > 0 && (
                                                 <p>
                                                     Deposit:{" "}
                                                     {row.deposit_payment_method ||
@@ -2998,53 +2660,52 @@ function AdminTransactions() {
                                             )}
 
                                             {Number(
-                                                row.balance_collected,
-                                            ) >
-                                            0 ? (
+                                                row.balance_collected
+                                            ) > 0 ? (
                                                 <p
                                                     className={
                                                         Number(
-                                                            row.deposit_applied,
-                                                        ) >
-                                                        0
+                                                            row.deposit_applied
+                                                        ) > 0
                                                             ? "mt-1"
                                                             : ""
                                                     }
                                                 >
                                                     Balance:{" "}
-                                                    {
-                                                        row.payment
-                                                    }
+                                                    {row.payment}
                                                 </p>
                                             ) : (
                                                 <p>
-                                                    No
-                                                    additional
-                                                    payment
+                                                    No additional payment
                                                 </p>
                                             )}
                                         </td>
 
                                         <td className="px-3 py-4">
-                                            <span className={`inline-flex whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${row.offline_pending ? "border-amber-200 bg-amber-50 text-amber-800" : row.status === "Paid" ? "border-emerald-100 bg-emerald-50 text-emerald-700" : "border-purple-100 bg-purple-50 text-purple-700"}`}>
-                                                {row.offline_pending ? "Pending sync" : row.status}
+                                            <span
+                                                className={`inline-flex whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold ${
+                                                    row.offline_pending
+                                                        ? "border-amber-200 bg-amber-50 text-amber-800"
+                                                        : row.status === "Paid"
+                                                          ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                                                          : "border-purple-100 bg-purple-50 text-purple-700"
+                                                }`}
+                                            >
+                                                {row.offline_pending
+                                                    ? "Pending sync"
+                                                    : row.status}
                                             </span>
                                         </td>
 
                                         <td className="px-3 py-4">
                                             <button
                                                 onClick={() => {
-                                                    setReceipt(
-                                                        row,
-                                                    )
+                                                    setReceipt(row)
 
-                                                    window.scrollTo(
-                                                        {
-                                                            top: 0,
-                                                            behavior:
-                                                                "smooth",
-                                                        },
-                                                    )
+                                                    window.scrollTo({
+                                                        top: 0,
+                                                        behavior: "smooth",
+                                                    })
                                                 }}
                                                 className="rounded-lg border border-purple-100 bg-purple-50 px-3 py-2 text-xs font-semibold text-purple-700 transition-colors hover:bg-purple-100"
                                             >
@@ -3052,15 +2713,13 @@ function AdminTransactions() {
                                             </button>
                                         </td>
                                     </tr>
-                                ),
+                                )
                             )}
 
                             {!filtered.length && (
                                 <tr>
                                     <td
-                                        colSpan={
-                                            8
-                                        }
+                                        colSpan={8}
                                         className="p-8 text-center text-gray-500"
                                     >
                                         {loading
@@ -3074,17 +2733,95 @@ function AdminTransactions() {
                 </div>
 
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-purple-100 pt-4">
-                    <p className="text-xs text-gray-500" aria-live="polite">
+                    <p
+                        className="text-xs text-gray-500"
+                        aria-live="polite"
+                    >
                         {filtered.length === 0
                             ? "No matching transactions"
-                            : `Showing ${pageStart + 1}–${Math.min(pageStart + HISTORY_PAGE_SIZE, filtered.length)} of ${filtered.length} transactions`}
+                            : `Showing ${
+                                  pageStart + 1
+                              }–${Math.min(
+                                  pageStart +
+                                      HISTORY_PAGE_SIZE,
+                                  filtered.length
+                              )} of ${
+                                  filtered.length
+                              } transactions`}
                     </p>
-                    <div className="flex items-center gap-2" aria-label="Transaction history pagination">
-                        <button type="button" onClick={() => setHistoryPage(1)} disabled={currentHistoryPage === 1} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">First</button>
-                        <button type="button" onClick={() => setHistoryPage((page) => Math.max(1, page - 1))} disabled={currentHistoryPage === 1} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-                        <span className="min-w-[75px] text-center text-xs font-semibold text-purple-950">{currentHistoryPage} / {historyPageCount}</span>
-                        <button type="button" onClick={() => setHistoryPage((page) => Math.min(historyPageCount, page + 1))} disabled={currentHistoryPage === historyPageCount} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">Next</button>
-                        <button type="button" onClick={() => setHistoryPage(historyPageCount)} disabled={currentHistoryPage === historyPageCount} className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40">Last</button>
+
+                    <div
+                        className="flex items-center gap-2"
+                        aria-label="Transaction history pagination"
+                    >
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setHistoryPage(1)
+                            }
+                            disabled={
+                                currentHistoryPage === 1
+                            }
+                            className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            First
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setHistoryPage((page) =>
+                                    Math.max(1, page - 1)
+                                )
+                            }
+                            disabled={
+                                currentHistoryPage === 1
+                            }
+                            className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            Previous
+                        </button>
+
+                        <span className="min-w-[75px] text-center text-xs font-semibold text-purple-950">
+                            {currentHistoryPage}
+                            {" / "}
+                            {historyPageCount}
+                        </span>
+
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setHistoryPage((page) =>
+                                    Math.min(
+                                        historyPageCount,
+                                        page + 1
+                                    )
+                                )
+                            }
+                            disabled={
+                                currentHistoryPage ===
+                                historyPageCount
+                            }
+                            className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            Next
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() =>
+                                setHistoryPage(
+                                    historyPageCount
+                                )
+                            }
+                            disabled={
+                                currentHistoryPage ===
+                                historyPageCount
+                            }
+                            className="rounded-lg border border-purple-100 px-3 py-2 text-xs font-semibold text-purple-700 hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            Last
+                        </button>
                     </div>
                 </div>
             </section>
