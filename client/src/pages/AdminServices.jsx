@@ -1,3 +1,5 @@
+import ServicePromotions from "../components/ServicePromotions";
+
 import {
     useCallback,
     useEffect,
@@ -1998,6 +2000,11 @@ function AdminServices() {
                     </table>
                 </div>
             </section>
+{/* SERVICE PROMOTIONS SECTION */}
+            <ServicePromotions
+                services={services}
+                isOwner={isOwner}
+                />
         </div>
     )
 }
