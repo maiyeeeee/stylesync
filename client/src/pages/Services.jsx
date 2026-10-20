@@ -53,7 +53,7 @@ function promotionForService(service) {
     ].join("-")
 
     const eligible = promotions.filter((promotion) => {
-        const enabled = Number(promotion.is_active) === 1
+        const enabled = promotion.is_active == null || Number(promotion.is_active) === 1
         const startsOn = String(promotion.starts_on || "").slice(0, 10)
         const endsOn = String(promotion.ends_on || "").slice(0, 10)
 
