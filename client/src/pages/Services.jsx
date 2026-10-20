@@ -18,9 +18,9 @@ useEffect(() => {
     async function loadPromotions() {
         try {
             const response = await fetch(
-                `${API_URL}/discounts/promotions`,
-                { signal: controller.signal }
-            )
+    `${API_URL}/public/promotions`,
+    { signal: controller.signal }
+)
 
             if (!response.ok) {
                 throw new Error("Unable to load promotions")

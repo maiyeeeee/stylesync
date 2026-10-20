@@ -448,6 +448,47 @@ api.use(
     inventoryRoutes,
 )
 api.use("/transactions", requireTeamMember, transactionRoutes)
+api.get("/public/promotions", async (req, res) => {
+    try {
+        const db = require("./db")
+
+        const [rows] = await db.promise().query(`
+            SELECT
+                p.promotion_id,
+                p.title,
+                p.percent_off,
+                DATE_FORMAT(p.starts_on, '%Y-%m-%d') AS starts_on,
+                DATE_FORMAT(p.ends_on, '%Y-%m-%d') AS ends_on,
+                GROUP_CONCAT(ps.service_id ORDER BY ps.service_id) AS service_ids
+            FROM ig_promotions p
+            INNER JOIN ig_promotion_services ps
+                ON ps.promotion_id = p.promotion_id
+            WHERE p.is_active = 1
+              AND CURDATE() BETWEEN p.starts_on AND p.ends_on
+            GROUP BY
+                p.promotion_id,
+                p.title,
+                p.percent_off,
+                p.starts_on,
+                p.ends_on
+            ORDER BY p.percent_off DESC, p.promotion_id DESC
+        `)
+
+        res.json(
+            rows.map((promotion) => ({
+                ...promotion,
+                service_ids: promotion.service_ids
+                    ? promotion.service_ids.split(",").map(Number)
+                    : [],
+            }))
+        )
+    } catch (error) {
+        console.error("Public promotions error:", error)
+        res.status(500).json({
+            error: "Unable to load promotions.",
+        })
+    }
+})
 api.use("/discounts", requireTeamMember, discountRoutes)
 api.use("/customers", requireOwner, customerRoutes)
 api.use("/recommendations", requireAdmin, recommendationRoutes)
