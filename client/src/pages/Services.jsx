@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
+import { API_URL } from "../lib/sessionApi"
 import { LuArrowUpRight, LuPhone, LuSearch, LuSearchX, LuRefreshCw } from "react-icons/lu"
 import Navbar from "../components/Navbar"
 import Footer from "../components/Footer"
@@ -9,6 +10,76 @@ import { categoryFor, useServices } from "../lib/services"
 
 export default function Services() {
     const { services, loading, error, retry } = useServices()
+    const [promotions, setPromotions] = useState([])
+
+useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadPromotions() {
+        try {
+            const response = await fetch(
+                `${API_URL}/discounts/promotions`,
+                { signal: controller.signal }
+            )
+
+            if (!response.ok) {
+                throw new Error("Unable to load promotions")
+            }
+
+            const data = await response.json()
+
+            if (Array.isArray(data)) {
+                setPromotions(data)
+            }
+        } catch (err) {
+            if (err.name !== "AbortError") {
+                console.error("Promotions loading failed:", err)
+            }
+        }
+    }
+
+    loadPromotions()
+
+    return () => controller.abort()
+}, [])
+
+function promotionForService(service) {
+    // Compare using the salon's local calendar date.
+    const now = new Date()
+    const today = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0"),
+    ].join("-")
+
+    const eligible = promotions.filter((promotion) => {
+        const enabled = Number(promotion.is_active) === 1
+        const startsOn = String(promotion.starts_on || "").slice(0, 10)
+        const endsOn = String(promotion.ends_on || "").slice(0, 10)
+
+        const matchingService = (
+            promotion.service_ids || []
+        ).some(
+            (id) => Number(id) === Number(service.service_id)
+        )
+
+        return (
+            enabled &&
+            startsOn <= today &&
+            endsOn >= today &&
+            matchingService &&
+            Number(promotion.percent_off) > 0
+        )
+    })
+
+    // When multiple promotions apply, display the largest discount.
+    eligible.sort(
+        (a, b) =>
+            Number(b.percent_off) - Number(a.percent_off)
+    )
+
+    return eligible[0] || null
+}
     const [params, setParams] = useSearchParams()
     const [search, setSearch] = useState("")
     const selected = params.get("category") || "all"
@@ -109,8 +180,12 @@ export default function Services() {
                             </p>
                             <div className="services-grid">
                                 {filtered.map((service) => (
-                                    <ServiceCard key={service.service_id} service={service} />
-                                ))}
+    <ServiceCard
+        key={service.service_id}
+        service={service}
+        promotion={promotionForService(service)}
+    />
+))}
                             </div>
                         </>
                     ) : (
