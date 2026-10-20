@@ -232,15 +232,17 @@ function isPublicSiteRequest(req) {
     )
         return true
 
-    const currentPath = req.path.replace(/\/+$/, "") || "/"
-    const isRead = ["GET", "HEAD"].includes(req.method)
-    return (
-        (isRead && currentPath === "/services") ||
-        (isRead && currentPath === "/appointments/availability") ||
-        (req.method === "POST" &&
-            currentPath === "/appointments" &&
-            !Object.prototype.hasOwnProperty.call(req.body || {}, "offline_id"))
-    )
+   const currentPath = req.path.replace(/\/+$/, "") || "/"
+const isRead = ["GET", "HEAD"].includes(req.method)
+
+return (
+    (isRead && currentPath === "/services") ||
+    (isRead && currentPath === "/public/promotions") ||
+    (isRead && currentPath === "/appointments/availability") ||
+    (req.method === "POST" &&
+        currentPath === "/appointments" &&
+        !Object.prototype.hasOwnProperty.call(req.body || {}, "offline_id"))
+)
 }
 
 // Verify authenticated requests against MySQL. Public pages need no login.
