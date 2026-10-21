@@ -238,6 +238,9 @@ const isRead = ["GET", "HEAD"].includes(req.method)
 return (
     (isRead && currentPath === "/services") ||
     (isRead && currentPath === "/public/promotions") ||
+    (isRead && currentPath === "/services") ||
+    (isRead && currentPath === "/public/promotions") ||
+    (isRead && currentPath === "/public/booking-price") ||
     (isRead && currentPath === "/appointments/availability") ||
     (req.method === "POST" &&
         currentPath === "/appointments" &&
@@ -491,6 +494,86 @@ api.get("/public/promotions", async (req, res) => {
         })
     }
 })
+
+
+api.get("/public/booking-price", async (req, res) => {
+    try {
+        const serviceId = Number(req.query.service_id)
+        const appointmentDate = String(
+            req.query.appointment_date || ""
+        )
+
+        if (
+            !Number.isSafeInteger(serviceId) ||
+            serviceId <= 0 ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate)
+        ) {
+            return res.status(400).json({
+                error: "Valid service and appointment date are required.",
+            })
+        }
+
+        const parsedDate = new Date(
+            `${appointmentDate}T00:00:00Z`
+        )
+
+        if (
+            Number.isNaN(parsedDate.getTime()) ||
+            parsedDate.toISOString().slice(0, 10) !== appointmentDate
+        ) {
+            return res.status(400).json({
+                error: "Invalid appointment date.",
+            })
+        }
+
+        const db = require("./db")
+        const { getPromotionPrice } = require("./utils/promotionPricing")
+
+        const [services] = await db.promise().query(
+            "SELECT price FROM services WHERE service_id = ? LIMIT 1",
+            [serviceId]
+        )
+
+        if (!services.length) {
+            return res.status(404).json({
+                error: "Service not found.",
+            })
+        }
+
+        const pricing = await getPromotionPrice(
+            db.promise(),
+            serviceId,
+            services[0].price,
+            appointmentDate
+        )
+
+        const depositCents = Math.round(pricing.totalCents / 5)
+
+        return res.json({
+            service_id: serviceId,
+            appointment_date: appointmentDate,
+            original_service_total:
+                (pricing.originalCents / 100).toFixed(2),
+            service_total:
+                (pricing.totalCents / 100).toFixed(2),
+            promotion_id: pricing.promotionId,
+            promotion_title: pricing.promotionTitle,
+            promotion_percent: pricing.promotionPercent,
+            promotion_discount:
+                (pricing.discountCents / 100).toFixed(2),
+            required_amount:
+                (depositCents / 100).toFixed(2),
+            remaining_balance:
+                ((pricing.totalCents - depositCents) / 100).toFixed(2),
+        })
+    } catch (error) {
+        console.error("Public booking price error:", error)
+        return res.status(500).json({
+            error: "Unable to calculate booking price.",
+        })
+    }
+})
+
 api.use("/discounts", requireTeamMember, discountRoutes)
 api.use("/customers", requireOwner, customerRoutes)
 api.use("/recommendations", requireAdmin, recommendationRoutes)

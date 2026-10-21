@@ -1,8 +1,12 @@
-
 const express = require("express")
 const router = express.Router()
 const db = require("../db")
 const promiseDb = db.promise()
+// Promotions are selected on the server, never by cashier-provided percentages.
+const { getPromotionPrice } = require("../utils/promotionPricing")
+const philippineToday = () => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit"
+}).format(new Date())
 
 // Authentication and CSRF middleware remain in server.js.
 router.use((req, res, next) => {
@@ -11,38 +15,30 @@ router.use((req, res, next) => {
             error: "Please sign in again.",
         })
     }
-
     if (!["owner", "admin", "user"].includes(req.user.role)) {
         return res.status(403).json({
             error: "Team member access is required.",
         })
     }
-
     next()
 })
-
 function problem(message, status = 400) {
     const error = new Error(message)
     error.status = status
     return error
 }
-
 // Work in centavos to avoid floating-point subtraction errors.
 function cents(value, label, allowZero = false) {
     const text = String(value ?? "").trim()
-
     if (!/^\d+(\.\d{1,2})?$/.test(text)) {
         throw problem(
             `${label} must be a valid amount with up to two decimals.`
         )
     }
-
     const [whole, fraction = ""] = text.split(".")
-
     const result =
         Number(whole) * 100 +
         Number(fraction.padEnd(2, "0"))
-
     if (
         !Number.isSafeInteger(result) ||
         result > 9999999999 ||
@@ -50,35 +46,27 @@ function cents(value, label, allowZero = false) {
     ) {
         throw problem(`${label} is outside the allowed range.`)
     }
-
     return result
 }
-
 function decimal(value) {
     return (value / 100).toFixed(2)
 }
-
 function normalizeCustomerName(value) {
     return String(value || "")
         .trim()
         .replace(/\s+/g, " ")
         .toLocaleLowerCase("en")
 }
-
 function historicalEpoch(value) {
     if (value == null || value === "") return null
-
     if (
         typeof value !== "string" ||
         !/^\d{4}-\d{2}-\d{2}$/.test(value)
     ) {
         throw problem("Choose a valid historical sale date.")
     }
-
     const [year, month, day] = value.split("-").map(Number)
-
     const check = new Date(Date.UTC(year, month - 1, day))
-
     if (
         check.getUTCFullYear() !== year ||
         check.getUTCMonth() !== month - 1 ||
@@ -86,24 +74,20 @@ function historicalEpoch(value) {
     ) {
         throw problem("Choose a valid historical sale date.")
     }
-
     const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: "Asia/Manila",
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
     }).formatToParts(new Date())
-
     const part = (type) =>
         parts.find((item) => item.type === type)?.value
-
     const today =
         part("year") +
         "-" +
         part("month") +
         "-" +
         part("day")
-
     if (
         value < "2000-01-01" ||
         value >= today
@@ -112,84 +96,65 @@ function historicalEpoch(value) {
             "Historical sale date must be before today in Philippine time."
         )
     }
-
     // Paper records have no exact transaction time.
     // Use noon in Philippine time as a neutral timestamp.
     return Date.parse(
         value + "T12:00:00+08:00"
     ) / 1000
 }
-
 function positiveId(value, label) {
     const result = Number(value)
-
     if (
         !Number.isSafeInteger(result) ||
         result <= 0
     ) {
         throw problem(`${label} is invalid.`)
     }
-
     return result
 }
-
 // Shared transaction query.
 // Deposit information is returned alongside each transaction.
 const transactionSelect = `
     SELECT
         t.*,
-
         COALESCE(
             da.amount_applied,
             0
         ) AS deposit_applied,
-
         t.amount - COALESCE(
             da.amount_applied,
             0
         ) AS balance_collected,
-
         CASE
             WHEN da.application_id IS NOT NULL
             THEN d.payment_method
             ELSE NULL
         END AS deposit_payment_method,
-
         COALESCE(
             NULLIF(TRIM(t.customer_contact), ''),
             a.contact_number
         ) AS customer_contact,
-
         a.email AS customer_email,
-
         DATE_FORMAT(
             a.appointment_date,
             '%Y-%m-%d'
         ) AS appointment_date,
-
         TIME_FORMAT(
             a.appointment_time,
             '%H:%i'
         ) AS appointment_time,
-
         a.status AS appointment_status
-
     FROM transactions t
-
     LEFT JOIN booking_deposit_applications da
         ON da.transaction_id = t.transaction_id
-
     LEFT JOIN booking_deposits d
         ON d.deposit_id = da.deposit_id
-
     LEFT JOIN appointments a
         ON a.id = t.appointment_id
 `
-
 // ============================================
 // GET ALL TRANSACTIONS
 // ============================================
-
 router.get("/", async (req, res) => {
     try {
         const [rows] = await promiseDb.query(`
@@ -198,29 +163,24 @@ router.get("/", async (req, res) => {
                 t.transaction_date DESC,
                 t.transaction_id DESC
         `)
-
         return res.json(rows)
     } catch (error) {
         console.error(
             "Transaction history error:",
             error
         )
-
         return res.status(500).json({
             error: "Unable to load transactions.",
         })
     }
 })
-
 //
 // ============================================
 // PART 2 — APPOINTMENT CHECKOUT LOOKUP
 // ============================================
 //
-
 // Only approved/completed appointments that have not
 // already been checked out should appear in the POS.
-
 router.get("/checkout-appointments", async (req, res) => {
     try {
         const [rows] = await promiseDb.query(`
@@ -230,75 +190,60 @@ router.get("/checkout-appointments", async (req, res) => {
                 a.contact_number,
                 a.service,
                 a.service_id,
-
                 DATE_FORMAT(
                     a.appointment_date,
                     '%Y-%m-%d'
                 ) AS appointment_date,
-
                 TIME_FORMAT(
                     a.appointment_time,
                     '%H:%i'
                 ) AS appointment_time,
-
                 a.status,
-
-                COALESCE(
-                    d.service_total,
-                    s.price
-                ) AS service_total,
-
+                COALESCE(d.service_total, s.price) AS service_total,
+                COALESCE(d.original_service_total, d.service_total, s.price) AS original_service_total,
+                d.promotion_id AS locked_promotion_id,
+                d.promotion_percent AS locked_promotion_percent,
+                d.promotion_discount AS locked_promotion_discount,
                 d.payment_status,
-
                 CASE
                     WHEN d.payment_status = 'Verified'
                     THEN d.verified_amount
                     ELSE 0
                 END AS verified_deposit
-
             FROM appointments a
-
             LEFT JOIN services s
                 ON s.service_id = a.service_id
-
             LEFT JOIN booking_deposits d
                 ON d.appointment_id = a.id
-
             WHERE a.status IN (
                 'Approved',
                 'Completed'
             )
-
             AND NOT EXISTS (
                 SELECT 1
                 FROM transactions t
                 WHERE t.appointment_id = a.id
             )
-
             AND NOT EXISTS (
                 SELECT 1
                 FROM booking_deposit_applications da
                 WHERE da.deposit_id = d.deposit_id
             )
-
             ORDER BY
                 a.appointment_date DESC,
                 a.appointment_time DESC
         `)
-
         return res.json(rows)
     } catch (error) {
         console.error(
             "Appointment checkout lookup error:",
             error
         )
-
         return res.status(500).json({
             error: "Unable to load checkout appointments.",
         })
     }
 })
-
 //
 // ============================================
 // OWNER-ISSUED LOYALTY REWARD PREVIEW
@@ -311,6 +256,34 @@ router.get("/checkout-appointments", async (req, res) => {
 //
 // Redemption happens only inside POST /transactions.
 //
+// Authenticated POS quote: use the same pricing helper as checkout.
+// No customer or loyalty details are returned by this endpoint.
+router.get("/price-preview", async (req, res) => {
+    try {
+        const serviceId = positiveId(req.query.service_id, "Service")
+        const [[service]] = await promiseDb.query(
+            "SELECT price FROM services WHERE service_id = ? LIMIT 1", [serviceId]
+        )
+        if (!service) return res.status(404).json({ error: "Service not found." })
+        const pricing = await getPromotionPrice(
+            promiseDb, serviceId, service.price, philippineToday()
+        )
+        res.set("Cache-Control", "no-store")
+        return res.json({
+            service_id: serviceId,
+            original_service_total: decimal(pricing.originalCents),
+            promotion_id: pricing.promotionId,
+            promotion_percent: pricing.promotionPercent,
+            promotion_title: pricing.promotionTitle,
+            promotion_discount: decimal(pricing.discountCents),
+            service_total: decimal(pricing.totalCents),
+        })
+    } catch (error) {
+        if (error.status) return res.status(error.status).json({ error: error.message })
+        console.error("POS price preview failed:", error)
+        return res.status(500).json({ error: "Unable to preview current service price." })
+    }
+})
 
 router.get("/loyalty-preview", async (req, res) => {
     try {
@@ -320,16 +293,13 @@ router.get("/loyalty-preview", async (req, res) => {
                   "Appointment"
               )
             : null
-
         const inputContact = String(
             req.query.customer_contact || ""
         ).trim()
-
         // A booked appointment must use the contact
         // saved on the appointment, not a POS override.
         let contact = inputContact
         let appointmentCustomerName = null
-
         if (appointmentId) {
             const [[appointment]] = await promiseDb.query(
                 `
@@ -341,22 +311,18 @@ router.get("/loyalty-preview", async (req, res) => {
                 `,
                 [appointmentId]
             )
-
             if (!appointment) {
                 throw problem(
                     "Appointment not found.",
                     404
                 )
             }
-
             contact = String(
                 appointment.contact_number || ""
             ).trim()
-
             appointmentCustomerName =
                 appointment.customer_name
         }
-
         if (
             !contact ||
             contact.length < 7 ||
@@ -368,7 +334,6 @@ router.get("/loyalty-preview", async (req, res) => {
                 reason: "Valid customer contact required.",
             })
         }
-
         // Never select an arbitrary customer when
         // duplicate phone numbers exist.
         const [customers] = await promiseDb.query(
@@ -382,7 +347,6 @@ router.get("/loyalty-preview", async (req, res) => {
             `,
             [contact]
         )
-
         if (customers.length !== 1) {
             return res.json({
                 available: false,
@@ -393,7 +357,6 @@ router.get("/loyalty-preview", async (req, res) => {
                         : "Customer profile not found.",
             })
         }
-
         // A booked appointment must belong to the
         // matching registered customer.
         if (
@@ -412,13 +375,11 @@ router.get("/loyalty-preview", async (req, res) => {
                     "Appointment and registered customer details do not match.",
             })
         }
-
         const [[policy]] = await promiseDb.query(`
             SELECT enabled
             FROM ig_loyalty_policy
             WHERE policy_id = 1
         `)
-
         if (!policy || !Number(policy.enabled)) {
             return res.json({
                 available: false,
@@ -426,7 +387,6 @@ router.get("/loyalty-preview", async (req, res) => {
                 reason: "Loyalty rewards are disabled.",
             })
         }
-
         const [rewards] = await promiseDb.query(
             `
             SELECT
@@ -440,7 +400,6 @@ router.get("/loyalty-preview", async (req, res) => {
             `,
             [customers[0].customer_id]
         )
-
         // More than one issued reward is ambiguous.
         // The owner must resolve that first.
         if (rewards.length !== 1) {
@@ -453,7 +412,6 @@ router.get("/loyalty-preview", async (req, res) => {
                         : "No issued reward.",
             })
         }
-
         return res.json({
             available: true,
             reward: {
@@ -468,7 +426,6 @@ router.get("/loyalty-preview", async (req, res) => {
             "Loyalty preview error:",
             error
         )
-
         return res.status(
             error.status || 500
         ).json({
@@ -478,20 +435,16 @@ router.get("/loyalty-preview", async (req, res) => {
         })
     }
 })
-
 //
 // ============================================
 // PART 3 — CREATE TRANSACTION
 // ============================================
 //
-
 router.post("/", async (req, res) => {
     let connection
     let inTransaction = false
-
     try {
         const body = req.body || {}
-
         const appointmentId =
             body.appointment_id == null ||
             body.appointment_id === ""
@@ -500,10 +453,8 @@ router.post("/", async (req, res) => {
                       body.appointment_id,
                       "Appointment"
                   )
-
         const saleType =
             body.sale_type || "Service"
-
         if (
             !["Service", "Product"].includes(saleType)
         ) {
@@ -511,11 +462,9 @@ router.post("/", async (req, res) => {
                 "Select Service or Product."
             )
         }
-
         const saleEpoch = historicalEpoch(
             body.historical_date
         )
-
         if (
             saleEpoch != null &&
             (
@@ -527,11 +476,9 @@ router.post("/", async (req, res) => {
                 "Historical dates are available for walk-in service sales only."
             )
         }
-
         const payment = String(
             body.payment || ""
         )
-
         if (
             !["Cash", "GCash"].includes(payment) &&
             !(
@@ -543,10 +490,8 @@ router.post("/", async (req, res) => {
                 "Select Cash or GCash, or use Not recorded for a historical sale."
             )
         }
-
         const status =
             body.status || "Paid"
-
         if (
             !["Paid", "Pending"].includes(status)
         ) {
@@ -554,7 +499,6 @@ router.post("/", async (req, res) => {
                 "Invalid payment status."
             )
         }
-
         // Booked appointments can only be checked out
         // as paid service transactions.
         if (
@@ -568,11 +512,9 @@ router.post("/", async (req, res) => {
                 "Appointment checkout must be a paid service transaction."
             )
         }
-
         const quantity = Number(
             body.quantity ?? 1
         )
-
         if (
             !Number.isSafeInteger(quantity) ||
             quantity < 1
@@ -581,7 +523,6 @@ router.post("/", async (req, res) => {
                 "Quantity must be a positive whole number."
             )
         }
-
         if (
             appointmentId &&
             quantity !== 1
@@ -590,7 +531,6 @@ router.post("/", async (req, res) => {
                 "Check out one appointment at a time."
             )
         }
-
         // The subtotal arrives from POS.
         // Discount calculation will be performed
         // by the server, not by the cashier.
@@ -598,13 +538,15 @@ router.post("/", async (req, res) => {
             body.amount,
             "Sale subtotal"
         )
-
         let total = subtotal
-
+        let originalSubtotal = subtotal
+        let promo = null
+        let winningPromotionId = null
+        let discountType = null
+        let serviceId = null
         const offlineId = body.offline_id
             ? String(body.offline_id)
             : null
-
         if (
             offlineId &&
             offlineId.length > 64
@@ -613,23 +555,18 @@ router.post("/", async (req, res) => {
                 "The transaction identifier is too long."
             )
         }
-
         let customer = String(
             body.customer || ""
         ).trim()
-
         let service = String(
             body.service || ""
         ).trim()
-
         let depositAmount = 0
         let depositId = null
         let itemId = null
-
         const customerContactInput = String(
             body.customer_contact || ""
         ).trim()
-
         if (
             customerContactInput.length > 30
         ) {
@@ -637,10 +574,8 @@ router.post("/", async (req, res) => {
                 "Customer contact is too long."
             )
         }
-
         let customerContact =
             customerContactInput || null
-
         // Staff cannot directly supply discount
         // percentages or approval decisions.
         const rewardId =
@@ -651,7 +586,6 @@ router.post("/", async (req, res) => {
                       body.loyalty_reward_id,
                       "Loyalty reward"
                   )
-
         if (
             body.discount_decision != null ||
             body.discount_percent != null ||
@@ -662,7 +596,6 @@ router.post("/", async (req, res) => {
                 "POS discounts must use an owner-issued loyalty reward."
             )
         }
-
         if (
             rewardId &&
             (
@@ -675,7 +608,6 @@ router.post("/", async (req, res) => {
                 "Loyalty rewards apply only to current paid service checkouts."
             )
         }
-
         // Offline-queued transactions cannot carry
         // a loyalty reward for automatic redemption.
         if (
@@ -686,30 +618,27 @@ router.post("/", async (req, res) => {
                 "Offline queued transactions cannot redeem loyalty rewards."
             )
         }
-
         // These variables will be populated only
         // after the reward is verified by the database.
         let discountPercent = 0
         let discountAmount = 0
         let discountReason = null
-
         let redeemedRewardId = null
         let rewardIssuedBy = null
         let rewardCustomerId = null
-
+        let loyaltyDiscount = 0
+        let loyaltyPercent = 0
+        let loyaltyReward = null
         connection =
             await promiseDb.getConnection()
-
         await connection.beginTransaction()
         inTransaction = true
-
         // ============================================
         // EMERGENCY MODE IDEMPOTENCY
         // ============================================
         //
         // Re-sending the same queued transaction
         // must not create another sale.
-
         if (offlineId) {
             const [duplicates] =
                 await connection.query(
@@ -720,11 +649,9 @@ router.post("/", async (req, res) => {
                     `,
                     [offlineId]
                 )
-
             if (duplicates.length) {
                 await connection.rollback()
                 inTransaction = false
-
                 return res.json({
                     message:
                         "Transaction already saved.",
@@ -734,11 +661,9 @@ router.post("/", async (req, res) => {
                 })
             }
         }
-
         // ============================================
         // BOOKED APPOINTMENT CHECKOUT
         // ============================================
-
         if (appointmentId) {
             const [appointments] =
                 await connection.query(
@@ -750,17 +675,14 @@ router.post("/", async (req, res) => {
                     `,
                     [appointmentId]
                 )
-
             if (!appointments.length) {
                 throw problem(
                     "Appointment not found.",
                     404
                 )
             }
-
             const appointment =
                 appointments[0]
-
             if (
                 !["Approved", "Completed"].includes(
                     appointment.status
@@ -771,7 +693,6 @@ router.post("/", async (req, res) => {
                     409
                 )
             }
-
             // Prevent duplicate checkout.
             const [existing] =
                 await connection.query(
@@ -783,29 +704,23 @@ router.post("/", async (req, res) => {
                     `,
                     [appointmentId]
                 )
-
             if (existing.length) {
                 throw problem(
                     "This appointment already has a transaction. Refresh the history.",
                     409
                 )
             }
-
             // The appointment record is authoritative.
             customer =
                 appointment.customer_name
-
             service =
                 appointment.service
-
             customerContact = String(
                 appointment.contact_number || ""
             ).trim() || null
-
             // ========================================
             // VERIFIED BOOKING DEPOSIT
             // ========================================
-
             const [deposits] =
                 await connection.query(
                     `
@@ -816,11 +731,9 @@ router.post("/", async (req, res) => {
                     `,
                     [appointmentId]
                 )
-
             if (deposits.length) {
                 const deposit =
                     deposits[0]
-
                 if (
                     deposit.payment_status ===
                         "Awaiting Verification" ||
@@ -832,7 +745,6 @@ router.post("/", async (req, res) => {
                         409
                     )
                 }
-
                 const [applications] =
                     await connection.query(
                         `
@@ -843,14 +755,12 @@ router.post("/", async (req, res) => {
                         `,
                         [deposit.deposit_id]
                     )
-
                 if (applications.length) {
                     throw problem(
                         "This deposit has already been applied.",
                         409
                     )
                 }
-
                 if (
                     deposit.payment_status ===
                     "Verified"
@@ -859,11 +769,38 @@ router.post("/", async (req, res) => {
                         deposit.verified_amount,
                         "Verified deposit"
                     )
-
                     depositId =
                         deposit.deposit_id
                 }
             }
+            // Locked booking price is authoritative even if the promo expires.
+            const [[serviceRow]] = await connection.query(
+                "SELECT price FROM services WHERE service_id = ?", [appointment.service_id]
+            )
+            if (!serviceRow) throw problem("Booked service no longer exists.", 409)
+            const saved = deposits[0] || null
+            originalSubtotal = cents(
+                saved?.original_service_total ?? saved?.service_total ?? serviceRow.price,
+                "Original booking price"
+            )
+            if (subtotal !== originalSubtotal) {
+                throw problem("The booking price changed. Refresh the appointment in POS.", 409)
+            }
+            if (saved?.promotion_id != null) {
+                const lockedDiscount = cents(saved.promotion_discount, "Locked promotion discount", true)
+                const lockedPercent = Number(saved.promotion_percent)
+                if (!Number.isFinite(lockedPercent) || lockedPercent <= 0 || lockedPercent > 100 ||
+                    lockedDiscount <= 0 || lockedDiscount >= originalSubtotal ||
+                    originalSubtotal - lockedDiscount !== cents(saved.service_total, "Booked promotional total")) {
+                    throw problem("Booking promotion snapshot is inconsistent. Contact the owner.", 409)
+                }
+                promo = { promotionId: Number(saved.promotion_id),
+                    discountCents: lockedDiscount, promotionPercent: lockedPercent }
+            } else if (saved?.original_service_total != null &&
+                       cents(saved.service_total, "Booked service total") !== originalSubtotal) {
+                throw problem("Booking price snapshot is inconsistent. Contact the owner.", 409)
+            }
+            serviceId = Number(appointment.service_id)
 
             // Reject stale frontend deposit values.
             const expectedDeposit = cents(
@@ -871,7 +808,6 @@ router.post("/", async (req, res) => {
                 "Displayed deposit",
                 true
             )
-
             if (
                 expectedDeposit !== depositAmount
             ) {
@@ -880,7 +816,6 @@ router.post("/", async (req, res) => {
                     409
                 )
             }
-
             if (
                 depositAmount > total
             ) {
@@ -889,19 +824,16 @@ router.post("/", async (req, res) => {
                     409
                 )
             }
-
         } else if (
             saleType === "Product"
         ) {
             // ========================================
             // PRODUCT SALE AND STOCK DEDUCTION
             // ========================================
-
             itemId = positiveId(
                 body.item_id,
                 "Product"
             )
-
             const [products] =
                 await connection.query(
                     `
@@ -915,17 +847,14 @@ router.post("/", async (req, res) => {
                     `,
                     [itemId]
                 )
-
             if (!products.length) {
                 throw problem(
                     "Product not found.",
                     404
                 )
             }
-
             const product =
                 products[0]
-
             if (
                 Number(product.stock) <
                 quantity
@@ -935,13 +864,10 @@ router.post("/", async (req, res) => {
                     409
                 )
             }
-
             service = product.name
-
             const newStock =
                 Number(product.stock) -
                 quantity
-
             const stockStatus =
                 newStock === 0
                     ? "Out of Stock"
@@ -949,7 +875,6 @@ router.post("/", async (req, res) => {
                       Number(product.alertLevel)
                         ? "Low Stock"
                         : "In Stock"
-
             await connection.query(
                 `
                 UPDATE inventory
@@ -964,6 +889,29 @@ router.post("/", async (req, res) => {
                     itemId,
                 ]
             )
+        }
+        // Current walk-in services: validate base price and discover active promo.
+        // Historical sales are deliberately excluded from promotions.
+        if (!appointmentId && saleType === "Service" && saleEpoch == null) {
+            if (body.offline_queued === true) {
+                throw problem("Current service pricing and promotions require online checkout.", 409)
+            }
+            serviceId = positiveId(body.service_id, "Service")
+            const [[selectedService]] = await connection.query(
+                "SELECT price FROM services WHERE service_id = ?", [serviceId]
+            )
+            if (!selectedService) throw problem("Service no longer exists.", 409)
+            originalSubtotal = cents(selectedService.price, "Service price")
+            if (subtotal !== originalSubtotal) {
+                throw problem("The service price changed. Refresh POS before checkout.", 409)
+            }
+            const quote = await getPromotionPrice(
+                connection, serviceId, decimal(originalSubtotal), philippineToday()
+            )
+            if (quote.promotionId && quote.discountCents > 0) {
+                promo = { promotionId: quote.promotionId,
+                    discountCents: quote.discountCents, promotionPercent: quote.promotionPercent }
+            }
         }
 
         // ============================================
@@ -984,14 +932,11 @@ router.post("/", async (req, res) => {
         // reward will be rejected during synchronization
         // rather than silently skipping that reward.
         // ============================================
-
         const loyaltyEligible =
             saleType === "Service" &&
             saleEpoch == null &&
             status === "Paid"
-
         let matchedCustomerId = null
-
         if (loyaltyEligible && customerContact) {
             if (
                 customerContact.length < 7 ||
@@ -1002,7 +947,6 @@ router.post("/", async (req, res) => {
                     409
                 )
             }
-
             const [matchingProfiles] =
                 await connection.query(
                     `
@@ -1015,21 +959,17 @@ router.post("/", async (req, res) => {
                     `,
                     [customerContact]
                 )
-
             if (matchingProfiles.length > 1) {
                 throw problem(
                     "Multiple registered customers use this contact number. Ask the owner to resolve the duplicate before checkout.",
                     409
                 )
             }
-
             if (matchingProfiles.length === 1) {
                 const matchedProfile =
                     matchingProfiles[0]
-
                 matchedCustomerId =
                     matchedProfile.customer_id
-
                 // A matching phone number alone is not
                 // enough to apply someone else's reward.
                 if (
@@ -1043,7 +983,6 @@ router.post("/", async (req, res) => {
                         409
                     )
                 }
-
                 // Lock the customer before reading rewards.
                 // Owner issuance/edit/revocation must use
                 // the same lock order to avoid races.
@@ -1057,14 +996,12 @@ router.post("/", async (req, res) => {
                         `,
                         [matchedCustomerId]
                     )
-
                 if (lockedCustomers.length !== 1) {
                     throw problem(
                         "Customer profile no longer exists.",
                         409
                     )
                 }
-
                 // Only enforce rewards while the
                 // loyalty program is enabled.
                 const [[policy]] =
@@ -1077,7 +1014,6 @@ router.post("/", async (req, res) => {
                         WHERE policy_id = 1
                         `
                     )
-
                 if (policy && Number(policy.enabled)) {
                     const [issuedRewards] =
                         await connection.query(
@@ -1094,17 +1030,14 @@ router.post("/", async (req, res) => {
                             `,
                             [matchedCustomerId]
                         )
-
                     if (issuedRewards.length > 1) {
                         throw problem(
                             "Multiple issued loyalty rewards require owner review.",
                             409
                         )
                     }
-
                     if (issuedRewards.length === 1) {
                         const reward = issuedRewards[0]
-
                         // The POS must send the exact
                         // reward shown in its preview.
                         if (!rewardId) {
@@ -1113,7 +1046,6 @@ router.post("/", async (req, res) => {
                                 409
                             )
                         }
-
                         if (
                             Number(reward.reward_id) !==
                             rewardId
@@ -1123,15 +1055,12 @@ router.post("/", async (req, res) => {
                                 409
                             )
                         }
-
                         const percent = Number(
                             reward.reward_percent
                         )
-
                         const maximumPercent = Number(
                             policy.max_override_percent
                         )
-
                         if (
                             !Number.isFinite(percent) ||
                             !Number.isFinite(maximumPercent) ||
@@ -1144,39 +1073,13 @@ router.post("/", async (req, res) => {
                                 409
                             )
                         }
-
-                        // Work in centavos and basis points.
-                        discountPercent = percent
-
-                        const basisPoints = Math.round(
-                            percent * 100
+                        // Compare rewards after resolving the promotion.
+                        loyaltyPercent = percent
+                        loyaltyDiscount = Math.round(
+                            originalSubtotal * Math.round(percent * 100) / 10000
                         )
-
-                        discountAmount = Math.round(
-                            subtotal * basisPoints / 10000
-                        )
-
-                        total =
-                            subtotal - discountAmount
-
-                        if (total < 1) {
-                            throw problem(
-                                "The discounted sale total must remain positive.",
-                                409
-                            )
-                        }
-
-                        redeemedRewardId =
-                            Number(reward.reward_id)
-
-                        rewardIssuedBy =
-                            reward.issued_by
-
-                        rewardCustomerId =
-                            matchedCustomerId
-
-                        discountReason =
-                            "Owner-issued one-time loyalty reward"
+                        loyaltyReward = { id: Number(reward.reward_id),
+                            issuedBy: reward.issued_by, customerId: matchedCustomerId }
                     } else if (rewardId) {
                         throw problem(
                             "The loyalty reward is no longer available. Refresh checkout.",
@@ -1196,15 +1099,55 @@ router.post("/", async (req, res) => {
                 )
             }
         }
-
         // Never accept a reward for an ineligible sale
         // or a missing registered customer contact.
-        if (rewardId && !redeemedRewardId) {
+        if (rewardId && !loyaltyReward) {
             throw problem(
                 "This loyalty reward cannot be applied to the transaction.",
                 409
             )
         }
+        // Prevent the cashier from collecting an amount based on a stale quote.
+        // Current walk-in service checkout must explicitly acknowledge the
+        // server's promotion identity, discount and final amount.
+        if (!appointmentId && saleType === "Service" && saleEpoch == null) {
+            const expectedPromoId = body.expected_promotion_id == null
+                ? null : positiveId(body.expected_promotion_id, "Expected promotion")
+            const expectedPromoDiscount = cents(
+                body.expected_promotion_discount, "Expected promotion discount", true
+            )
+            const actualPromoId = promo?.promotionId ?? null
+            const actualPromoDiscount = promo?.discountCents ?? 0
+            if (expectedPromoId !== actualPromoId ||
+                expectedPromoDiscount !== actualPromoDiscount) {
+                throw problem("The promotion changed. Refresh the POS price preview before collecting payment.", 409)
+            }
+        }
+        // One winning discount on ORIGINAL price. Promotion wins ties.
+        if (promo?.discountCents > 0 && promo.discountCents >= loyaltyDiscount) {
+            discountType = "promotion"
+            discountAmount = promo.discountCents
+            discountPercent = promo.promotionPercent
+            discountReason = "Service promotion"
+            winningPromotionId = promo.promotionId
+            // Do not redeem an issued reward when promotion wins.
+        } else if (loyaltyReward && loyaltyDiscount > 0) {
+            discountType = "loyalty"
+            discountAmount = loyaltyDiscount
+            discountPercent = loyaltyPercent
+            discountReason = "Owner-issued one-time loyalty reward"
+            redeemedRewardId = loyaltyReward.id
+            rewardIssuedBy = loyaltyReward.issuedBy
+            rewardCustomerId = loyaltyReward.customerId
+        }
+        total = originalSubtotal - discountAmount
+        if (!appointmentId && saleType === "Service" && saleEpoch == null) {
+            const expectedTotal = cents(body.expected_sale_total, "Expected sale total")
+            if (expectedTotal !== total) {
+                throw problem("The checkout total changed. Refresh the price and loyalty preview before collecting payment.", 409)
+            }
+        }
+        if (total < 1) throw problem("Discounted sale total must remain positive.", 409)
 
         // Offline-queued sales must not redeem rewards.
         // This is a synchronization rule, not a trusted
@@ -1219,7 +1162,6 @@ router.post("/", async (req, res) => {
                 409
             )
         }
-
         // Recheck after the discount has been calculated.
         // A verified deposit must never exceed the total.
         if (depositAmount > total) {
@@ -1228,7 +1170,6 @@ router.post("/", async (req, res) => {
                 409
             )
         }
-
         if (
             !customer ||
             customer.length > 100 ||
@@ -1239,7 +1180,6 @@ router.post("/", async (req, res) => {
                 "Enter a valid customer and item/service name."
             )
         }
-
         // ============================================
         // PART 5 — SAVE TRANSACTION
         // ============================================
@@ -1251,7 +1191,6 @@ router.post("/", async (req, res) => {
         // The booking deposit is recorded separately
         // so the receipt can show the balance collected.
         // ============================================
-
         const [result] = await connection.query(
             `
             INSERT INTO transactions (
@@ -1274,9 +1213,9 @@ router.post("/", async (req, res) => {
                 discount_amount,
                 discount_decision,
                 discount_reason,
-                discount_approved_by
+                discount_approved_by,
+                promotion_id
             )
-
 VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
     ${
@@ -1284,9 +1223,8 @@ VALUES (
             ? "CURRENT_TIMESTAMP"
             : "FROM_UNIXTIME(?)"
     },
-    ?, ?, ?, ?, ?, ?, ?, ?, ?
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 )
-
             `,
             [
                 appointmentId,
@@ -1299,39 +1237,21 @@ VALUES (
                 itemId,
                 quantity,
                 offlineId,
-
                 ...(saleEpoch == null
                     ? []
                     : [saleEpoch]),
-
                 saleEpoch == null ? 0 : 1,
                 customerContact,
-                decimal(subtotal),
-
-                redeemedRewardId
-                    ? "loyalty"
-                    : null,
-
-                redeemedRewardId
-                    ? discountPercent.toFixed(2)
-                    : null,
-
+                decimal(originalSubtotal),
+                discountType,
+                discountType ? discountPercent.toFixed(2) : null,
                 decimal(discountAmount),
-
-                redeemedRewardId
-                    ? "apply"
-                    : null,
-
-                redeemedRewardId
-                    ? discountReason
-                    : null,
-
-                redeemedRewardId
-                    ? rewardIssuedBy
-                    : null,
+                discountType ? "apply" : null,
+                discountType ? discountReason : null,
+                redeemedRewardId ? rewardIssuedBy : null,
+                winningPromotionId,
             ]
         )
-
         // ============================================
         // AUTOMATIC POS INVENTORY MOVEMENT RECORD
         // ============================================
@@ -1342,7 +1262,6 @@ VALUES (
         // This entry is saved in the same SQL transaction
         // as the POS sale.
         // ============================================
-
         if (saleType === "Product") {
             await connection.query(
                 `
@@ -1361,7 +1280,6 @@ VALUES (
                 ]
             )
         }
-
         // ============================================
         // VERIFIED BOOKING DEPOSIT APPLICATION
         // ============================================
@@ -1371,13 +1289,11 @@ VALUES (
         // column because transaction.amount stores the
         // final service price after the loyalty discount.
         // ============================================
-
         if (depositId) {
             const userId = positiveId(
                 req.user.user_id,
                 "Signed-in user"
             )
-
             await connection.query(
                 `
                 INSERT INTO booking_deposit_applications (
@@ -1396,7 +1312,6 @@ VALUES (
                 ]
             )
         }
-
         // ============================================
         // PART 6 — REDEEM OWNER-ISSUED LOYALTY REWARD
         // ============================================
@@ -1410,7 +1325,6 @@ VALUES (
         // If anything fails before COMMIT, the rollback
         // restores the reward to its previous state.
         // ============================================
-
         if (redeemedRewardId) {
             const [redemption] =
                 await connection.query(
@@ -1431,7 +1345,6 @@ VALUES (
                         rewardCustomerId,
                     ]
                 )
-
             if (redemption.affectedRows !== 1) {
                 throw problem(
                     "The loyalty reward is no longer available. Refresh checkout.",
@@ -1439,7 +1352,6 @@ VALUES (
                 )
             }
         }
-
         // ============================================
         // COMMIT THE COMPLETE CHECKOUT
         // ============================================
@@ -1451,64 +1363,47 @@ VALUES (
         // 3. Booking deposit application, if applicable
         // 4. One-time loyalty redemption, if applicable
         // ============================================
-
         await connection.commit()
         inTransaction = false
-
         // ============================================
         // SUCCESS RESPONSE
         // ============================================
-
         return res.status(201).json({
             message:
                 "Transaction saved successfully.",
-
             id: result.insertId,
-
-            subtotal: decimal(subtotal),
-
+            subtotal: decimal(originalSubtotal),
+            discount_type: discountType,
+            promotion_id: winningPromotionId,
             // Discount authorized by the owner-issued
             // reward, not by cashier input.
             discount_amount:
                 decimal(discountAmount),
-
             discount_decision:
-                redeemedRewardId
-                    ? "apply"
-                    : null,
-
+                discountType ? "apply" : null,
             discount_percent:
-                redeemedRewardId
-                    ? discountPercent
-                    : 0,
-
+                discountType ? discountPercent : 0,
             // Deposit is already paid and verified.
             deposit_applied:
                 decimal(depositAmount),
-
             // Amount still collected at checkout.
             balance_collected:
                 decimal(total - depositAmount),
-
             // Final transaction amount, including
             // any loyalty discount but before deposit.
             amount: decimal(total),
-
             // Loyalty reward details.
             reward_id:
                 redeemedRewardId,
-
             reward_status:
                 redeemedRewardId
                     ? "redeemed"
                     : null,
         })
-
     } catch (error) {
         // ============================================
         // ROLLBACK ON FAILURE
         // ============================================
-
         if (connection && inTransaction) {
             await connection
                 .rollback()
@@ -1518,10 +1413,8 @@ VALUES (
                         rollbackError
                     )
                 })
-
             inTransaction = false
         }
-
         // ============================================
         // EMERGENCY MODE DUPLICATE HANDLING
         // ============================================
@@ -1531,7 +1424,6 @@ VALUES (
         // the existing transaction rather than creating
         // a duplicate.
         // ============================================
-
         if (
             error.code === "ER_DUP_ENTRY" &&
             req.body?.offline_id &&
@@ -1551,16 +1443,13 @@ VALUES (
                             ),
                         ]
                     )
-
                 if (duplicates.length) {
                     return res.json({
                         message:
                             "Transaction already saved.",
-
                         id:
                             duplicates[0]
                                 .transaction_id,
-
                         duplicate: true,
                     })
                 }
@@ -1571,16 +1460,13 @@ VALUES (
                 )
             }
         }
-
         // ============================================
         // SAFE ERROR RESPONSE
         // ============================================
-
         console.error(
             "Transaction checkout error:",
             error
         )
-
         const statusCode =
             error.status ||
             (
@@ -1588,7 +1474,6 @@ VALUES (
                     ? 409
                     : 500
             )
-
         return res.status(statusCode).json({
             error:
                 error.code === "ER_DUP_ENTRY"
@@ -1597,11 +1482,9 @@ VALUES (
                         ? error.message
                         : "Unable to save the transaction. Please try again.",
         })
-
     } finally {
         // Always release the pooled connection.
         connection?.release()
     }
 })
-
 module.exports = router

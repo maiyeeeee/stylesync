@@ -893,6 +893,43 @@ function AdminTransactions() {
             ) === form.selectedId,
     )
 
+    const currentWalkin = !booked && !productSale && !form.historicalDate
+    const quoteServiceId = currentWalkin && selectedItem
+        ? Number(selectedItem.service_id) : null
+    const [walkinQuote, setWalkinQuote] = useState(null)
+    const [walkinQuoteError, setWalkinQuoteError] = useState("")
+    const [walkinQuoteLoading, setWalkinQuoteLoading] = useState(false)
+    const quoteKey = quoteServiceId ? String(quoteServiceId) : ""
+    const currentQuote = navigator.onLine && quoteKey &&
+        walkinQuote?.key === quoteKey ? walkinQuote.data : null
+    const quotePending = Boolean(navigator.onLine && quoteKey &&
+        (walkinQuoteLoading || !currentQuote || walkinQuoteError))
+
+    useEffect(() => {
+        const controller = new AbortController()
+        setWalkinQuote(null)
+        setWalkinQuoteError("")
+        if (!navigator.onLine || !quoteKey) {
+            setWalkinQuoteLoading(false)
+            return () => controller.abort()
+        }
+        setWalkinQuoteLoading(true)
+        request(`/transactions/price-preview?service_id=${encodeURIComponent(quoteKey)}`,
+            { signal: controller.signal })
+            .then((data) => {
+                if (!controller.signal.aborted) {
+                    setWalkinQuote({ key: quoteKey, data })
+                }
+            })
+            .catch((err) => {
+                if (!controller.signal.aborted) setWalkinQuoteError(err.message)
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setWalkinQuoteLoading(false)
+            })
+        return () => controller.abort()
+    }, [quoteKey, booked, productSale, form.historicalDate])
+
     const deposit =
         booked &&
         appointment?.payment_status ===
@@ -908,23 +945,30 @@ function AdminTransactions() {
         ? Number(activeReward.reward_percent)
         : 0
 
-    const discountCents =
-        activeReward &&
-        Number.isFinite(approvedPercent) &&
-        approvedPercent > 0 &&
-        approvedPercent <= 100
-            ? Math.round(
-                  subtotalCents *
-                      approvedPercent /
-                      100,
-              )
+    const loyaltyDiscountCents =
+        activeReward && Number.isFinite(approvedPercent) &&
+        approvedPercent > 0 && approvedPercent <= 100
+            ? Math.round(subtotalCents * approvedPercent / 100)
             : 0
+    const lockedPromoCents = booked && appointment?.locked_promotion_id
+        ? toCents(appointment.locked_promotion_discount)
+        : 0
+    const walkinPromoCents = currentWalkin && currentQuote
+        ? toCents(currentQuote.promotion_discount) : 0
+    const activePromoCents = booked ? lockedPromoCents : walkinPromoCents
+    const promoPercent = booked
+        ? appointment?.locked_promotion_percent : currentQuote?.promotion_percent
+    const promotionWins = activePromoCents > 0 &&
+        activePromoCents >= loyaltyDiscountCents
+    const discountCents = promotionWins ? activePromoCents : loyaltyDiscountCents
 
     const netCents =
         subtotalCents - discountCents
 
     const balanceCents =
         netCents - toCents(deposit)
+    // Current walk-in promotions come from the authenticated server quote.
+    // The POST revalidates promotion identity and the exact final total.
 
     const unresolved =
         booked &&
@@ -996,7 +1040,7 @@ function AdminTransactions() {
             customer:
                 row?.customer_name || "",
             amount:
-                row?.service_total ?? "",
+                row?.original_service_total ?? row?.service_total ?? "",
             quantity: "1",
             sale_type: "Service",
         }))
@@ -1030,6 +1074,11 @@ function AdminTransactions() {
         setError("")
         setMessage("")
 
+        if (!navigator.onLine && !booked && !productSale && !form.historicalDate) {
+            setError("Current walk-in service promotions require an online checkout. Please reconnect.")
+            return
+        }
+
         if (!navigator.onLine && booked) {
             setError(
                 "Existing appointment checkout requires an internet connection. Emergency Mode supports walk-in service and product transactions."
@@ -1047,6 +1096,14 @@ function AdminTransactions() {
             setError(
                 "Select the booking or item and enter a valid sale subtotal."
             )
+            return
+        }
+
+        if (currentWalkin && navigator.onLine && (
+            quotePending || walkinQuoteError || !currentQuote ||
+            toCents(currentQuote.original_service_total) !== subtotalCents
+        )) {
+            setError("The current service price is not verified. Refresh the price preview before checkout.")
             return
         }
 
@@ -1172,9 +1229,11 @@ function AdminTransactions() {
 
             // This is the ORIGINAL subtotal.
             // The server calculates the actual discount.
-            amount: Number(
-                form.amount
-            ).toFixed(2),
+            amount: Number(form.amount).toFixed(2),
+            service_id: !booked && !productSale ? Number(selectedItem.service_id) : null,
+            expected_promotion_id: currentWalkin ? currentQuote?.promotion_id ?? null : null,
+            expected_promotion_discount: currentWalkin ? currentQuote?.promotion_discount ?? "0.00" : null,
+            expected_sale_total: currentWalkin ? (netCents / 100).toFixed(2) : null,
 
             payment:
                 form.payment,
@@ -1192,9 +1251,7 @@ function AdminTransactions() {
                     : form.customerContact.trim(),
 
             loyalty_reward_id:
-                redeemingReward
-                    ? Number(activeReward.reward_id)
-                    : null,
+                redeemingReward ? Number(activeReward.reward_id) : null,
 
             expected_deposit_amount:
                 deposit.toFixed(2),
@@ -1342,7 +1399,8 @@ function AdminTransactions() {
             if (
                 !navigator.onLine &&
                 !redeemingReward &&
-                !booked
+                !booked &&
+                !currentWalkin
             ) {
                 const offlineId =
                     retry.current?.id
@@ -1532,7 +1590,7 @@ function AdminTransactions() {
 
             line(
                 "p",
-                `Loyalty discount: −${money(
+                `${receipt.discount_type === "promotion" ? "Promotion discount" : "Loyalty discount"}: −${money(
                     receipt.discount_amount
                 )}`
             )
@@ -2129,14 +2187,15 @@ function AdminTransactions() {
                                                     <p className="text-purple-900">
                                                         Savings:{" "}
                                                         <strong>
-                                                            {money(discountCents / 100)}
+                                                            {money(loyaltyDiscountCents / 100)}
                                                         </strong>
                                                     </p>
 
                                                     <p className="text-xs text-gray-600">
                                                         Reward #{activeReward.reward_id}
-                                                        {" "}will be redeemed only
-                                                        after successful checkout.
+                                                        {" "}{promotionWins
+                                                            ? "is preserved because the promotion wins."
+                                                            : "will be redeemed only after successful checkout."}
                                                     </p>
                                                 </div>
                                             )}
@@ -2155,7 +2214,7 @@ function AdminTransactions() {
                                 )}
                             </div>
 
-                            <Field label="Sale subtotal before loyalty discount and deposit (₱)">
+                            <Field label="Original sale price before promotion, loyalty and deposit (₱)">
                                 <input
                                     required
                                     type="number"
@@ -2172,6 +2231,20 @@ function AdminTransactions() {
                                 />
                             </Field>
 
+                            {currentWalkin && navigator.onLine && (
+                                <div className="rounded-xl border border-purple-100 bg-purple-50 p-3 text-sm">
+                                    {quotePending && !walkinQuoteError
+                                        ? "Checking today's walk-in service promotion…"
+                                        : walkinQuoteError
+                                          ? `Price preview failed: ${walkinQuoteError}. Re-select the service or refresh the page.`
+                                          : currentQuote && toCents(currentQuote.original_service_total) !== subtotalCents
+                                            ? "The service price differs from the server. Re-select the service or refresh before checkout."
+                                            : currentQuote?.promotion_id
+                                              ? `Active promotion: ${currentQuote.promotion_title || "Service promotion"} (${currentQuote.promotion_percent}% off).`
+                                              : "No active walk-in promotion for this service today."}
+                                </div>
+                            )}
+
                             <div className="space-y-3 rounded-xl bg-gray-50 p-4 text-sm">
                                 <div className="flex justify-between gap-3">
                                     <span>Subtotal</span>
@@ -2182,10 +2255,10 @@ function AdminTransactions() {
 
                                 <div className="flex justify-between gap-3 text-purple-700">
                                     <span>
-                                        Loyalty discount{" "}
-                                        {approvedPercent > 0
-                                            ? `(${approvedPercent}%)`
-                                            : ""}
+                                        {promotionWins ? (booked ? "Locked promotion discount" : "Walk-in promotion discount") : approvedPercent > 0 ? "Loyalty discount" : "Discount"}
+                                        {promotionWins
+                                            ? ` (${promoPercent}%)`
+                                            : approvedPercent > 0 ? ` (${approvedPercent}%)` : ""}
                                     </span>
                                     <strong>
                                         − {money(discountCents / 100)}
@@ -2195,7 +2268,7 @@ function AdminTransactions() {
                                 <div className="flex justify-between gap-3 font-semibold">
                                     <span>Final sale total</span>
                                     <strong>
-                                        {money(netCents / 100)}
+                                        {currentWalkin && quotePending ? "Checking price…" : money(netCents / 100)}
                                     </strong>
                                 </div>
 
@@ -2211,7 +2284,7 @@ function AdminTransactions() {
                                         Balance to collect
                                     </span>
                                     <strong>
-                                        {money(balanceCents / 100)}
+                                        {currentWalkin && quotePending ? "Checking price…" : money(balanceCents / 100)}
                                     </strong>
                                 </div>
                             </div>
@@ -2273,6 +2346,8 @@ function AdminTransactions() {
                                     disabled ||
                                     Boolean(unresolved) ||
                                     balanceCents < 0 ||
+                                    Boolean(currentWalkin && (!navigator.onLine || quotePending || walkinQuoteError || !currentQuote ||
+                                        toCents(currentQuote.original_service_total) !== subtotalCents)) ||
                                     Boolean(
                                         navigator.onLine &&
                                         rewardLookupKey &&
@@ -2345,7 +2420,7 @@ function AdminTransactions() {
                                               ),
                                           ],
                                           [
-                                              "Loyalty discount",
+                                              receipt.discount_type === "promotion" ? "Promotion discount" : "Loyalty discount",
                                               `−${money(
                                                   receipt.discount_amount
                                               )}`,

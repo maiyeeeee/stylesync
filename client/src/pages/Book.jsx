@@ -154,6 +154,9 @@ export default function Book() {
     const location = useLocation()
 
     const [services, setServices] = useState([])
+    const [priceQuote, setPriceQuote] = useState(null)
+    const [priceChecking, setPriceChecking] = useState(false)
+    const [priceError, setPriceError] = useState("")
 
     const [form, setForm] = useState({
         customer_name: "",
@@ -186,6 +189,56 @@ export default function Book() {
         (service) =>
             String(service.service_id) === String(form.service_id),
     )
+    // A quote is usable only for the currently selected service and date.
+    const priceKey = `${form.service_id}|${form.appointment_date}`
+    const validPriceQuote =
+        priceQuote?.key === priceKey &&
+        Number.isFinite(Number(priceQuote.service_total)) &&
+        Number(priceQuote.service_total) > 0 &&
+        Number.isFinite(Number(priceQuote.required_amount)) &&
+        Number(priceQuote.required_amount) > 0
+
+    useEffect(() => {
+        if (!form.service_id || !form.appointment_date || entry) {
+            setPriceQuote(null)
+            setPriceChecking(false)
+            setPriceError("")
+            return
+        }
+
+        const controller = new AbortController()
+        const key = `${form.service_id}|${form.appointment_date}`
+
+        setPriceQuote(null)
+        setPriceChecking(true)
+        setPriceError("")
+
+        const query = new URLSearchParams({
+            service_id: form.service_id,
+            appointment_date: form.appointment_date,
+        })
+
+        call(`/public/booking-price?${query}`, {
+            signal: controller.signal,
+        })
+            .then((data) => {
+                if (!controller.signal.aborted) {
+                    setPriceQuote({ ...data, key })
+                }
+            })
+            .catch((err) => {
+                if (!controller.signal.aborted) {
+                    setPriceError(err.message)
+                }
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) {
+                    setPriceChecking(false)
+                }
+            })
+
+        return () => controller.abort()
+    }, [form.service_id, form.appointment_date, entry])
 
     const availabilityKey =
         `${form.service_id}|${form.appointment_date}|${form.appointment_time}`
@@ -442,6 +495,11 @@ export default function Book() {
     function reviewBooking(event) {
         event.preventDefault()
 
+        if (priceChecking || !validPriceQuote || priceError || !total) {
+            setError("Please wait for the updated booking price before continuing.")
+            return
+        }
+
         if (!validAvailability) {
             setError(
                 "Choose an available slot first.",
@@ -471,6 +529,15 @@ export default function Book() {
         event?.preventDefault()
 
         if (lock.current) {
+            return
+        }
+
+        // Do not interfere with recovery of a previously saved reservation.
+        if (
+            !entry &&
+            (priceChecking || !validPriceQuote || priceError || !total)
+        ) {
+            setError("Booking price is not ready. Please review the updated price.")
             return
         }
 
@@ -697,18 +764,21 @@ export default function Book() {
                     : "",
         })
     }
+    const total = validPriceQuote
+        ? Math.round(Number(priceQuote.service_total) * 100)
+        : 0
 
-    const total = Math.round(
-        Number(
-            selected?.price ||
-                0,
-        ) * 100,
-    )
+    const down = validPriceQuote
+        ? Math.round(Number(priceQuote.required_amount) * 100)
+        : 0
 
-    const down =
-        Math.round(
-            total / 5,
-        )
+    const originalTotal = validPriceQuote
+        ? Math.round(Number(priceQuote.original_service_total) * 100)
+        : 0
+
+    const promoDiscount = validPriceQuote
+        ? Math.round(Number(priceQuote.promotion_discount) * 100)
+        : 0
 
     const dateParts =
         new Intl.DateTimeFormat(
@@ -1442,8 +1512,7 @@ export default function Book() {
 
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Service
-                                                    price
+                                                    Final service price
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
@@ -1453,6 +1522,25 @@ export default function Book() {
                                                     )}
                                                 </p>
                                             </div>
+
+                                            {validPriceQuote && promoDiscount > 0 && (
+                                                <>
+                                                    <div>
+                                                        <p className="text-gray-500">Original service price</p>
+                                                        <p className="mt-1 font-semibold text-gray-900 line-through">
+                                                            {peso(originalTotal / 100)}
+                                                        </p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-gray-500">
+                                                            {priceQuote.promotion_title || "Promotion"} ({priceQuote.promotion_percent}% OFF)
+                                                        </p>
+                                                        <p className="mt-1 font-semibold text-emerald-700">
+                                                            −{peso(promoDiscount / 100)}
+                                                        </p>
+                                                    </div>
+                                                </>
+                                            )}
 
                                             <div>
                                                 <p className="text-gray-500">
@@ -1601,7 +1689,11 @@ export default function Book() {
                                         <button
                                             type="button"
                                             disabled={
-                                                busy
+                                                busy ||
+                                                priceChecking ||
+                                                !validPriceQuote ||
+                                                Boolean(priceError) ||
+                                                !total
                                             }
                                             onClick={() =>
                                                 reserve()
@@ -1959,40 +2051,45 @@ export default function Book() {
                                         )}
 
                                         {selected && (
-                                            <p className="rounded-xl bg-purple-50 p-4 text-purple-800">
-                                                Service
-                                                total:{" "}
-                                                <strong>
-                                                    {peso(
-                                                        total /
-                                                            100,
-                                                    )}
-                                                </strong>
-
-                                                <br />
-
-                                                Required
-                                                down
-                                                payment
-                                                (20%):{" "}
-                                                <strong>
-                                                    {peso(
-                                                        down /
-                                                            100,
-                                                    )}
-                                                </strong>
-
-                                                <br />
-
-                                                Estimated
-                                                salon
-                                                balance:{" "}
-                                                {peso(
-                                                    (total -
-                                                        down) /
-                                                        100,
+                                            <div className="rounded-xl bg-purple-50 p-4 text-sm text-purple-900" aria-live="polite">
+                                                {!form.appointment_date ? (
+                                                    <p>Select an appointment date to see the final price and deposit.</p>
+                                                ) : priceChecking || (!validPriceQuote && !priceError) ? (
+                                                    <p>Checking service price and promotions…</p>
+                                                ) : priceError ? (
+                                                    <p role="alert" className="text-red-700">{priceError}</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {promoDiscount > 0 && (
+                                                            <>
+                                                                <div className="flex justify-between gap-3">
+                                                                    <span>Original price</span>
+                                                                    <span className="line-through">{peso(originalTotal / 100)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-3 text-emerald-700">
+                                                                    <span>{priceQuote.promotion_title || "Promotion"} ({priceQuote.promotion_percent}% OFF)</span>
+                                                                    <strong>−{peso(promoDiscount / 100)}</strong>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                        <div className="flex justify-between gap-3">
+                                                            <span>Final service total</span>
+                                                            <strong>{peso(total / 100)}</strong>
+                                                        </div>
+                                                        <div className="flex justify-between gap-3">
+                                                            <span>Required deposit (20%)</span>
+                                                            <strong>{peso(down / 100)}</strong>
+                                                        </div>
+                                                        <div className="flex justify-between gap-3">
+                                                            <span>Estimated salon balance</span>
+                                                            <strong>{peso((total - down) / 100)}</strong>
+                                                        </div>
+                                                        <p className="pt-1 text-xs text-purple-700">
+                                                            Price is finalized when your reservation is created.
+                                                        </p>
+                                                    </div>
                                                 )}
-                                            </p>
+                                            </div>
                                         )}
 
                                         <Field label="Additional notes">
@@ -2098,6 +2195,9 @@ export default function Book() {
                                             disabled={
                                                 busy ||
                                                 checking ||
+                                                priceChecking ||
+                                                !validPriceQuote ||
+                                                Boolean(priceError) ||
                                                 !validAvailability ||
                                                 !total ||
                                                 !form.privacy_consent

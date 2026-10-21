@@ -1,5 +1,7 @@
 const crypto = require("crypto")
 const db = require("../db")
+const { getPromotionPrice } = require("../utils/promotionPricing");
+
 
 const {
     resolveService,
@@ -752,17 +754,15 @@ module.exports =
                                         ],
                                     )
 
-                                const total =
-                                    amount(
-                                        prices[0]
-                                            ?.price,
-                                    )
+                                   const pricing = await getPromotionPrice(
+                                    conn,
+                                    selected.service_id,
+                                    prices[0]?.price,
+                                    b.appointment_date,
+                                )
 
-                                const down =
-                                    Math.round(
-                                        total /
-                                            5,
-                                    )
+                                const total = pricing.totalCents
+                                const down = Math.round(total / 5)
 
                                 if (
                                     down <
@@ -888,54 +888,46 @@ module.exports =
                                         ],
                                     )
 
-                                await conn.query(
-                                    `INSERT INTO booking_deposits
-                                    (
-                                        appointment_id,
-                                        access_token_hash,
-                                        service_total,
-                                        required_amount,
-                                        receiving_name,
-                                        receiving_number,
-                                        qr_snapshot,
-                                        expires_at
-                                    )
 
-                                    VALUES
-                                    (
-                                        ?, ?, ?, ?, ?, ?, ?,
+await conn.query(
+    `INSERT INTO booking_deposits
+    (
+        appointment_id,
+        access_token_hash,
+        service_total,
+        required_amount,
+        original_service_total,
+        promotion_id,
+        promotion_percent,
+        promotion_discount,
+        receiving_name,
+        receiving_number,
+        qr_snapshot,
+        expires_at
+    )
+    VALUES
+    (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        DATE_ADD(
+            UTC_TIMESTAMP(),
+            INTERVAL 15 MINUTE
+        )
+    )`,
+    [
+        result.insertId,
+        hash,
+        (total / 100).toFixed(2),
+        (down / 100).toFixed(2),
+        (pricing.originalCents / 100).toFixed(2),
+        pricing.promotionId,
+        pricing.promotionPercent,
+        (pricing.discountCents / 100).toFixed(2),
+        setting.receiving_name,
+        setting.receiving_number,
+        setting.qr_data,
+    ],
+)
 
-                                        DATE_ADD(
-                                            UTC_TIMESTAMP(),
-                                            INTERVAL 15 MINUTE
-                                        )
-                                    )`,
-                                    [
-                                        result.insertId,
-
-                                        hash,
-
-                                        (
-                                            total /
-                                            100
-                                        ).toFixed(
-                                            2,
-                                        ),
-
-                                        (
-                                            down /
-                                            100
-                                        ).toFixed(
-                                            2,
-                                        ),
-
-                                        setting.receiving_name,
-
-                                        setting.receiving_number,
-
-                                        setting.qr_data,
-                                    ],
-                                )
 
                                 /*
                                  * Customer record
