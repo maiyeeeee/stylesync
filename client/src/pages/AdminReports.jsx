@@ -609,6 +609,21 @@ function PrintableSalonReport({ report, generatedAt }) {
   )
 }
 
+function ReportCategoryIcon({ name }) {
+  const paths = {
+    sales: <><path d="M4 19V11h4v8" /><path d="M10 19V7h4v12" /><path d="M16 19V4h4v15" /><path d="M3 21h18" /></>,
+    appointments: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18" /><path d="M8 14h3v3H8z" /></>,
+    services: <><circle cx="6" cy="6" r="2" /><circle cx="6" cy="18" r="2" /><path d="M8 8l11 11M8 16L19 5M14 10l5-5" /></>,
+    discounts: <><path d="M12 2l9 9v6l-6 5-12-12V4a2 2 0 0 1 2-2z" /><circle cx="7.5" cy="7.5" r="1" /></>,
+    inventory: <><path d="M12 2 21 7v10l-9 5-9-5V7z" /><path d="m3 7 9 5 9-5M12 12v10" /></>,
+  }
+  return (
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[name]}
+    </svg>
+  )
+}
+
 function AdminReports() {
   const today = useMemo(() => todayInManila(), [])
   const currentYear = Number(today.slice(0, 4))
@@ -1221,6 +1236,41 @@ function AdminReports() {
           </div>
         )}
 
+        {/* CATEGORY NAVIGATION */}
+        <nav aria-label="Report categories" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            { id: "sales", title: "Sales", description: "Revenue & transactions", icon: "sales" },
+            { id: "appointments", title: "Appointments", description: "Booking activity", icon: "appointments" },
+            { id: "services", title: "Services", description: "Service performance", icon: "services" },
+            { id: "discounts", title: "Promotions & Discounts", description: "Promo & loyalty analytics", icon: "discounts" },
+            { id: "inventory", title: "Inventory", description: "Stock & inventory", icon: "inventory" },
+          ].map((category) => {
+            const selected = activeCategory === category.id
+            return (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setActiveCategory(category.id)}
+                aria-pressed={selected}
+                className={`group relative flex min-h-[88px] items-center gap-3 rounded-2xl border px-3 py-4 text-left shadow-sm transform-gpu transition-all duration-200 ease-out hover:z-10 hover:-translate-y-1 hover:scale-[1.03] hover:border-purple-300 hover:bg-purple-50 hover:shadow-lg hover:shadow-purple-100/70 active:scale-[1.01] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 motion-reduce:transform-none motion-reduce:transition-none ${
+                  selected
+                    ? "border-purple-300 bg-gradient-to-br from-purple-100 via-purple-50 to-fuchsia-100 shadow-md shadow-purple-100"
+                    : "border-gray-100 bg-white"
+                }`}
+              >
+                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors duration-200 ${selected ? "bg-purple-200 text-purple-800" : "bg-purple-50 text-purple-800 group-hover:bg-purple-100"}`} aria-hidden="true">
+                  <ReportCategoryIcon name={category.icon} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-bold leading-snug text-purple-950">{category.title}</span>
+                  <span className="mt-1 block text-[11px] leading-snug text-gray-500">{category.description}</span>
+                </span>
+                {selected && <span aria-hidden="true" className="absolute inset-x-2 bottom-0 h-[3px] rounded-t-full bg-purple-700" />}
+              </button>
+            )
+          })}
+        </nav>
+
         {/* REPORT FILTERS */}
 
         <section className={`${panel} p-4 md:p-5`}>
@@ -1396,38 +1446,6 @@ function AdminReports() {
         </section>
 
 
-        {/* CATEGORY NAVIGATION */}
-        <nav aria-label="Report categories" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {[
-            { id: "sales", title: "Sales", description: "Revenue and transactions", icon: "₱" },
-            { id: "appointments", title: "Appointments", description: "Booking activity and status", icon: "◷" },
-            { id: "services", title: "Services", description: "Most requested treatments", icon: "✦" },
-            { id: "discounts", title: "Promotions & Discounts", description: "Promo and loyalty insights", icon: "%" },
-            { id: "inventory", title: "Inventory", description: "Stock health and movement", icon: "▦" },
-          ].map((category) => {
-            const selected = activeCategory === category.id
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => setActiveCategory(category.id)}
-                aria-pressed={selected}
-                className={`rounded-2xl border p-4 text-left shadow-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
-                  selected
-                    ? "border-purple-600 bg-purple-700 text-white shadow-purple-100"
-                    : "border-purple-100 bg-white text-purple-950 hover:border-purple-300 hover:bg-purple-50"
-                }`}
-              >
-                <span className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl text-lg font-bold ${selected ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"}`} aria-hidden="true">
-                  {category.icon}
-                </span>
-                <span className="block text-sm font-bold leading-snug">{category.title}</span>
-                <span className={`mt-1 block text-xs leading-relaxed ${selected ? "text-purple-100" : "text-gray-500"}`}>{category.description}</span>
-              </button>
-            )
-          })}
-        </nav>
-
         {activeCategory === "sales" && (
           <>
         {/* OVERVIEW CARDS */}
@@ -1489,7 +1507,7 @@ function AdminReports() {
         )}
 
         {/* SALES AND APPOINTMENT CHARTS */}
-        <section className="grid gap-6 xl:grid-cols-2">
+        <section className="grid gap-6">
 
           {/* SALES CHART */}
           {activeCategory === "sales" && (
