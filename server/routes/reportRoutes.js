@@ -1,3 +1,4 @@
+
 const express = require("express")
 const router = express.Router()
 const db = require("../db")
@@ -188,6 +189,7 @@ router.get("/", async (req, res) => {
           THEN amount ELSE 0 END), 0) AS monthSales
 
       FROM transactions
+
       WHERE status = 'Paid'
     `)
 
@@ -206,6 +208,67 @@ router.get("/", async (req, res) => {
          AND transaction_date < ?`,
       [startDate, endDate]
     )
+
+    // ====================================
+    // PROMOTION & LOYALTY DISCOUNT ANALYTICS
+    // ====================================
+    // Read-only: only completed Paid POS transactions are counted.
+    // Transaction amount already reflects the applied discount;
+    // verified booking deposits are NOT subtracted again.
+    // Promotions and loyalty rewards are mutually exclusive per sale.
+
+    const [discountRows] = await connection.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN discount_type = 'promotion' THEN 1 ELSE 0 END), 0) AS promotionTransactions,
+         COALESCE(SUM(CASE WHEN discount_type = 'loyalty' THEN 1 ELSE 0 END), 0) AS loyaltyTransactions,
+         COALESCE(SUM(CASE WHEN discount_type = 'promotion' THEN COALESCE(discount_amount, 0) ELSE 0 END), 0) AS promotionSavings,
+         COALESCE(SUM(CASE WHEN discount_type = 'loyalty' THEN COALESCE(discount_amount, 0) ELSE 0 END), 0) AS loyaltySavings,
+         COALESCE(SUM(CASE WHEN discount_type IN ('promotion', 'loyalty') THEN COALESCE(subtotal, amount + COALESCE(discount_amount, 0)) ELSE 0 END), 0) AS discountedGrossSales,
+         COALESCE(SUM(CASE WHEN discount_type IN ('promotion', 'loyalty') THEN amount ELSE 0 END), 0) AS discountedNetSales
+       FROM transactions
+       WHERE status = 'Paid'
+         AND transaction_date >= ?
+         AND transaction_date < ?`,
+      [startDate, endDate]
+    )
+
+    const [promotionBreakdownRows] = await connection.query(
+      `SELECT
+         promotion_id AS promotionId,
+         COUNT(*) AS transactions,
+         COALESCE(SUM(discount_amount), 0) AS savings,
+         COALESCE(SUM(amount), 0) AS paidSales
+       FROM transactions
+       WHERE status = 'Paid'
+         AND discount_type = 'promotion'
+         AND transaction_date >= ?
+         AND transaction_date < ?
+       GROUP BY promotion_id
+       ORDER BY savings DESC, transactions DESC`,
+      [startDate, endDate]
+    )
+
+    const discountTotals = discountRows[0] || {}
+    const promotionSavings = Number(discountTotals.promotionSavings || 0)
+    const loyaltySavings = Number(discountTotals.loyaltySavings || 0)
+    const promotionTransactions = Number(discountTotals.promotionTransactions || 0)
+    const loyaltyTransactions = Number(discountTotals.loyaltyTransactions || 0)
+    const discountAnalytics = {
+      promotionTransactions,
+      loyaltyTransactions,
+      discountedTransactions: promotionTransactions + loyaltyTransactions,
+      promotionSavings,
+      loyaltySavings,
+      totalSavings: Math.round((promotionSavings + loyaltySavings) * 100) / 100,
+      discountedGrossSales: Number(discountTotals.discountedGrossSales || 0),
+      discountedNetSales: Number(discountTotals.discountedNetSales || 0),
+      promotions: promotionBreakdownRows.map((row) => ({
+        promotionId: row.promotionId == null ? null : Number(row.promotionId),
+        transactions: Number(row.transactions || 0),
+        savings: Number(row.savings || 0),
+        paidSales: Number(row.paidSales || 0),
+      })),
+    }
 
     // ====================================
     // APPOINTMENTS FOR SELECTED PERIOD
@@ -317,6 +380,7 @@ router.get("/", async (req, res) => {
          AND status <> 'Awaiting Payment'
        GROUP BY status
        ORDER BY count DESC, status`,
+
       [startDate, endDate]
     )
 
@@ -502,6 +566,7 @@ router.get("/", async (req, res) => {
       ])
     )
 
+
     const inventoryMovementTrend = summary.map((row) => {
       const movement =
         movementByDate.get(String(row.date)) || {}
@@ -576,6 +641,9 @@ router.get("/", async (req, res) => {
       dailySales: todaySales,
       weeklySales: weekSales,
       monthlySales: monthSales,
+
+      // Applied discounts on paid sales in the selected period.
+      discountAnalytics,
 
       // ====================================
       // INVENTORY ANALYTICS RESPONSE

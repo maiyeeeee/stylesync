@@ -35,6 +35,17 @@ const emptyReport = {
   salesTrend: [],
   appointmentStatus: [],
   mostRequestedServices: [],
+  discountAnalytics: {
+    promotionTransactions: 0,
+    loyaltyTransactions: 0,
+    discountedTransactions: 0,
+    promotionSavings: 0,
+    loyaltySavings: 0,
+    totalSavings: 0,
+    discountedGrossSales: 0,
+    discountedNetSales: 0,
+    promotions: [],
+  },
   inventoryAnalytics: {
     snapshot: {
       products: 0,
@@ -615,6 +626,7 @@ function AdminReports() {
   const [error, setError] = useState("")
   const [generatedAt, setGeneratedAt] = useState("")
   const [attentionSearch, setAttentionSearch] = useState("")
+  const [activeCategory, setActiveCategory] = useState("sales")
 
   const selectedValue = filters[period]
 
@@ -731,6 +743,13 @@ function AdminReports() {
                 }))
               : [],
 
+            discountAnalytics: {
+              ...emptyReport.discountAnalytics,
+              ...(data.discountAnalytics || {}),
+              promotions: Array.isArray(data.discountAnalytics?.promotions)
+                ? data.discountAnalytics.promotions
+                : [],
+            },
             inventoryAnalytics: {
               ...emptyReport.inventoryAnalytics,
               ...(data.inventoryAnalytics || {}),
@@ -1376,6 +1395,41 @@ function AdminReports() {
           </p>
         </section>
 
+
+        {/* CATEGORY NAVIGATION */}
+        <nav aria-label="Report categories" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            { id: "sales", title: "Sales", description: "Revenue and transactions", icon: "₱" },
+            { id: "appointments", title: "Appointments", description: "Booking activity and status", icon: "◷" },
+            { id: "services", title: "Services", description: "Most requested treatments", icon: "✦" },
+            { id: "discounts", title: "Promotions & Discounts", description: "Promo and loyalty insights", icon: "%" },
+            { id: "inventory", title: "Inventory", description: "Stock health and movement", icon: "▦" },
+          ].map((category) => {
+            const selected = activeCategory === category.id
+            return (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setActiveCategory(category.id)}
+                aria-pressed={selected}
+                className={`rounded-2xl border p-4 text-left shadow-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
+                  selected
+                    ? "border-purple-600 bg-purple-700 text-white shadow-purple-100"
+                    : "border-purple-100 bg-white text-purple-950 hover:border-purple-300 hover:bg-purple-50"
+                }`}
+              >
+                <span className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl text-lg font-bold ${selected ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"}`} aria-hidden="true">
+                  {category.icon}
+                </span>
+                <span className="block text-sm font-bold leading-snug">{category.title}</span>
+                <span className={`mt-1 block text-xs leading-relaxed ${selected ? "text-purple-100" : "text-gray-500"}`}>{category.description}</span>
+              </button>
+            )
+          })}
+        </nav>
+
+        {activeCategory === "sales" && (
+          <>
         {/* OVERVIEW CARDS */}
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {cards.map((card) => (
@@ -1396,6 +1450,11 @@ function AdminReports() {
           ))}
         </section>
 
+          </>
+        )}
+
+        {activeCategory === "sales" && (
+          <>
         {/* SELECTED PERIOD SUMMARY */}
         <section className={`${panel} grid gap-4 p-5 sm:grid-cols-3`}>
           <div>
@@ -1426,10 +1485,14 @@ function AdminReports() {
           </div>
         </section>
 
+          </>
+        )}
+
         {/* SALES AND APPOINTMENT CHARTS */}
         <section className="grid gap-6 xl:grid-cols-2">
 
           {/* SALES CHART */}
+          {activeCategory === "sales" && (
           <article className={`${panel} p-5 md:p-6`}>
             <h2 className="text-lg font-bold text-purple-950">
               Paid Sales — {report.periodLabel}
@@ -1519,7 +1582,9 @@ function AdminReports() {
 </div>
           </article>
 
+          )}
           {/* APPOINTMENT STATUS CHART */}
+          {activeCategory === "appointments" && (
           <article className={`${panel} p-5 md:p-6`}>
             <h2 className="text-lg font-bold text-purple-950">
               Appointment Status — {report.periodLabel}
@@ -1603,8 +1668,11 @@ function AdminReports() {
             </table>
                 </div>
           </article>
+          )}
         </section>
 
+        {activeCategory === "services" && (
+          <>
         {/* MOST REQUESTED SERVICES CHART */}
         <section className={`${panel} p-5 md:p-6`}>
           <h2 className="text-lg font-bold text-purple-950">
@@ -1695,6 +1763,11 @@ function AdminReports() {
             </div>
         </section>
 
+          </>
+        )}
+
+        {activeCategory === "appointments" && (
+          <>
         {/* ACTIVITY BY DATE — CHART AND TABLE */}
 <section className={`${panel} overflow-hidden`}>
 
@@ -1852,6 +1925,11 @@ function AdminReports() {
           </div>
         </section>
 
+          </>
+        )}
+
+        {activeCategory === "inventory" && (
+          <>
         {/* INVENTORY ANALYTICS */}
         <section
           className="space-y-5"
@@ -2388,6 +2466,111 @@ function AdminReports() {
             </div>
           </article>
         </section>
+
+          </>
+        )}
+
+        {activeCategory === "discounts" && (
+          <section className="space-y-5" aria-labelledby="discount-reports-title">
+            <div className={`${panel} p-5 md:p-6`}>
+              <p className="text-xs font-semibold uppercase tracking-widest text-purple-500">Discount Intelligence</p>
+              <h2 id="discount-reports-title" className="mt-2 text-2xl font-bold text-purple-950">Promotions & Loyalty Analytics</h2>
+              <p className="mt-2 text-sm text-gray-500">
+                Applied discounts on paid transactions during {report.periodLabel}. Promotions and loyalty do not stack.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Discounted Transactions", value: report.discountAnalytics.discountedTransactions, note: "Paid sales with an applied discount" },
+                { label: "Promotion Uses", value: report.discountAnalytics.promotionTransactions, note: "Paid sales using promotions" },
+                { label: "Loyalty Uses", value: report.discountAnalytics.loyaltyTransactions, note: "Paid sales using loyalty rewards" },
+                { label: "Total Discounts Given", value: money(report.discountAnalytics.totalSavings), note: "Promotion and loyalty savings combined" },
+              ].map((card) => (
+                <article key={card.label} className={`${panel} p-5`}>
+                  <p className="text-sm text-gray-500">{card.label}</p>
+                  <p className="mt-3 text-2xl font-bold tabular-nums text-purple-800">
+                    {loading && !error ? "—" : card.value}
+                  </p>
+                  <p className="mt-2 text-xs text-gray-500">{card.note}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-2">
+              <article className={`${panel} min-w-0 p-5 md:p-6`}>
+                <h3 className="text-lg font-bold text-purple-950">Discount Usage Comparison</h3>
+                <p className="mt-1 text-xs text-gray-500">Number of paid transactions by applied discount type.</p>
+                <div className="mt-5 h-72">
+                  {Number(report.discountAnalytics.discountedTransactions || 0) === 0 ? (
+                    <ChartEmpty>No discounted paid transactions for this period.</ChartEmpty>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={[
+                        { type: "Promotions", uses: Number(report.discountAnalytics.promotionTransactions || 0) },
+                        { type: "Loyalty", uses: Number(report.discountAnalytics.loyaltyTransactions || 0) },
+                      ]}>
+                        <CartesianGrid stroke="#eee8f3" strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="type" />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip formatter={(value) => [value, "Paid transactions"]} />
+                        <Bar dataKey="uses" name="Paid transactions" fill="#9333ea" radius={[8, 8, 0, 0]} maxBarSize={90} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+                <div className="mt-5 overflow-x-auto border-t border-purple-100 pt-4">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-purple-50 text-purple-950">
+                      <tr><th className="px-4 py-3">Discount Type</th><th className="px-4 py-3 text-right">Uses</th><th className="px-4 py-3 text-right">Savings</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-gray-100"><td className="px-4 py-3">Promotions</td><td className="px-4 py-3 text-right">{report.discountAnalytics.promotionTransactions}</td><td className="px-4 py-3 text-right">{money(report.discountAnalytics.promotionSavings)}</td></tr>
+                      <tr><td className="px-4 py-3">Loyalty</td><td className="px-4 py-3 text-right">{report.discountAnalytics.loyaltyTransactions}</td><td className="px-4 py-3 text-right">{money(report.discountAnalytics.loyaltySavings)}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article className={`${panel} min-w-0 p-5 md:p-6`}>
+                <h3 className="text-lg font-bold text-purple-950">Discounted Sales Impact</h3>
+                <p className="mt-1 text-xs text-gray-500">Original versus final sales totals for discounted paid transactions.</p>
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-xl bg-purple-50 p-4"><p className="text-xs text-purple-700">Before discounts</p><p className="mt-2 text-xl font-bold text-purple-950">{money(report.discountAnalytics.discountedGrossSales)}</p></div>
+                  <div className="rounded-xl bg-emerald-50 p-4"><p className="text-xs text-emerald-700">After discounts</p><p className="mt-2 text-xl font-bold text-emerald-900">{money(report.discountAnalytics.discountedNetSales)}</p></div>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-gray-500">These figures reflect recorded paid transaction totals, not deposits collected separately. A verified deposit is not subtracted from the final service price again.</p>
+              </article>
+            </div>
+
+            <article className={`${panel} overflow-hidden`}>
+              <div className="p-5 md:p-6">
+                <h3 className="text-lg font-bold text-purple-950">Promotion Breakdown</h3>
+                <p className="mt-1 text-xs text-gray-500">Paid uses and savings by promotion ID for {report.periodLabel}.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[540px] text-left text-sm">
+                  <thead className="bg-purple-50 text-purple-950">
+                    <tr><th className="px-5 py-3">Promotion</th><th className="px-5 py-3 text-right">Paid Uses</th><th className="px-5 py-3 text-right">Savings</th><th className="px-5 py-3 text-right">Final Sales</th></tr>
+                  </thead>
+                  <tbody>
+                    {report.discountAnalytics.promotions.length ? report.discountAnalytics.promotions.map((item, index) => (
+                      <tr key={`${item.promotionId ?? "unknown"}-${index}`} className="border-t border-gray-100">
+                        <td className="px-5 py-3 font-medium">{item.promotionId == null ? "Unlinked promotion" : `Promotion #${item.promotionId}`}</td>
+                        <td className="px-5 py-3 text-right">{item.transactions}</td>
+                        <td className="px-5 py-3 text-right">{money(item.savings)}</td>
+                        <td className="px-5 py-3 text-right">{money(item.paidSales)}</td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">No promotion redemptions recorded for this period.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+            <p className="text-xs text-gray-500">Daily discount trends, discounted-service rankings, and unique customer counts require additional backend queries. Usage counts here represent paid transactions, not necessarily unique customers.</p>
+          </section>
+        )}
 
         <p className="text-xs text-gray-500">
           Report dates use Philippine time. Sales, appointments,
