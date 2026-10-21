@@ -34,7 +34,23 @@ const emptyReport = {
   summary: [],
   salesTrend: [],
   appointmentStatus: [],
+  appointmentAnalytics: {
+    totals: { totalBookings: 0, approved: 0, completed: 0, pending: 0,
+      pendingValidation: 0, awaitingPayment: 0, declined: 0, cancelled: 0,
+      rescheduleSuggestions: 0 },
+    cancellations: [], dailyBookings: [],
+  },
+  serviceAnalytics: {
+    catalog: { totalServices: 0, availableServices: 0, unavailableServices: 0 },
+    categories: [], paidServices: [], requestedServices: [],
+  },
   mostRequestedServices: [],
+  salesAnalytics: {
+    previousPeriod: { startDate: "", endDate: "", sales: 0, transactions: 0 },
+    salesByType: [],
+    paymentBreakdown: [],
+    topSellingServices: [],
+  },
   discountAnalytics: {
     promotionTransactions: 0,
     loyaltyTransactions: 0,
@@ -758,6 +774,25 @@ function AdminReports() {
                 }))
               : [],
 
+            appointmentAnalytics: {
+              totals: { ...emptyReport.appointmentAnalytics.totals,
+                ...(data.appointmentAnalytics?.totals || {}) },
+              cancellations: Array.isArray(data.appointmentAnalytics?.cancellations)
+                ? data.appointmentAnalytics.cancellations : [],
+              dailyBookings: Array.isArray(data.appointmentAnalytics?.dailyBookings)
+                ? data.appointmentAnalytics.dailyBookings : [],
+            },
+            salesAnalytics: {
+              ...emptyReport.salesAnalytics,
+              ...(data.salesAnalytics || {}),
+              previousPeriod: {
+                ...emptyReport.salesAnalytics.previousPeriod,
+                ...(data.salesAnalytics?.previousPeriod || {}),
+              },
+              salesByType: Array.isArray(data.salesAnalytics?.salesByType) ? data.salesAnalytics.salesByType : [],
+              paymentBreakdown: Array.isArray(data.salesAnalytics?.paymentBreakdown) ? data.salesAnalytics.paymentBreakdown : [],
+              topSellingServices: Array.isArray(data.salesAnalytics?.topSellingServices) ? data.salesAnalytics.topSellingServices : [],
+            },
             discountAnalytics: {
               ...emptyReport.discountAnalytics,
               ...(data.discountAnalytics || {}),
@@ -800,6 +835,18 @@ function AdminReports() {
                 : [],
             },
 
+            serviceAnalytics: {
+              catalog: {
+                ...emptyReport.serviceAnalytics.catalog,
+                ...(data.serviceAnalytics?.catalog || {}),
+              },
+              categories: Array.isArray(data.serviceAnalytics?.categories)
+                ? data.serviceAnalytics.categories : [],
+              paidServices: Array.isArray(data.serviceAnalytics?.paidServices)
+                ? data.serviceAnalytics.paidServices : [],
+              requestedServices: Array.isArray(data.serviceAnalytics?.requestedServices)
+                ? data.serviceAnalytics.requestedServices : [],
+            },
             mostRequestedServices: Array.isArray(
               data.mostRequestedServices
             )
@@ -963,11 +1010,6 @@ function AdminReports() {
         month: "long",
         year: "numeric",
       }),
-    },
-    {
-      label: "Selected-period Appointments",
-      value: report.appointments,
-      note: report.periodLabel,
     },
   ]
 
@@ -1449,7 +1491,7 @@ function AdminReports() {
         {activeCategory === "sales" && (
           <>
         {/* OVERVIEW CARDS */}
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => (
             <article
               key={card.label}
@@ -1503,6 +1545,76 @@ function AdminReports() {
           </div>
         </section>
 
+          </>
+        )}
+
+        {activeCategory === "sales" && (
+          <>
+            <section className={`${panel} p-5 md:p-6`}>
+              <h2 className="text-lg font-bold text-purple-950">Sales Performance Comparison</h2>
+              <p className="mt-1 text-xs text-gray-500">Selected period compared with the immediately preceding period of the same length.</p>
+              <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-xl bg-purple-50 p-4">
+                  <p className="text-xs text-purple-700">Current period</p>
+                  <p className="mt-2 text-xl font-bold text-purple-950">{money(report.sales)}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-4">
+                  <p className="text-xs text-gray-600">Previous period</p>
+                  <p className="mt-2 text-xl font-bold text-gray-900">{money(report.salesAnalytics.previousPeriod.sales)}</p>
+                </div>
+                <div className="rounded-xl bg-gray-50 p-4">
+                  <p className="text-xs text-gray-600">Revenue change</p>
+                  <p className={`mt-2 text-xl font-bold ${Number(report.sales) - Number(report.salesAnalytics.previousPeriod.sales) >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                    {Number(report.sales) - Number(report.salesAnalytics.previousPeriod.sales) > 0 ? "+" : ""}{money(Number(report.sales) - Number(report.salesAnalytics.previousPeriod.sales))}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {Number(report.salesAnalytics.previousPeriod.sales) > 0
+                      ? `${((Number(report.sales) - Number(report.salesAnalytics.previousPeriod.sales)) / Number(report.salesAnalytics.previousPeriod.sales) * 100).toFixed(1)}% vs previous period`
+                      : "Percentage unavailable without previous-period sales"}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="grid gap-6 lg:grid-cols-2">
+              <article className={`${panel} p-5 md:p-6`}>
+                <h2 className="text-lg font-bold text-purple-950">Sales by Type</h2>
+                <p className="mt-1 text-xs text-gray-500">Paid service and product sales for the selected period.</p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b text-left text-gray-500"><th className="py-3">Sale type</th><th className="py-3 text-right">Transactions</th><th className="py-3 text-right">Revenue</th></tr></thead>
+                    <tbody>{report.salesAnalytics.salesByType.length ? report.salesAnalytics.salesByType.map((item) => (
+                      <tr key={item.saleType} className="border-b border-gray-100"><td className="py-3">{item.saleType}</td><td className="py-3 text-right">{item.transactions}</td><td className="py-3 text-right">{money(item.revenue)}</td></tr>
+                    )) : <tr><td colSpan={3} className="py-5 text-center text-gray-500">No paid sales in this period.</td></tr>}</tbody>
+                  </table>
+                </div>
+              </article>
+              <article className={`${panel} p-5 md:p-6`}>
+                <h2 className="text-lg font-bold text-purple-950">Payment Method Breakdown</h2>
+                <p className="mt-1 text-xs text-gray-500">Payment method saved on each paid transaction; booking deposits are not counted again.</p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="border-b text-left text-gray-500"><th className="py-3">Method</th><th className="py-3 text-right">Transactions</th><th className="py-3 text-right">Revenue</th></tr></thead>
+                    <tbody>{report.salesAnalytics.paymentBreakdown.length ? report.salesAnalytics.paymentBreakdown.map((item) => (
+                      <tr key={item.paymentMethod} className="border-b border-gray-100"><td className="py-3">{item.paymentMethod}</td><td className="py-3 text-right">{item.transactions}</td><td className="py-3 text-right">{money(item.revenue)}</td></tr>
+                    )) : <tr><td colSpan={3} className="py-5 text-center text-gray-500">No payment data for this period.</td></tr>}</tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
+
+            <section className={`${panel} p-5 md:p-6`}>
+              <h2 className="text-lg font-bold text-purple-950">Top-Selling Services by Revenue</h2>
+              <p className="mt-1 text-xs text-gray-500">Based on paid service transactions, not appointment requests. Product sales are excluded.</p>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b text-left text-gray-500"><th className="py-3">Service</th><th className="py-3 text-right">Paid transactions</th><th className="py-3 text-right">Quantity</th><th className="py-3 text-right">Revenue</th></tr></thead>
+                  <tbody>{report.salesAnalytics.topSellingServices.length ? report.salesAnalytics.topSellingServices.map((item) => (
+                    <tr key={item.service} className="border-b border-gray-100"><td className="py-3">{item.service}</td><td className="py-3 text-right">{item.transactions}</td><td className="py-3 text-right">{item.quantity}</td><td className="py-3 text-right font-medium text-purple-800">{money(item.revenue)}</td></tr>
+                  )) : <tr><td colSpan={4} className="py-5 text-center text-gray-500">No paid service sales in this period.</td></tr>}</tbody>
+                </table>
+              </div>
+            </section>
           </>
         )}
 
@@ -1601,6 +1713,88 @@ function AdminReports() {
           </article>
 
           )}
+          {/* APPOINTMENT ANALYTICS — all booking records, including expired holds */}
+          {activeCategory === "appointments" && (
+            <section className="space-y-5">
+              <div className={`${panel} p-5 md:p-6`}>
+                <h2 className="text-lg font-bold text-purple-950">Booking Overview — {report.periodLabel}</h2>
+                <p className="mt-1 text-xs text-gray-500">Based on scheduled appointment dates. Includes unpaid holds and expired reservations.</p>
+                <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {[
+                    ["Total Booking Records", "totalBookings"],
+                    ["Approved", "approved"],
+                    ["Completed", "completed"],
+                    ["Pending Review", "pending"],
+                    ["Declined", "declined"],
+                    ["Cancelled", "cancelled"],
+                    ["Reschedule Suggestions", "rescheduleSuggestions"],
+                    ["Completion Rate", "completionRate"],
+                  ].map(([label, key]) => (
+                    <div key={key} className="rounded-xl border border-purple-100 bg-purple-50/40 p-4">
+                      <p className="text-xs text-gray-600">{label}</p>
+                      <p className="mt-2 text-2xl font-bold text-purple-950">
+                        {key === "completionRate"
+                          ? `${report.appointmentAnalytics.totals.totalBookings
+                              ? (100 * report.appointmentAnalytics.totals.completed / report.appointmentAnalytics.totals.totalBookings).toFixed(1)
+                              : "0.0"}%`
+                          : report.appointmentAnalytics.totals[key] || 0}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-xs text-gray-500">Awaiting Payment: {report.appointmentAnalytics.totals.awaitingPayment} · Pending Validation: {report.appointmentAnalytics.totals.pendingValidation}. Reschedule suggestions are declined bookings with an alternative date and time, not confirmed reschedules. Completion rate = Completed ÷ Total Booking Records.</p>
+              </div>
+              <div className={`${panel} p-5 md:p-6`}>
+                <h2 className="text-lg font-bold text-purple-950">Booking Trends by Scheduled Date</h2>
+                <div className="mt-4 h-64">
+                  {report.appointmentAnalytics.dailyBookings.length ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={report.appointmentAnalytics.dailyBookings}>
+                        <CartesianGrid stroke="#eee8f3" strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis allowDecimals={false} />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="total" name="Bookings" stroke="#9333ea" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : <ChartEmpty>No booking records in this period.</ChartEmpty>}
+                </div>
+              </div>
+              <div className={`${panel} p-5 md:p-6`}>
+                <h2 className="text-lg font-bold text-purple-950">Cancellation Reasons</h2>
+                <p className="mt-1 text-xs text-gray-500">Expired payment windows mean the deposit was not submitted in StyleSync before the 15-minute deadline; this does not prove no GCash transfer occurred.</p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-purple-50"><tr><th className="px-4 py-3">Reason</th><th className="px-4 py-3 text-right">Bookings</th></tr></thead>
+                    <tbody>{report.appointmentAnalytics.cancellations.length
+                      ? report.appointmentAnalytics.cancellations.map(row => (
+                        <tr key={row.reason} className="border-b border-gray-100"><td className="px-4 py-3">{row.reason}</td><td className="px-4 py-3 text-right">{row.count}</td></tr>
+                      ))
+                      : <tr><td colSpan={2} className="px-4 py-4 text-center text-gray-500">No cancellations in this period.</td></tr>}</tbody>
+                  </table>
+                </div>
+              </div>
+              <div className={`${panel} p-5 md:p-6`}>
+                <h2 className="text-lg font-bold text-purple-950">Daily Booking Breakdown</h2>
+                <p className="mt-1 text-xs text-gray-500">Peak day: {(() => {
+                  const rows = report.appointmentAnalytics.dailyBookings
+                  if (!rows.length) return "No data"
+                  const peak = [...rows].sort((a,b) => b.total - a.total || a.date.localeCompare(b.date))[0]
+                  return `${peak.date} (${peak.total} bookings)`
+                })()}</p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-purple-50"><tr>{["Date","Total","Approved","Completed","Declined","Cancelled"].map(h => <th key={h} className="px-3 py-3">{h}</th>)}</tr></thead>
+                    <tbody>{report.appointmentAnalytics.dailyBookings.length
+                      ? report.appointmentAnalytics.dailyBookings.map(row => (
+                        <tr key={row.date} className="border-b border-gray-100">{[row.date,row.total,row.approved,row.completed,row.declined,row.cancelled].map((v,i) => <td key={i} className="px-3 py-3">{v}</td>)}</tr>
+                      ))
+                      : <tr><td colSpan={6} className="px-4 py-4 text-center text-gray-500">No bookings in this period.</td></tr>}</tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          )}
           {/* APPOINTMENT STATUS CHART */}
           {activeCategory === "appointments" && (
           <article className={`${panel} p-5 md:p-6`}>
@@ -1608,7 +1802,7 @@ function AdminReports() {
               Appointment Status — {report.periodLabel}
             </h2>
             <p className="mt-1 text-xs text-gray-500">
-              Unpaid reservation holds are not included.
+              Includes all recorded statuses, including expired reservations. Awaiting Payment is excluded only from this existing chart.
             </p>
 
             <div className="mt-5 h-72">
@@ -1691,6 +1885,45 @@ function AdminReports() {
 
         {activeCategory === "services" && (
           <>
+        <section className="grid gap-4 md:grid-cols-3">
+          {[
+            ["Catalog Services", report.serviceAnalytics.catalog.totalServices],
+            ["Available Services", report.serviceAnalytics.catalog.availableServices],
+            ["Unavailable Services", report.serviceAnalytics.catalog.unavailableServices],
+          ].map(([label, value]) => (
+            <article key={label} className={`${panel} p-5`}>
+              <p className="text-sm text-gray-500">{label}</p>
+              <p className="mt-2 text-3xl font-bold text-purple-950">{value}</p>
+            </article>
+          ))}
+        </section>
+        <p className="text-xs text-gray-500">Service catalog counts reflect current records, regardless of the selected reporting period.</p>
+
+        <section className={`${panel} p-5 md:p-6`}>
+          <h2 className="text-lg font-bold text-purple-950">Service Categories — Current Catalog</h2>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-purple-50 text-purple-950"><tr><th className="px-4 py-3">Category</th><th className="px-4 py-3 text-right">Services</th><th className="px-4 py-3 text-right">Available</th></tr></thead>
+              <tbody>{report.serviceAnalytics.categories.length ? report.serviceAnalytics.categories.map(row => (
+                <tr key={row.category} className="border-b border-gray-100"><td className="px-4 py-3">{row.category}</td><td className="px-4 py-3 text-right">{row.services}</td><td className="px-4 py-3 text-right">{row.available}</td></tr>
+              )) : <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-500">No services in the catalog.</td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className={`${panel} p-5 md:p-6`}>
+          <h2 className="text-lg font-bold text-purple-950">Paid Service Performance — {report.periodLabel}</h2>
+          <p className="mt-1 text-xs text-gray-500">Only paid service transactions; product sales are excluded. Revenue uses final discounted amounts.</p>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-purple-50 text-purple-950"><tr><th className="px-4 py-3">Service</th><th className="px-4 py-3 text-right">Paid Transactions</th><th className="px-4 py-3 text-right">Units</th><th className="px-4 py-3 text-right">Revenue</th></tr></thead>
+              <tbody>{report.serviceAnalytics.paidServices.length ? report.serviceAnalytics.paidServices.map(row => (
+                <tr key={row.service} className="border-b border-gray-100"><td className="px-4 py-3">{row.service}</td><td className="px-4 py-3 text-right">{row.paidTransactions}</td><td className="px-4 py-3 text-right">{row.unitsSold}</td><td className="px-4 py-3 text-right">{money(row.revenue)}</td></tr>
+              )) : <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-500">No paid services for the selected period.</td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+
         {/* MOST REQUESTED SERVICES CHART */}
         <section className={`${panel} p-5 md:p-6`}>
           <h2 className="text-lg font-bold text-purple-950">

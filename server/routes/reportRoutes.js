@@ -1,4 +1,3 @@
-
 const express = require("express")
 const router = express.Router()
 const db = require("../db")
@@ -189,7 +188,6 @@ router.get("/", async (req, res) => {
           THEN amount ELSE 0 END), 0) AS monthSales
 
       FROM transactions
-
       WHERE status = 'Paid'
     `)
 
@@ -208,6 +206,90 @@ router.get("/", async (req, res) => {
          AND transaction_date < ?`,
       [startDate, endDate]
     )
+
+    // ====================================
+    // SALES CATEGORY ANALYTICS (READ-ONLY)
+    // ====================================
+    // Amount is the final sale price (including any discount).
+    // Deposits are already part of that price; never subtract again.
+    // Product rows are excluded from service rankings.
+
+    const [salesByTypeRows] = await connection.query(
+      `SELECT COALESCE(sale_type, 'Service') AS saleType,
+              COUNT(*) AS transactions,
+              COALESCE(SUM(amount), 0) AS revenue
+       FROM transactions
+       WHERE status = 'Paid'
+         AND transaction_date >= ? AND transaction_date < ?
+       GROUP BY COALESCE(sale_type, 'Service')
+       ORDER BY revenue DESC`,
+      [startDate, endDate]
+    )
+
+    const [paymentBreakdownRows] = await connection.query(
+      `SELECT COALESCE(NULLIF(TRIM(payment), ''), 'Not recorded') AS paymentMethod,
+              COUNT(*) AS transactions,
+              COALESCE(SUM(amount), 0) AS revenue
+       FROM transactions
+       WHERE status = 'Paid'
+         AND transaction_date >= ? AND transaction_date < ?
+       GROUP BY COALESCE(NULLIF(TRIM(payment), ''), 'Not recorded')
+       ORDER BY revenue DESC`,
+      [startDate, endDate]
+    )
+
+    const [topSellingServiceRows] = await connection.query(
+      `SELECT COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service') AS service,
+              COUNT(*) AS transactions,
+              COALESCE(SUM(COALESCE(quantity, 1)), 0) AS quantity,
+              COALESCE(SUM(amount), 0) AS revenue
+       FROM transactions
+       WHERE status = 'Paid'
+         AND (sale_type = 'Service' OR sale_type IS NULL)
+         AND transaction_date >= ? AND transaction_date < ?
+       GROUP BY COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service')
+       ORDER BY revenue DESC, transactions DESC, service ASC
+       LIMIT 10`,
+      [startDate, endDate]
+    )
+
+    const daysInPeriod = Math.round(
+      (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86400000
+    )
+    const previousStartDate = addDays(startDate, -daysInPeriod)
+    const [[previousPeriodRows]] = await connection.query(
+      `SELECT COALESCE(SUM(amount), 0) AS sales,
+              COUNT(*) AS transactions
+       FROM transactions
+       WHERE status = 'Paid'
+         AND transaction_date >= ? AND transaction_date < ?`,
+      [previousStartDate, startDate]
+    )
+
+    const salesAnalytics = {
+      previousPeriod: {
+        startDate: previousStartDate,
+        endDate: addDays(startDate, -1),
+        sales: Number(previousPeriodRows?.sales || 0),
+        transactions: Number(previousPeriodRows?.transactions || 0),
+      },
+      salesByType: salesByTypeRows.map((row) => ({
+        saleType: row.saleType,
+        transactions: Number(row.transactions || 0),
+        revenue: Number(row.revenue || 0),
+      })),
+      paymentBreakdown: paymentBreakdownRows.map((row) => ({
+        paymentMethod: row.paymentMethod,
+        transactions: Number(row.transactions || 0),
+        revenue: Number(row.revenue || 0),
+      })),
+      topSellingServices: topSellingServiceRows.map((row) => ({
+        service: row.service,
+        transactions: Number(row.transactions || 0),
+        quantity: Number(row.quantity || 0),
+        revenue: Number(row.revenue || 0),
+      })),
+    }
 
     // ====================================
     // PROMOTION & LOYALTY DISCOUNT ANALYTICS
@@ -380,9 +462,74 @@ router.get("/", async (req, res) => {
          AND status <> 'Awaiting Payment'
        GROUP BY status
        ORDER BY count DESC, status`,
-
       [startDate, endDate]
     )
+
+    // Appointment analytics: count every stored booking, including expired holds.
+    // Dates refer to the scheduled appointment date (not the booking creation date).
+    const [appointmentTotalsRows] = await connection.query(
+      `SELECT
+         COUNT(*) AS totalBookings,
+         SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) AS approved,
+         SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed,
+         SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending,
+         SUM(CASE WHEN status = 'Pending Validation' THEN 1 ELSE 0 END) AS pendingValidation,
+         SUM(CASE WHEN status = 'Awaiting Payment' THEN 1 ELSE 0 END) AS awaitingPayment,
+         SUM(CASE WHEN status = 'Declined' THEN 1 ELSE 0 END) AS declined,
+         SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled,
+         SUM(CASE WHEN status = 'Declined' AND suggested_date IS NOT NULL
+                   AND suggested_time IS NOT NULL THEN 1 ELSE 0 END) AS rescheduleSuggestions
+       FROM appointments
+       WHERE appointment_date >= ? AND appointment_date < ?`,
+      [startDate, endDate]
+    )
+    const appointmentTotals = appointmentTotalsRows[0] || {}
+
+    const [cancellationRows] = await connection.query(
+      `SELECT
+         CASE
+           WHEN d.payment_status = 'Expired' THEN 'Expired payment window'
+           WHEN d.payment_status = 'Rejected' THEN 'Rejected deposit'
+           ELSE 'Other / unknown'
+         END AS reason,
+         COUNT(*) AS count
+       FROM appointments a
+       LEFT JOIN booking_deposits d ON d.appointment_id = a.id
+       WHERE a.status = 'Cancelled'
+         AND a.appointment_date >= ? AND a.appointment_date < ?
+       GROUP BY reason ORDER BY count DESC, reason`,
+      [startDate, endDate]
+    )
+
+    const [dailyBookingRows] = await connection.query(
+      `SELECT DATE_FORMAT(appointment_date, '%Y-%m-%d') AS date,
+              COUNT(*) AS total,
+              SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) AS approved,
+              SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed,
+              SUM(CASE WHEN status = 'Declined' THEN 1 ELSE 0 END) AS declined,
+              SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled
+       FROM appointments
+       WHERE appointment_date >= ? AND appointment_date < ?
+       GROUP BY appointment_date ORDER BY appointment_date`,
+      [startDate, endDate]
+    )
+
+    const appointmentAnalytics = {
+      totals: Object.fromEntries(
+        ['totalBookings', 'approved', 'completed', 'pending', 'pendingValidation',
+         'awaitingPayment', 'declined', 'cancelled', 'rescheduleSuggestions'].map(
+          key => [key, Number(appointmentTotals[key] || 0)]
+        )
+      ),
+      cancellations: cancellationRows.map(row => ({
+        reason: row.reason, count: Number(row.count || 0)
+      })),
+      dailyBookings: dailyBookingRows.map(row => ({
+        ...row, total: Number(row.total || 0), approved: Number(row.approved || 0),
+        completed: Number(row.completed || 0), declined: Number(row.declined || 0),
+        cancelled: Number(row.cancelled || 0)
+      })),
+    }
 
     // ====================================
     // MOST REQUESTED SERVICES
@@ -401,6 +548,72 @@ router.get("/", async (req, res) => {
        LIMIT 5`,
       [startDate, endDate]
     )
+
+    // SERVICE ANALYTICS: current catalog snapshot + selected-period activity.
+    // Historical transactions and appointments store service names, not stable IDs.
+    const [[serviceCatalogTotals]] = await connection.query(`
+      SELECT COUNT(*) AS totalServices,
+             SUM(CASE WHEN status = 'Available' THEN 1 ELSE 0 END) AS availableServices,
+             SUM(CASE WHEN status = 'Unavailable' THEN 1 ELSE 0 END) AS unavailableServices
+      FROM services
+    `)
+
+    const [serviceCategoryRows] = await connection.query(`
+      SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,
+             COUNT(*) AS services,
+             SUM(CASE WHEN status = 'Available' THEN 1 ELSE 0 END) AS available
+      FROM services
+      GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized')
+      ORDER BY services DESC, category ASC
+    `)
+
+    const [serviceRevenueRows] = await connection.query(
+      `SELECT COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service') AS service,
+              COUNT(*) AS paidTransactions,
+              COALESCE(SUM(COALESCE(quantity, 1)), 0) AS unitsSold,
+              COALESCE(SUM(amount), 0) AS revenue
+       FROM transactions
+       WHERE status = 'Paid'
+         AND (sale_type = 'Service' OR sale_type IS NULL)
+         AND transaction_date >= ? AND transaction_date < ?
+       GROUP BY COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service')
+       ORDER BY revenue DESC, paidTransactions DESC, service ASC`,
+      [startDate, endDate]
+    )
+
+    const [serviceDemandRows] = await connection.query(
+      `SELECT COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service') AS service,
+              COUNT(*) AS requests
+       FROM appointments
+       WHERE ${activeAppointment}
+         AND appointment_date >= ? AND appointment_date < ?
+       GROUP BY COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service')
+       ORDER BY requests DESC, service ASC`,
+      [startDate, endDate]
+    )
+
+    const serviceAnalytics = {
+      catalog: {
+        totalServices: Number(serviceCatalogTotals.totalServices || 0),
+        availableServices: Number(serviceCatalogTotals.availableServices || 0),
+        unavailableServices: Number(serviceCatalogTotals.unavailableServices || 0),
+      },
+      categories: serviceCategoryRows.map(row => ({
+        category: row.category,
+        services: Number(row.services || 0),
+        available: Number(row.available || 0),
+      })),
+      paidServices: serviceRevenueRows.map(row => ({
+        service: row.service,
+        paidTransactions: Number(row.paidTransactions || 0),
+        unitsSold: Number(row.unitsSold || 0),
+        revenue: Number(row.revenue || 0),
+      })),
+      requestedServices: serviceDemandRows.map(row => ({
+        service: row.service,
+        requests: Number(row.requests || 0),
+      })),
+    }
 
     // ====================================
     // INVENTORY ANALYTICS
@@ -566,7 +779,6 @@ router.get("/", async (req, res) => {
       ])
     )
 
-
     const inventoryMovementTrend = summary.map((row) => {
       const movement =
         movementByDate.get(String(row.date)) || {}
@@ -641,6 +853,10 @@ router.get("/", async (req, res) => {
       dailySales: todaySales,
       weeklySales: weekSales,
       monthlySales: monthSales,
+
+      salesAnalytics,
+      serviceAnalytics,
+      appointmentAnalytics,
 
       // Applied discounts on paid sales in the selected period.
       discountAnalytics,
