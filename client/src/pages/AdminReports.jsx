@@ -971,29 +971,9 @@ function AdminReports() {
     (row) => row.stockIn > 0 || row.stockOut > 0
   )
 
-  const categoryChartData =
-    inventory.categoryStock.length > 8
-      ? [
-          ...inventory.categoryStock.slice(0, 7),
-          {
-            category: "Other categories",
-            units: inventory.categoryStock
-              .slice(7)
-              .reduce(
-                (sum, row) =>
-                  sum + Number(row.units || 0),
-                0
-              ),
-            products: inventory.categoryStock
-              .slice(7)
-              .reduce(
-                (sum, row) =>
-                  sum + Number(row.products || 0),
-                0
-              ),
-          },
-        ]
-      : inventory.categoryStock
+  // Show every inventory category in both the graph and the table.
+  // Do not collapse smaller categories into "Other", which would hide detail.
+  const categoryChartData = inventory.categoryStock
 
   const attentionItems = inventory.attentionItems.filter(
     (item) =>
@@ -2252,8 +2232,9 @@ function AdminReports() {
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-500">
               Current stock health and category distribution,
               with stock movements for {report.periodLabel}.
-              Stock totals are a live snapshot; changing the
-              report period only changes movement history.
+              Stock totals and reorder alerts show the current inventory snapshot.
+              Only the recorded stock movements follow the selected reporting period.
+              These charts summarize existing data; they do not forecast future stock.
             </p>
           </div>
 
@@ -2287,7 +2268,7 @@ function AdminReports() {
                 Stock by Category
               </h3>
               <p className="mt-1 text-xs text-gray-500">
-                Units currently available, grouped by product category.
+                Current units on hand by product category. Every category shown in the chart is listed in the table below.
               </p>
 
               <div
@@ -2413,7 +2394,7 @@ function AdminReports() {
                 Product Stock Status
               </h3>
               <p className="mt-1 text-xs text-gray-500">
-                Number of products in each stock condition.
+                Share of inventory products classified as In Stock, Low Stock, or Out of Stock. Exact counts appear in the table.
               </p>
 
               <div className="mt-4 h-[260px]">
@@ -2527,8 +2508,8 @@ function AdminReports() {
                   Stock Movement — {report.periodLabel}
                 </h3>
                 <p className="mt-1 text-xs text-gray-500">
-                  Recorded units added and removed each day,
-                  including initial stock entries.
+                  Recorded units added and removed on each date in the selected period,
+                  including initial stock entries. The bars represent movement, not the current stock balance.
                 </p>
               </div>
 
@@ -2675,6 +2656,7 @@ function AdminReports() {
                 Stock Attention — Current Stock vs Reorder Level
               </h4>
               <p className="mb-4 text-xs text-gray-500">
+                Compare current quantity with each product's configured reorder alert level.
                 Chart and table both follow the product search above.
               </p>
               <div style={{ height: Math.max(240, attentionItems.length * 45) }}>
@@ -2837,12 +2819,51 @@ function AdminReports() {
               </article>
 
               <article className={`${panel} min-w-0 p-5 md:p-6`}>
+                <h3 className="text-lg font-bold text-purple-950">Discount Savings by Type</h3>
+                <p className="mt-1 text-xs text-gray-500">Actual recorded peso savings from promotion and loyalty discounts on paid sales.</p>
+                <div className="mt-4 h-64">
+                  <RankedBarChart
+                    data={[
+                      { type: "Promotions", savings: Number(report.discountAnalytics.promotionSavings || 0) },
+                      { type: "Loyalty", savings: Number(report.discountAnalytics.loyaltySavings || 0) },
+                    ]}
+                    labelKey="type"
+                    valueKey="savings"
+                    formatValue={money}
+                  />
+                </div>
+                <p className="mt-3 text-xs text-gray-500">Exact savings amounts are shown in the Discount Usage Comparison table above.</p>
+              </article>
+
+              <article className={`${panel} min-w-0 p-5 md:p-6`}>
                 <h3 className="text-lg font-bold text-purple-950">Discounted Sales Impact</h3>
                 <p className="mt-1 text-xs text-gray-500">Original versus final sales totals for discounted paid transactions.</p>
                 <div className="mt-5 grid gap-4 sm:grid-cols-2">
                   <div className="rounded-xl bg-purple-50 p-4"><p className="text-xs text-purple-700">Before discounts</p><p className="mt-2 text-xl font-bold text-purple-950">{money(report.discountAnalytics.discountedGrossSales)}</p></div>
                   <div className="rounded-xl bg-emerald-50 p-4"><p className="text-xs text-emerald-700">After discounts</p><p className="mt-2 text-xl font-bold text-emerald-900">{money(report.discountAnalytics.discountedNetSales)}</p></div>
                 </div>
+                <div className="mt-4 h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={[
+                      { stage: "Before discounts", amount: Number(report.discountAnalytics.discountedGrossSales || 0) },
+                      { stage: "After discounts", amount: Number(report.discountAnalytics.discountedNetSales || 0) },
+                    ]}>
+                      <CartesianGrid stroke="#eee8f3" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="stage" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip formatter={(value) => [money(value), "Sales"]} />
+                      <Bar dataKey="amount" fill="#9333ea" radius={[8, 8, 0, 0]} maxBarSize={90} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <table className="mt-4 w-full text-left text-sm">
+                  <thead className="bg-purple-50 text-purple-950"><tr><th className="px-4 py-3">Measure</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
+                  <tbody>
+                    <tr className="border-b border-gray-100"><td className="px-4 py-3">Before discounts</td><td className="px-4 py-3 text-right">{money(report.discountAnalytics.discountedGrossSales)}</td></tr>
+                    <tr className="border-b border-gray-100"><td className="px-4 py-3">After discounts</td><td className="px-4 py-3 text-right">{money(report.discountAnalytics.discountedNetSales)}</td></tr>
+                    <tr><td className="px-4 py-3">Total savings</td><td className="px-4 py-3 text-right">{money(report.discountAnalytics.totalSavings)}</td></tr>
+                  </tbody>
+                </table>
                 <p className="mt-4 text-sm leading-6 text-gray-500">These figures reflect recorded paid transaction totals, not deposits collected separately. A verified deposit is not subtracted from the final service price again.</p>
               </article>
             </div>
@@ -2851,6 +2872,18 @@ function AdminReports() {
               <div className="p-5 md:p-6">
                 <h3 className="text-lg font-bold text-purple-950">Promotion Breakdown</h3>
                 <p className="mt-1 text-xs text-gray-500">Paid uses and savings by promotion ID for {report.periodLabel}.</p>
+                <div className="mt-4 h-72">
+                  <RankedBarChart
+                    data={report.discountAnalytics.promotions.map((item) => ({
+                      promotion: item.promotionId == null ? "Unlinked promotion" : `Promotion #${item.promotionId}`,
+                      savings: Number(item.savings || 0),
+                    }))}
+                    labelKey="promotion"
+                    valueKey="savings"
+                    formatValue={money}
+                  />
+                </div>
+                <p className="mt-2 text-xs text-gray-500">Chart ranks up to 10 promotions by actual savings; the table provides paid uses and final sales.</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[540px] text-left text-sm">
@@ -2872,7 +2905,7 @@ function AdminReports() {
                 </table>
               </div>
             </article>
-            <p className="text-xs text-gray-500">Daily discount trends, discounted-service rankings, and unique customer counts require additional backend queries. Usage counts here represent paid transactions, not necessarily unique customers.</p>
+            <p className="text-xs text-gray-500">Usage counts represent paid transactions, not necessarily unique customers. All charts show recorded values only; no forecasting is used.</p>
           </section>
         )}
 
