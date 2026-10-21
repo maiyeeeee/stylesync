@@ -142,6 +142,39 @@ function shortDate(value) {
   })
 }
 
+const chartColors = ["#7e22ce", "#c084fc", "#a78bfa", "#f59e0b", "#10b981", "#64748b", "#ec4899"]
+
+function BreakdownDonut({ data, labelKey, valueKey = "revenue", formatValue = money, emptyText = "No data for this period." }) {
+  const rows = data.filter((item) => Number(item[valueKey]) > 0)
+  if (!rows.length) return <ChartEmpty>{emptyText}</ChartEmpty>
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <PieChart>
+        <Pie data={rows} dataKey={valueKey} nameKey={labelKey} cx="50%" cy="50%" innerRadius={55} outerRadius={88} paddingAngle={rows.length > 1 ? 2 : 0}>
+          {rows.map((item, index) => <Cell key={String(item[labelKey])} fill={chartColors[index % chartColors.length]} />)}
+        </Pie>
+        <Tooltip formatter={(value, name) => [formatValue(value), name]} />
+      </PieChart>
+    </ResponsiveContainer>
+  )
+}
+
+function RankedBarChart({ data, labelKey, valueKey, formatValue = (value) => value, emptyText = "No data for this period.", maxItems = 10 }) {
+  const rows = [...data].sort((a, b) => Number(b[valueKey]) - Number(a[valueKey])).slice(0, maxItems)
+  if (!rows.length) return <ChartEmpty>{emptyText}</ChartEmpty>
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 25, bottom: 8, left: 10 }}>
+        <CartesianGrid stroke="#eee8f3" strokeDasharray="3 3" horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 11 }} />
+        <YAxis type="category" dataKey={labelKey} width={155} tick={{ fontSize: 11 }} />
+        <Tooltip formatter={(value) => [formatValue(value), "Value"]} />
+        <Bar dataKey={valueKey} fill="#7e22ce" radius={[0, 6, 6, 0]} maxBarSize={26} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
 function ChartEmpty({ children }) {
   return (
     <div className="flex h-full items-center justify-center px-4 text-center text-sm text-gray-500">
@@ -1580,6 +1613,7 @@ function AdminReports() {
               <article className={`${panel} p-5 md:p-6`}>
                 <h2 className="text-lg font-bold text-purple-950">Sales by Type</h2>
                 <p className="mt-1 text-xs text-gray-500">Paid service and product sales for the selected period.</p>
+                <div className="mt-4 h-56"><BreakdownDonut data={report.salesAnalytics.salesByType} labelKey="saleType" /></div>
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead><tr className="border-b text-left text-gray-500"><th className="py-3">Sale type</th><th className="py-3 text-right">Transactions</th><th className="py-3 text-right">Revenue</th></tr></thead>
@@ -1592,6 +1626,7 @@ function AdminReports() {
               <article className={`${panel} p-5 md:p-6`}>
                 <h2 className="text-lg font-bold text-purple-950">Payment Method Breakdown</h2>
                 <p className="mt-1 text-xs text-gray-500">Payment method saved on each paid transaction; booking deposits are not counted again.</p>
+                <div className="mt-4 h-56"><BreakdownDonut data={report.salesAnalytics.paymentBreakdown} labelKey="paymentMethod" /></div>
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead><tr className="border-b text-left text-gray-500"><th className="py-3">Method</th><th className="py-3 text-right">Transactions</th><th className="py-3 text-right">Revenue</th></tr></thead>
@@ -1606,6 +1641,7 @@ function AdminReports() {
             <section className={`${panel} p-5 md:p-6`}>
               <h2 className="text-lg font-bold text-purple-950">Top-Selling Services by Revenue</h2>
               <p className="mt-1 text-xs text-gray-500">Based on paid service transactions, not appointment requests. Product sales are excluded.</p>
+              <div className="mt-4 h-80"><RankedBarChart data={report.salesAnalytics.topSellingServices} labelKey="service" valueKey="revenue" formatValue={money} /></div>
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead><tr className="border-b text-left text-gray-500"><th className="py-3">Service</th><th className="py-3 text-right">Paid transactions</th><th className="py-3 text-right">Quantity</th><th className="py-3 text-right">Revenue</th></tr></thead>
@@ -1728,21 +1764,33 @@ function AdminReports() {
                     ["Declined", "declined"],
                     ["Cancelled", "cancelled"],
                     ["Reschedule Suggestions", "rescheduleSuggestions"],
-                    ["Completion Rate", "completionRate"],
                   ].map(([label, key]) => (
                     <div key={key} className="rounded-xl border border-purple-100 bg-purple-50/40 p-4">
                       <p className="text-xs text-gray-600">{label}</p>
                       <p className="mt-2 text-2xl font-bold text-purple-950">
-                        {key === "completionRate"
-                          ? `${report.appointmentAnalytics.totals.totalBookings
-                              ? (100 * report.appointmentAnalytics.totals.completed / report.appointmentAnalytics.totals.totalBookings).toFixed(1)
-                              : "0.0"}%`
-                          : report.appointmentAnalytics.totals[key] || 0}
+                        {report.appointmentAnalytics.totals[key] || 0}
                       </p>
                     </div>
                   ))}
                 </div>
-                <p className="mt-3 text-xs text-gray-500">Awaiting Payment: {report.appointmentAnalytics.totals.awaitingPayment} · Pending Validation: {report.appointmentAnalytics.totals.pendingValidation}. Reschedule suggestions are declined bookings with an alternative date and time, not confirmed reschedules. Completion rate = Completed ÷ Total Booking Records.</p>
+                <div className="mt-5 border-t border-purple-100 pt-4">
+                  <h3 className="text-sm font-semibold text-purple-950">Booking Status Distribution</h3>
+                  <p className="mt-1 text-xs text-gray-500">Counts by current booking status, including payment holds. Reschedule suggestions are already included in declined bookings.</p>
+                  <div className="h-60">
+                    <BreakdownDonut
+                      data={[
+                        ["Approved", "approved"], ["Completed", "completed"], ["Pending", "pending"],
+                        ["Pending Validation", "pendingValidation"], ["Awaiting Payment", "awaitingPayment"],
+                        ["Declined", "declined"], ["Cancelled", "cancelled"],
+                      ].map(([status, key]) => ({ status, count: report.appointmentAnalytics.totals[key] || 0 }))}
+                      labelKey="status"
+                      valueKey="count"
+                      formatValue={(value) => `${value} bookings`}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">The booking cards above provide the exact counts; this chart shows their relative proportions.</p>
+                </div>
+                <p className="mt-3 text-xs text-gray-500">Awaiting Payment: {report.appointmentAnalytics.totals.awaitingPayment} · Pending Validation: {report.appointmentAnalytics.totals.pendingValidation}. Reschedule suggestions are declined bookings with an alternative date and time, not confirmed reschedules.</p>
               </div>
               <div className={`${panel} p-5 md:p-6`}>
                 <h2 className="text-lg font-bold text-purple-950">Booking Trends by Scheduled Date</h2>
@@ -1763,6 +1811,7 @@ function AdminReports() {
               <div className={`${panel} p-5 md:p-6`}>
                 <h2 className="text-lg font-bold text-purple-950">Cancellation Reasons</h2>
                 <p className="mt-1 text-xs text-gray-500">Expired payment windows mean the deposit was not submitted in StyleSync before the 15-minute deadline; this does not prove no GCash transfer occurred.</p>
+                <div className="mt-4 h-60"><RankedBarChart data={report.appointmentAnalytics.cancellations} labelKey="reason" valueKey="count" formatValue={(v) => `${v} bookings`} /></div>
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-purple-50"><tr><th className="px-4 py-3">Reason</th><th className="px-4 py-3 text-right">Bookings</th></tr></thead>
@@ -1901,6 +1950,8 @@ function AdminReports() {
 
         <section className={`${panel} p-5 md:p-6`}>
           <h2 className="text-lg font-bold text-purple-950">Service Categories — Current Catalog</h2>
+          <p className="mt-1 text-xs text-gray-500">Number of services per catalog category; current snapshot, not historical demand.</p>
+          <div className="mt-4 h-72"><RankedBarChart data={report.serviceAnalytics.categories} labelKey="category" valueKey="services" formatValue={(v) => `${v} services`} maxItems={20} /></div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-purple-50 text-purple-950"><tr><th className="px-4 py-3">Category</th><th className="px-4 py-3 text-right">Services</th><th className="px-4 py-3 text-right">Available</th></tr></thead>
@@ -1914,6 +1965,8 @@ function AdminReports() {
         <section className={`${panel} p-5 md:p-6`}>
           <h2 className="text-lg font-bold text-purple-950">Paid Service Performance — {report.periodLabel}</h2>
           <p className="mt-1 text-xs text-gray-500">Only paid service transactions; product sales are excluded. Revenue uses final discounted amounts.</p>
+          <p className="mt-1 text-xs text-gray-500">Chart shows the 10 highest-revenue services; the table lists all recorded paid services.</p>
+          <div className="mt-4 h-80"><RankedBarChart data={report.serviceAnalytics.paidServices} labelKey="service" valueKey="revenue" formatValue={money} /></div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-purple-50 text-purple-950"><tr><th className="px-4 py-3">Service</th><th className="px-4 py-3 text-right">Paid Transactions</th><th className="px-4 py-3 text-right">Units</th><th className="px-4 py-3 text-right">Revenue</th></tr></thead>
