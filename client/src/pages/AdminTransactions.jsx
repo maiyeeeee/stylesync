@@ -8,6 +8,7 @@ import {
     useState,
 } from "react"
 import { API_URL, apiFetch } from "../lib/sessionApi"
+import { getEmergencyRecord, reconcileEmergencySale } from "../lib/offlineDb"
 
 const panel =
     "rounded-2xl border border-purple-100 bg-white p-5 shadow-sm md:p-6"
@@ -473,6 +474,14 @@ function AdminTransactions() {
     const [appointments, setAppointments] = useState([])
 
     const [form, setForm] = useState(freshForm)
+    const [emergencySale, setEmergencySale] = useState(null)
+    const [emergencyCheck, setEmergencyCheck] = useState("")
+    const [emergencyMatches, setEmergencyMatches] = useState([])
+    const [emergencyConfirmed, setEmergencyConfirmed] = useState(false)
+    const [emergencyChecking, setEmergencyChecking] = useState(false)
+    const [emergencyPaidAcknowledged, setEmergencyPaidAcknowledged] = useState(false)
+    const [emergencyCollected, setEmergencyCollected] = useState("")
+    const [emergencyPendingPaid, setEmergencyPendingPaid] = useState(false)
 
     const [loyalty, setLoyalty] = useState(null)
     const [loyaltyLoading, setLoyaltyLoading] = useState(false)
@@ -752,6 +761,79 @@ function AdminTransactions() {
             )
         }
     }, [syncOfflineTransactions])
+
+    // The URL carries only an identifier; the saved payload is loaded from IndexedDB.
+    // Never trust URL-supplied customer, price, or service information.
+    useEffect(() => {
+        const id = new URLSearchParams(window.location.search).get("emergency_offline_id")
+        if (!id) return
+        let active = true
+        getEmergencyRecord(id).then((record) => {
+            if (!active) return
+            if (!record || record.record_type !== "sale" || record.payload?.sale_type !== "Service") {
+                setEmergencyCheck("Emergency service record not found on this device. Do not create a new sale.")
+                return
+            }
+            if (record.sync_status === "Synced") {
+                setEmergencyCheck(`Already reconciled with server transaction #${record.server_id}. Do not submit again.`)
+                return
+            }
+            setEmergencySale(record)
+            setEmergencyCheck("")
+            setForm({ ...freshForm(), customer: record.payload.customer || "",
+                sale_type: "Service", payment: record.payload.payment || "Cash" })
+        }).catch((err) => { if (active) setEmergencyCheck(err.message) })
+        return () => { active = false }
+    }, [])
+
+    // Load the current server history before allowing an emergency checkout.
+    // The backend returns t.* (including offline_id); this is an exact-ID lookup.
+    useEffect(() => {
+        if (!emergencySale) return
+        let active = true
+        setEmergencyChecking(true)
+        setEmergencyCheck("")
+        request(`/transactions/offline/${encodeURIComponent(emergencySale.offline_id)}`).then(async (lookup) => {
+            if (!active) return
+            if (!lookup || typeof lookup.found !== "boolean") throw new Error("Invalid duplicate lookup response.")
+            const exact = lookup.found ? lookup.transaction : null
+            if (exact) {
+                await reconcileEmergencySale(emergencySale.offline_id, exact)
+                if (active) {
+                    setEmergencyCheck(`Already saved as transaction #${exact.transaction_id}. Emergency record reconciled; do not submit again.`)
+                    setEmergencySale(null)
+                }
+                return
+            }
+            // Name/date matches are only warnings. Failure to load history does not
+            // replace the authoritative exact-offline-ID check above.
+            const rows = await request("/transactions")
+            if (!Array.isArray(rows)) throw new Error("Transaction history was not returned.")
+            if (!active) return
+            const name = String(emergencySale.payload?.customer || "").trim().toLowerCase()
+            const service = String(emergencySale.payload?.service || "").trim().toLowerCase()
+            const day = new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Manila", year:"numeric", month:"2-digit", day:"2-digit"}).format(new Date(emergencySale.recorded_at))
+            const possible = rows.filter((row) =>
+                String(row.customer || "").trim().toLowerCase() === name &&
+                String(row.service || "").trim().toLowerCase() === service &&
+                dayKey(row.transaction_date) === day)
+            setEmergencyMatches(possible)
+        }).catch((err) => { if (active) setEmergencyCheck(`Cannot verify server duplicates: ${err.message}. Checkout blocked.`) })
+          .finally(() => { if (active) setEmergencyChecking(false) })
+        return () => { active = false }
+    }, [emergencySale])
+
+    // Wait for the current service catalog to load. Old records without service_id
+    // require staff to choose the correct service manually; never guess by name.
+    useEffect(() => {
+        if (!emergencySale || !services.length) return
+        const id = Number(emergencySale.payload?.service_id)
+        const found = Number.isSafeInteger(id) && id > 0 && services.some((item) => Number(item.service_id) === id)
+        if (!found) return
+        const item = services.find((entry) => Number(entry.service_id) === id)
+        setForm((previous) => ({ ...previous, mode: "Walk-in", sale_type: "Service",
+            selectedId: String(id), amount: Number(item.price).toFixed(2), quantity: "1" }))
+    }, [emergencySale, services])
 
     const booked = form.mode === "Appointment"
     const productSale = form.sale_type === "Product"
@@ -1073,6 +1155,39 @@ function AdminTransactions() {
 
         setError("")
         setMessage("")
+        if (new URLSearchParams(window.location.search).has("emergency_offline_id") && !emergencySale) {
+            setError("Emergency record is unavailable or already reconciled. Open normal POS without the emergency link to make a separate sale.")
+            return
+        }
+        if (emergencySale) {
+            if (emergencyChecking || emergencyCheck || !emergencyConfirmed ||
+                (emergencySale.payload?.status === "Paid"
+                    ? (!emergencyPaidAcknowledged || !emergencyCollected || toCents(emergencyCollected) !== netCents)
+                    : (!emergencyPendingPaid || !emergencyCollected || toCents(emergencyCollected) !== netCents))) {
+                setError("Complete the emergency review, payment acknowledgment, and duplicate check before saving.")
+                return
+            }
+            if (form.mode !== "Walk-in" || form.sale_type !== "Service" || form.historicalDate ||
+                form.payment !== (emergencySale.payload?.payment || "Cash")) {
+                setError("Emergency service sales must use the current online walk-in checkout.")
+                return
+            }
+            if (String(form.customer).trim().toLowerCase() !== String(emergencySale.payload?.customer || "").trim().toLowerCase()) {
+                setError("Customer differs from the emergency record. Review the original details before continuing.")
+                return
+            }
+            if (Number(form.quantity) !== 1 || !form.selectedId ||
+                !services.some((item) => String(item.service_id) === String(form.selectedId) &&
+                    String(item.service || "").trim().toLowerCase() === String(emergencySale.payload?.service || "").trim().toLowerCase())) {
+                setError("Select the original service from the current catalog. Service name and quantity must match.")
+                return
+            }
+            if (Number.isSafeInteger(Number(emergencySale.payload?.service_id)) && Number(emergencySale.payload.service_id) > 0 &&
+                String(form.selectedId) !== String(emergencySale.payload.service_id)) {
+                setError("Service differs from the emergency record. Do not submit this checkout.")
+                return
+            }
+        }
 
         if (!navigator.onLine && !booked && !productSale && !form.historicalDate) {
             setError("Current walk-in service promotions require an online checkout. Please reconnect.")
@@ -1274,7 +1389,18 @@ function AdminTransactions() {
         setBusy(true)
 
         try {
-            const offlineId = retry.current.id
+            const offlineId = emergencySale?.offline_id || retry.current.id
+            if (emergencySale) {
+                // Recheck immediately before POST; do not rely on a previous page-load check.
+                const check = await request(`/transactions/offline/${encodeURIComponent(offlineId)}`)
+                if (!check || typeof check.found !== "boolean") throw new Error("Duplicate check could not be confirmed. Checkout blocked.")
+                if (check.found) {
+                    await reconcileEmergencySale(offlineId, check.transaction)
+                    setEmergencySale(null)
+                    setEmergencyCheck(`Already on server as transaction #${check.transaction.transaction_id}. No new sale was created.`)
+                    throw new Error("This emergency sale is already recorded. No second transaction was created.")
+                }
+            }
 
             if (!navigator.onLine) {
                 if (redeemingReward) {
@@ -1363,6 +1489,19 @@ function AdminTransactions() {
                 }
             )
 
+            // POST success is not sufficient: confirm the server history links this exact offline ID.
+            if (emergencySale) {
+                const verified = await request(`/transactions/offline/${encodeURIComponent(emergencySale.offline_id)}`)
+                const matching = verified?.found && verified.transaction?.offline_id === emergencySale.offline_id &&
+                    String(verified.transaction.transaction_id) === String(result.id) ? verified.transaction : null
+                if (!matching) {
+                    throw new Error(`Transaction #${result.id} may have saved, but its offline ID could not be verified. Do not resubmit; refresh/review first.`)
+                }
+                await reconcileEmergencySale(emergencySale.offline_id, matching)
+                setEmergencySale(null)
+                setEmergencyCheck(`Reconciled with verified server transaction #${result.id}.`)
+                window.history.replaceState(null, "", window.location.pathname)
+            }
             retry.current = null
             setForm(freshForm())
             setLoyalty(null)
@@ -1397,6 +1536,7 @@ function AdminTransactions() {
             // NEVER queue a transaction containing
             // an owner-issued loyalty reward.
             if (
+                !emergencySale &&
                 !navigator.onLine &&
                 !redeemingReward &&
                 !booked &&
@@ -1847,6 +1987,29 @@ function AdminTransactions() {
                         : "Refresh"}
                 </button>
             </header>
+
+            {(emergencySale || emergencyCheck) && (
+                <section className="rounded-2xl border border-purple-300 bg-purple-50 p-5 text-sm text-purple-950 space-y-3">
+                    <h2 className="text-lg font-bold">Emergency Mode · Online POS Review</h2>
+                    {emergencySale && <>
+                        <p className="break-all text-xs">Offline ID: {emergencySale.offline_id}</p>
+                        <p><strong>Original:</strong> {emergencySale.payload.customer} · {emergencySale.payload.service} · cached ₱{Number(emergencySale.payload.amount || 0).toFixed(2)} · {emergencySale.payload.payment} · {emergencySale.payload.status}</p>
+                        <p>Cached amount is not the final bill. Check the current POS total and loyalty rewards. Never collect a payment twice.</p>
+                        {emergencyChecking && <p>Checking server for duplicates…</p>}
+                        {emergencyMatches.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                            <strong>Possible existing transactions — investigate before proceeding:</strong>
+                            {emergencyMatches.slice(0, 8).map((row) => <p key={row.transaction_id}>#{row.transaction_id} · {row.customer} · {row.service} · ₱{row.amount} · {dateLabel(row.transaction_date)}</p>)}
+                            <p>Same customer/service/day is only a warning, not proof. Check receipts and payment records.</p>
+                        </div>}
+                        <label className="block">Amount actually collected and verified (₱): <input type="number" min="0" step="0.01" value={emergencyCollected} onChange={(e) => setEmergencyCollected(e.target.value)} className="mt-1 w-full rounded-lg border border-purple-300 bg-white p-2" placeholder="Enter amount from cash/GCash receipt" /><span className="block text-xs mt-1">Must match the verified POS final total of {money(netCents / 100)}. If different, stop and resolve the difference before posting.</span></label>
+                        {emergencySale.payload?.status === "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPaidAcknowledged} onChange={(e) => setEmergencyPaidAcknowledged(e.target.checked)} /> <span>I verified the amount already collected and any difference from the online final total. No second payment will be collected automatically.</span></label>}
+                        <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyConfirmed} onChange={(e) => setEmergencyConfirmed(e.target.checked)} /><span>I reviewed potential duplicates, original service and customer, current promotion/loyalty, and payment status. This is a genuine sale that has not been recorded.</span></label>
+                        {emergencySale.payload?.status !== "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPendingPaid} onChange={(e) => setEmergencyPendingPaid(e.target.checked)} /><span>This record was originally Pending. I confirm the full verified POS amount has now been collected using the recorded payment method, and I checked the payment evidence. Otherwise leave it in Needs Review.</span></label>}
+                        <p className="font-medium">The final POS confirmation is disabled until these checks are completed.</p>
+                    </>}
+                    {emergencyCheck && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-amber-900">{emergencyCheck}</p>}
+                </section>
+            )}
 
             {loadError && (
                 <p
@@ -2344,6 +2507,7 @@ function AdminTransactions() {
                                 type="submit"
                                 disabled={
                                     disabled ||
+                                    Boolean(emergencySale && (emergencyChecking || emergencyCheck || !emergencyConfirmed || (emergencySale.payload?.status === "Paid" ? (!emergencyPaidAcknowledged || !emergencyCollected || toCents(emergencyCollected) !== netCents) : (!emergencyPendingPaid || !emergencyCollected || toCents(emergencyCollected) !== netCents)))) ||
                                     Boolean(unresolved) ||
                                     balanceCents < 0 ||
                                     Boolean(currentWalkin && (!navigator.onLine || quotePending || walkinQuoteError || !currentQuote ||

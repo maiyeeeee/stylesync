@@ -119,6 +119,16 @@ function RecordDetails({ record }) {
                 {record.server_id != null && <p className="break-all text-gray-600">Server ID: {record.server_id}</p>}
                 {record.error_message && <p className="mt-1 break-words text-amber-800">{record.error_message}</p>}
             </div>
+            {isServiceSale && record.sync_status === "Synced" && record.reconciliation_status === "Reconciled" && (
+                <p className="rounded-lg bg-green-50 p-2 text-green-800">Verified POS transaction #{record.server_id}. Reconciled using the original offline ID.</p>
+            )}
+            {isServiceSale && record.sync_status === "Needs Review" && (
+                <button type="button" onClick={() => {
+                    window.location.assign(`/admin/transactions?emergency_offline_id=${encodeURIComponent(record.offline_id)}`)
+                }} className="w-full rounded-lg bg-purple-700 px-3 py-2 font-semibold text-white hover:bg-purple-800">
+                    Review in POS
+                </button>
+            )}
             {isServiceSale && record.sync_status !== "Synced" && (
                 <p className="rounded-lg bg-amber-50 p-2 leading-relaxed text-amber-900">
                     Requires online POS review. Check current promotions, loyalty rewards, and any payment already collected before final checkout. This record is not a completed server sale. Do not charge twice.

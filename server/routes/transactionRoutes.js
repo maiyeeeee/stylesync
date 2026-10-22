@@ -174,6 +174,49 @@ router.get("/", async (req, res) => {
         })
     }
 })
+
+
+//
+// GET TRANSACTION BY EMERGENCY OFFLINE ID
+// Read-only lookup used by POS reconciliation.
+//
+router.get("/offline/:offlineId", async (req, res) => {
+    res.set("Cache-Control", "no-store")
+
+    const offlineId = String(req.params.offlineId || "").trim()
+
+    if (!offlineId || offlineId.length > 64) {
+        return res.status(400).json({
+            error: "Invalid offline ID.",
+        })
+    }
+
+    try {
+        const [rows] = await promiseDb.query(
+            `${transactionSelect}
+             WHERE t.offline_id = ?
+             LIMIT 1`,
+            [offlineId]
+        )
+
+       if (!rows.length) {
+    return res.status(200).json({
+        found: false,
+    })
+}
+
+        return res.json({
+            found: true,
+            transaction: rows[0],
+        })
+    } catch (error) {
+        console.error("Offline transaction lookup error:", error)
+        return res.status(500).json({
+            error: "Unable to verify the emergency transaction.",
+        })
+    }
+})
+
 //
 // ============================================
 // PART 2 — APPOINTMENT CHECKOUT LOOKUP

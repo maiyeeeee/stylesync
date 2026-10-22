@@ -64,6 +64,31 @@ export async function listEmergencyRecords() {
     return records.sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))
 }
 
+export async function getEmergencyRecord(offline_id) {
+    return withStore("readonly", (store, resolve) => {
+        const request = store.get(offline_id)
+        request.onsuccess = () => resolve(request.result || null)
+    })
+}
+
+// A POS confirmation must be matched against an actual server row before updating local status.
+export async function reconcileEmergencySale(offline_id, serverTransaction) {
+    const record = await getEmergencyRecord(offline_id)
+    if (!record || record.record_type !== "sale" || record.payload?.sale_type !== "Service") {
+        throw new Error("The original emergency service sale was not found on this device.")
+    }
+    if (String(serverTransaction?.offline_id || "") !== String(offline_id) ||
+        !Number.isSafeInteger(Number(serverTransaction?.transaction_id)) ||
+        Number(serverTransaction.transaction_id) <= 0) {
+        throw new Error("The server transaction does not match the original offline ID.")
+    }
+    await updateEmergencyRecord(offline_id, {
+        sync_status: "Synced", reconciliation_status: "Reconciled",
+        server_id: Number(serverTransaction.transaction_id),
+        synced_at: new Date().toISOString(), error_message: "",
+    })
+}
+
 export async function updateEmergencyRecord(offline_id, updates) {
     await withStore("readwrite", (store) => {
         const request = store.get(offline_id)
@@ -83,7 +108,7 @@ export async function clearSyncedEmergencyRecords() {
         request.onsuccess = () => {
             const cursor = request.result
             if (!cursor) return
-            if (cursor.value.sync_status === "Synced") cursor.delete()
+            if (cursor.value.sync_status === "Synced" && cursor.value.reconciliation_status !== "Reconciled") cursor.delete()
             cursor.continue()
         }
     })
