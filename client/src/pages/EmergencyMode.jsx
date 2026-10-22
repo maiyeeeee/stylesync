@@ -72,6 +72,62 @@ function formatDate(value) {
     })
 }
 
+function RecordDetails({ record }) {
+    const payload = record.payload || {}
+    const isServiceSale = record.record_type === "sale" && payload.sale_type === "Service"
+    const rows = record.record_type === "sale"
+        ? [
+            ["Customer", payload.customer],
+            ["Sale type", payload.sale_type],
+            ["Service / product", payload.service],
+            ["Service ID", payload.service_id],
+            ["Product ID", payload.item_id],
+            ["Quantity", payload.quantity],
+            [isServiceSale ? "Cached base amount (not final)" : "Recorded amount", Number.isFinite(Number(payload.amount)) && payload.amount != null ? `₱${Number(payload.amount).toFixed(2)}` : null],
+            ["Payment method", payload.payment],
+            ["Recorded payment status", payload.status],
+        ]
+        : record.record_type === "appointment"
+          ? [
+              ["Customer", payload.customer_name],
+              ["Contact number", payload.contact_number],
+              ["Email", payload.email],
+              ["Service", payload.service],
+              ["Service ID", payload.service_id],
+              ["Appointment date", payload.appointment_date],
+              ["Start time", payload.appointment_time],
+              ["Notes", payload.notes],
+          ]
+          : [
+              ["Inventory item ID", payload.item_id],
+              ["Quantity change", payload.quantity_change],
+              ["Reason", payload.reason],
+          ]
+
+    return (
+        <div className="mt-3 w-72 max-w-[75vw] space-y-2 rounded-xl border border-purple-100 bg-white p-3 text-xs shadow-sm">
+            <p className="font-semibold text-purple-950">Saved record details</p>
+            <p className="break-all font-mono text-[11px] text-gray-500">Offline ID: {record.offline_id}</p>
+            {rows.filter(([, value]) => value !== null && value !== undefined && value !== "").map(([label, value]) => (
+                <div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-gray-100 pt-2">
+                    <span className="text-gray-500">{label}</span>
+                    <span className="max-w-full break-words text-right font-medium text-gray-800">{String(value)}</span>
+                </div>
+            ))}
+            <div className="border-t border-gray-100 pt-2">
+                <p className="font-semibold text-gray-700">Sync status: {record.sync_status}</p>
+                {record.server_id != null && <p className="break-all text-gray-600">Server ID: {record.server_id}</p>}
+                {record.error_message && <p className="mt-1 break-words text-amber-800">{record.error_message}</p>}
+            </div>
+            {isServiceSale && record.sync_status !== "Synced" && (
+                <p className="rounded-lg bg-amber-50 p-2 leading-relaxed text-amber-900">
+                    Requires online POS review. Check current promotions, loyalty rewards, and any payment already collected before final checkout. This record is not a completed server sale. Do not charge twice.
+                </p>
+            )}
+        </div>
+    )
+}
+
 function EmergencyMode() {
     const [recordType, setRecordType] =
         useState("appointment")
@@ -509,6 +565,11 @@ function EmergencyMode() {
                         ? itemId
                         : null,
 
+                service_id:
+                    saleType === "Service" ? itemId : null,
+
+                offline_queued: true,
+
                 quantity:
                     Number(
                         fields.get(
@@ -574,7 +635,9 @@ function EmergencyMode() {
             form.reset()
 
             setMessage(
-                "Saved on this device as Pending Sync.",
+                recordType === "sale" && payload.sale_type === "Service"
+                    ? "Service sale saved locally. Online POS promotion/loyalty verification and staff review are required before it can be posted to Reports."
+                    : "Saved on this device as Pending Sync.",
             )
 
             await refreshRecords()
@@ -832,6 +895,10 @@ function EmergencyMode() {
                 not guarantee
                 the server is
                 reachable.
+            </div>
+
+            <div className="rounded-2xl border border-purple-200 bg-purple-50 p-4 text-sm leading-relaxed text-purple-950">
+                <strong>Emergency service sales:</strong> Cached prices are provisional and do not include verified promotions or loyalty rewards. Service sales stay on this device for online POS review; they are not automatically synchronized or counted in Reports. Before recording a final checkout, verify the promotion and loyalty reward online and reconcile any amount already collected. Do not collect payment twice.
             </div>
 
             {referenceError && (
@@ -1421,22 +1488,12 @@ function EmergencyMode() {
                                         className="border-b border-gray-100 hover:bg-purple-50"
                                     >
                                         <td className="px-5 py-4 align-middle">
-                                            <details className="max-w-[200px]">
-                                                <summary className="cursor-pointer font-mono text-xs text-purple-700">
-                                                    {String(
-                                                        record.offline_id,
-                                                    ).slice(
-                                                        0,
-                                                        8,
-                                                    )}
-                                                    …
+                                            <details>
+                                                <summary className="cursor-pointer text-xs font-semibold text-purple-700">
+                                                    {String(record.offline_id).slice(0, 8)}…
+                                                    <span className="ml-2 whitespace-nowrap font-normal underline">View details</span>
                                                 </summary>
-
-                                                <p className="mt-2 break-all font-mono text-xs text-gray-500">
-                                                    {
-                                                        record.offline_id
-                                                    }
-                                                </p>
+                                                <RecordDetails record={record} />
                                             </details>
                                         </td>
 
@@ -1712,6 +1769,12 @@ function SaleFields({
                 />
             </Field>
 
+            {saleType === "Service" && (
+                <p className="md:col-span-2 text-xs leading-relaxed text-amber-800">
+                    Cached base price only — promotions and loyalty rewards must be verified online. Do not treat this as the final amount due.
+                </p>
+            )}
+
             <Field label="Total amount (₱)">
                 <input
                     name="amount"
@@ -1747,9 +1810,6 @@ function SaleFields({
                         GCash
                     </option>
 
-                    <option>
-                        Other
-                    </option>
                 </select>
             </Field>
 
