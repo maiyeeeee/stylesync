@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test server/tests/*.test.js",
+    "test": "node --test server/tests",
     "backup": "node server/scripts/backup-database.js",
     "restore": "node server/scripts/restore-database.js"
   },

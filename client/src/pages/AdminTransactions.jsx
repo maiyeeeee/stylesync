@@ -832,7 +832,7 @@ function AdminTransactions() {
         if (!found) return
         const item = services.find((entry) => Number(entry.service_id) === id)
         setForm((previous) => ({ ...previous, mode: "Walk-in", sale_type: "Service",
-            selectedId: String(id), amount: Number(item.price).toFixed(2), quantity: "1" }))
+            selectedId: String(id), amount: Number(emergencySale.payload.amount).toFixed(2), quantity: "1" }))
     }, [emergencySale, services])
 
     const booked = form.mode === "Appointment"
@@ -852,6 +852,7 @@ function AdminTransactions() {
         : form.customerContact.trim()
 
     const rewardApplicable =
+         !emergencySale &&
         !productSale &&
         !form.historicalDate &&
         (!booked || Boolean(appointment))
@@ -976,7 +977,7 @@ function AdminTransactions() {
     )
 
     const currentWalkin = !booked && !productSale && !form.historicalDate
-    const quoteServiceId = currentWalkin && selectedItem
+    const quoteServiceId = currentWalkin && !emergencySale && selectedItem
         ? Number(selectedItem.service_id) : null
     const [walkinQuote, setWalkinQuote] = useState(null)
     const [walkinQuoteError, setWalkinQuoteError] = useState("")
@@ -1035,14 +1036,14 @@ function AdminTransactions() {
     const lockedPromoCents = booked && appointment?.locked_promotion_id
         ? toCents(appointment.locked_promotion_discount)
         : 0
-    const walkinPromoCents = currentWalkin && currentQuote
+    const walkinPromoCents = currentWalkin && !emergencySale && currentQuote
         ? toCents(currentQuote.promotion_discount) : 0
     const activePromoCents = booked ? lockedPromoCents : walkinPromoCents
     const promoPercent = booked
         ? appointment?.locked_promotion_percent : currentQuote?.promotion_percent
     const promotionWins = activePromoCents > 0 &&
         activePromoCents >= loyaltyDiscountCents
-    const discountCents = promotionWins ? activePromoCents : loyaltyDiscountCents
+    const discountCents = emergencySale ? 0 : (promotionWins ? activePromoCents : loyaltyDiscountCents)
 
     const netCents =
         subtotalCents - discountCents
@@ -1214,7 +1215,7 @@ function AdminTransactions() {
             return
         }
 
-        if (currentWalkin && navigator.onLine && (
+        if (currentWalkin && !emergencySale && navigator.onLine && (
             quotePending || walkinQuoteError || !currentQuote ||
             toCents(currentQuote.original_service_total) !== subtotalCents
         )) {
@@ -1222,6 +1223,13 @@ function AdminTransactions() {
             return
         }
 
+        if (emergencySale && (
+            toCents(form.amount) !== toCents(emergencySale.payload.amount) ||
+            toCents(selectedItem?.price) !== toCents(emergencySale.payload.amount)
+        )) {
+            setError("The recorded emergency amount differs from the current regular catalog price. Owner review is required; do not post.")
+            return
+        }
         if (unresolved || balanceCents < 0) {
             setError(
                 "Resolve the deposit or excess payment before checkout."
@@ -1312,7 +1320,7 @@ function AdminTransactions() {
         // Online reward redemption must never be queued
         // as an Emergency Mode transaction.
         const redeemingReward =
-            Boolean(activeReward)
+            Boolean(activeReward) && !emergencySale
 
         const payload = {
             appointment_id:
@@ -1346,9 +1354,12 @@ function AdminTransactions() {
             // The server calculates the actual discount.
             amount: Number(form.amount).toFixed(2),
             service_id: !booked && !productSale ? Number(selectedItem.service_id) : null,
-            expected_promotion_id: currentWalkin ? currentQuote?.promotion_id ?? null : null,
-            expected_promotion_discount: currentWalkin ? currentQuote?.promotion_discount ?? "0.00" : null,
+            expected_promotion_id: currentWalkin && !emergencySale ? currentQuote?.promotion_id ?? null : null,
+            expected_promotion_discount: currentWalkin && !emergencySale ? currentQuote?.promotion_discount ?? "0.00" : null,
             expected_sale_total: currentWalkin ? (netCents / 100).toFixed(2) : null,
+            emergency_reconciliation: Boolean(emergencySale),
+            emergency_review_confirmed: Boolean(emergencySale && emergencyConfirmed),
+            offline_queued: Boolean(emergencySale),
 
             payment:
                 form.payment,
@@ -1994,16 +2005,16 @@ function AdminTransactions() {
                     {emergencySale && <>
                         <p className="break-all text-xs">Offline ID: {emergencySale.offline_id}</p>
                         <p><strong>Original:</strong> {emergencySale.payload.customer} · {emergencySale.payload.service} · cached ₱{Number(emergencySale.payload.amount || 0).toFixed(2)} · {emergencySale.payload.payment} · {emergencySale.payload.status}</p>
-                        <p>Cached amount is not the final bill. Check the current POS total and loyalty rewards. Never collect a payment twice.</p>
+                        <p>Emergency Mode uses the recorded regular service price, without promotions. Verify the amount collected and check for issued loyalty rewards. Never collect payment twice.</p>
                         {emergencyChecking && <p>Checking server for duplicates…</p>}
                         {emergencyMatches.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
                             <strong>Possible existing transactions — investigate before proceeding:</strong>
                             {emergencyMatches.slice(0, 8).map((row) => <p key={row.transaction_id}>#{row.transaction_id} · {row.customer} · {row.service} · ₱{row.amount} · {dateLabel(row.transaction_date)}</p>)}
                             <p>Same customer/service/day is only a warning, not proof. Check receipts and payment records.</p>
                         </div>}
-                        <label className="block">Amount actually collected and verified (₱): <input type="number" min="0" step="0.01" value={emergencyCollected} onChange={(e) => setEmergencyCollected(e.target.value)} className="mt-1 w-full rounded-lg border border-purple-300 bg-white p-2" placeholder="Enter amount from cash/GCash receipt" /><span className="block text-xs mt-1">Must match the verified POS final total of {money(netCents / 100)}. If different, stop and resolve the difference before posting.</span></label>
-                        {emergencySale.payload?.status === "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPaidAcknowledged} onChange={(e) => setEmergencyPaidAcknowledged(e.target.checked)} /> <span>I verified the amount already collected and any difference from the online final total. No second payment will be collected automatically.</span></label>}
-                        <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyConfirmed} onChange={(e) => setEmergencyConfirmed(e.target.checked)} /><span>I reviewed potential duplicates, original service and customer, current promotion/loyalty, and payment status. This is a genuine sale that has not been recorded.</span></label>
+                        <label className="block">Amount actually collected and verified (₱): <input type="number" min="0" step="0.01" value={emergencyCollected} onChange={(e) => setEmergencyCollected(e.target.value)} className="mt-1 w-full rounded-lg border border-purple-300 bg-white p-2" placeholder="Enter amount from cash/GCash receipt" /><span className="block text-xs mt-1">Must match the recorded regular-price total of {money(netCents / 100)}. If different, stop and resolve the difference before posting.</span></label>
+                        {emergencySale.payload?.status === "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPaidAcknowledged} onChange={(e) => setEmergencyPaidAcknowledged(e.target.checked)} /> <span>I verified the amount already collected and the recorded regular price. No second payment will be collected automatically.</span></label>}
+                        <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyConfirmed} onChange={(e) => setEmergencyConfirmed(e.target.checked)} /><span>I reviewed potential duplicates, original service and customer, regular price, loyalty status, and payment status. This is a genuine sale that has not been recorded.</span></label>
                         {emergencySale.payload?.status !== "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPendingPaid} onChange={(e) => setEmergencyPendingPaid(e.target.checked)} /><span>This record was originally Pending. I confirm the full verified POS amount has now been collected using the recorded payment method, and I checked the payment evidence. Otherwise leave it in Needs Review.</span></label>}
                         <p className="font-medium">The final POS confirmation is disabled until these checks are completed.</p>
                     </>}
@@ -2394,7 +2405,7 @@ function AdminTransactions() {
                                 />
                             </Field>
 
-                            {currentWalkin && navigator.onLine && (
+                            {currentWalkin && !emergencySale && navigator.onLine && (
                                 <div className="rounded-xl border border-purple-100 bg-purple-50 p-3 text-sm">
                                     {quotePending && !walkinQuoteError
                                         ? "Checking today's walk-in service promotion…"
@@ -2510,8 +2521,8 @@ function AdminTransactions() {
                                     Boolean(emergencySale && (emergencyChecking || emergencyCheck || !emergencyConfirmed || (emergencySale.payload?.status === "Paid" ? (!emergencyPaidAcknowledged || !emergencyCollected || toCents(emergencyCollected) !== netCents) : (!emergencyPendingPaid || !emergencyCollected || toCents(emergencyCollected) !== netCents)))) ||
                                     Boolean(unresolved) ||
                                     balanceCents < 0 ||
-                                    Boolean(currentWalkin && (!navigator.onLine || quotePending || walkinQuoteError || !currentQuote ||
-                                        toCents(currentQuote.original_service_total) !== subtotalCents)) ||
+                                    Boolean(currentWalkin && (!navigator.onLine || (!emergencySale && (quotePending || walkinQuoteError || !currentQuote ||
+                                        toCents(currentQuote.original_service_total) !== subtotalCents)))) ||
                                     Boolean(
                                         navigator.onLine &&
                                         rewardLookupKey &&

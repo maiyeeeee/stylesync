@@ -590,6 +590,25 @@ router.post("/", async (req, res) => {
         const offlineId = body.offline_id
             ? String(body.offline_id)
             : null
+        // Explicit staff-reviewed emergency reconciliation; never infer from offline_id.
+        const emergencyReconciliation = body.emergency_reconciliation === true
+        if (emergencyReconciliation) {
+            if (!["owner", "admin"].includes(req.user.role)) {
+                throw problem("Owner or admin approval is required for emergency reconciliation.", 403)
+            }
+            if (!offlineId || appointmentId || saleType !== "Service" ||
+                saleEpoch != null || status !== "Paid" || quantity !== 1 ||
+                body.offline_queued !== true || body.emergency_review_confirmed !== true ||
+                !["Cash", "GCash"].includes(payment)) {
+                throw problem("Invalid emergency reconciliation details.", 409)
+            }
+            if (body.loyalty_reward_id != null && body.loyalty_reward_id !== "") {
+                throw problem("Emergency reconciliation cannot redeem a loyalty reward.", 409)
+            }
+            if (cents(body.expected_sale_total, "Reviewed emergency total") !== subtotal) {
+                throw problem("Reviewed emergency total must match the recorded amount.", 409)
+            }
+        }
         if (
             offlineId &&
             offlineId.length > 64
@@ -936,7 +955,7 @@ router.post("/", async (req, res) => {
         // Current walk-in services: validate base price and discover active promo.
         // Historical sales are deliberately excluded from promotions.
         if (!appointmentId && saleType === "Service" && saleEpoch == null) {
-            if (body.offline_queued === true) {
+            if (body.offline_queued === true && !emergencyReconciliation) {
                 throw problem("Current service pricing and promotions require online checkout.", 409)
             }
             serviceId = positiveId(body.service_id, "Service")
@@ -948,12 +967,14 @@ router.post("/", async (req, res) => {
             if (subtotal !== originalSubtotal) {
                 throw problem("The service price changed. Refresh POS before checkout.", 409)
             }
-            const quote = await getPromotionPrice(
-                connection, serviceId, decimal(originalSubtotal), philippineToday()
-            )
-            if (quote.promotionId && quote.discountCents > 0) {
-                promo = { promotionId: quote.promotionId,
-                    discountCents: quote.discountCents, promotionPercent: quote.promotionPercent }
+            if (!emergencyReconciliation) {
+                const quote = await getPromotionPrice(
+                    connection, serviceId, decimal(originalSubtotal), philippineToday()
+                )
+                if (quote.promotionId && quote.discountCents > 0) {
+                    promo = { promotionId: quote.promotionId,
+                        discountCents: quote.discountCents, promotionPercent: quote.promotionPercent }
+                }
             }
         }
 
@@ -975,10 +996,11 @@ router.post("/", async (req, res) => {
         // reward will be rejected during synchronization
         // rather than silently skipping that reward.
         // ============================================
-        const loyaltyEligible =
-            saleType === "Service" &&
-            saleEpoch == null &&
-            status === "Paid"
+       const loyaltyEligible =
+    !emergencyReconciliation &&
+    saleType === "Service" &&
+    saleEpoch == null &&
+    status === "Paid"
         let matchedCustomerId = null
         if (loyaltyEligible && customerContact) {
             if (
@@ -1153,7 +1175,7 @@ router.post("/", async (req, res) => {
         // Prevent the cashier from collecting an amount based on a stale quote.
         // Current walk-in service checkout must explicitly acknowledge the
         // server's promotion identity, discount and final amount.
-        if (!appointmentId && saleType === "Service" && saleEpoch == null) {
+        if (!emergencyReconciliation && !appointmentId && saleType === "Service" && saleEpoch == null) {
             const expectedPromoId = body.expected_promotion_id == null
                 ? null : positiveId(body.expected_promotion_id, "Expected promotion")
             const expectedPromoDiscount = cents(
@@ -1290,9 +1312,13 @@ VALUES (
                 discountType ? discountPercent.toFixed(2) : null,
                 decimal(discountAmount),
                 discountType ? "apply" : null,
-                discountType ? discountReason : null,
-                redeemedRewardId ? rewardIssuedBy : null,
-                winningPromotionId,
+emergencyReconciliation
+    ? "Emergency regular-price reconciliation (owner/admin reviewed)"
+    : (discountType ? discountReason : null),
+emergencyReconciliation
+    ? req.user.user_id
+    : (redeemedRewardId ? rewardIssuedBy : null),
+winningPromotionId,
             ]
         )
         // ============================================
