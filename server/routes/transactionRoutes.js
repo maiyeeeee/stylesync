@@ -2,6 +2,7 @@ const express = require("express")
 const router = express.Router()
 const db = require("../db")
 const promiseDb = db.promise()
+router.use("/cart", require("./cartCheckoutRoutes"))
 // Promotions are selected on the server, never by cashier-provided percentages.
 const { getPromotionPrice } = require("../utils/promotionPricing")
 const philippineToday = () => new Intl.DateTimeFormat("en-CA", {

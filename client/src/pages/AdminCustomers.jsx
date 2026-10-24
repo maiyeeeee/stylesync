@@ -879,7 +879,16 @@ export default function AdminCustomers() {
                               {date(transaction.transaction_date)}
                             </td>
                             <td className="py-3 pr-3 font-medium text-gray-800">
-                              {transaction.service}
+                              {transaction.sale_type === "Mixed" && transaction.items?.length ? (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-purple-900">One checkout · {transaction.items.length} items</div>
+                                  {transaction.items.map((item, index) => (
+                                    <div key={`${transaction.transaction_id}-${index}`} className="text-xs text-gray-600">
+                                      {item.name} ({item.type}) ×{item.quantity} · {money(item.line_total)}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : transaction.service}
                             </td>
                             <td className="py-3 pr-3 text-gray-500">
                               {transaction.sale_type}

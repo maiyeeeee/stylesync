@@ -239,18 +239,26 @@ router.get("/", async (req, res) => {
     )
 
     const [topSellingServiceRows] = await connection.query(
-      `SELECT COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service') AS service,
-              COUNT(*) AS transactions,
-              COALESCE(SUM(COALESCE(quantity, 1)), 0) AS quantity,
-              COALESCE(SUM(amount), 0) AS revenue
-       FROM transactions
-       WHERE status = 'Paid'
-         AND (sale_type = 'Service' OR sale_type IS NULL)
-         AND transaction_date >= ? AND transaction_date < ?
-       GROUP BY COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service')
-       ORDER BY revenue DESC, transactions DESC, service ASC
-       LIMIT 10`,
-      [startDate, endDate]
+      `SELECT service, SUM(transactions) AS transactions,
+              SUM(quantity) AS quantity, SUM(revenue) AS revenue
+       FROM (
+         SELECT COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service') AS service,
+                COUNT(*) AS transactions, SUM(COALESCE(quantity, 1)) AS quantity,
+                SUM(amount) AS revenue
+         FROM transactions
+         WHERE status = 'Paid' AND (sale_type = 'Service' OR sale_type IS NULL)
+           AND transaction_date >= ? AND transaction_date < ?
+         GROUP BY service
+         UNION ALL
+         SELECT ti.item_name AS service, COUNT(*) AS transactions,
+                SUM(ti.quantity) AS quantity, SUM(ti.line_total) AS revenue
+         FROM transaction_items ti JOIN transactions t ON t.transaction_id = ti.transaction_id
+         WHERE t.status = 'Paid' AND t.sale_type = 'Mixed' AND ti.item_type = 'Service'
+           AND t.transaction_date >= ? AND t.transaction_date < ?
+         GROUP BY ti.item_name
+       ) service_rows GROUP BY service
+       ORDER BY revenue DESC, transactions DESC, service ASC LIMIT 10`,
+      [startDate, endDate, startDate, endDate]
     )
 
     const daysInPeriod = Math.round(
@@ -568,17 +576,26 @@ router.get("/", async (req, res) => {
     `)
 
     const [serviceRevenueRows] = await connection.query(
-      `SELECT COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service') AS service,
-              COUNT(*) AS paidTransactions,
-              COALESCE(SUM(COALESCE(quantity, 1)), 0) AS unitsSold,
-              COALESCE(SUM(amount), 0) AS revenue
-       FROM transactions
-       WHERE status = 'Paid'
-         AND (sale_type = 'Service' OR sale_type IS NULL)
-         AND transaction_date >= ? AND transaction_date < ?
-       GROUP BY COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service')
+      `SELECT service, SUM(paidTransactions) AS paidTransactions,
+              SUM(unitsSold) AS unitsSold, SUM(revenue) AS revenue
+       FROM (
+         SELECT COALESCE(NULLIF(TRIM(service), ''), 'Unspecified service') AS service,
+                COUNT(*) AS paidTransactions, SUM(COALESCE(quantity, 1)) AS unitsSold,
+                SUM(amount) AS revenue
+         FROM transactions
+         WHERE status = 'Paid' AND (sale_type = 'Service' OR sale_type IS NULL)
+           AND transaction_date >= ? AND transaction_date < ?
+         GROUP BY service
+         UNION ALL
+         SELECT ti.item_name AS service, COUNT(*) AS paidTransactions,
+                SUM(ti.quantity) AS unitsSold, SUM(ti.line_total) AS revenue
+         FROM transaction_items ti JOIN transactions t ON t.transaction_id = ti.transaction_id
+         WHERE t.status = 'Paid' AND t.sale_type = 'Mixed' AND ti.item_type = 'Service'
+           AND t.transaction_date >= ? AND t.transaction_date < ?
+         GROUP BY ti.item_name
+       ) service_rows GROUP BY service
        ORDER BY revenue DESC, paidTransactions DESC, service ASC`,
-      [startDate, endDate]
+      [startDate, endDate, startDate, endDate]
     )
 
     const [serviceDemandRows] = await connection.query(

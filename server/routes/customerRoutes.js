@@ -92,7 +92,7 @@ router.get("/", async (req, res) => {
           WHERE ${CONTACT_MATCH} =
                 TRIM(c.contact_number)
             AND t.status = 'Paid'
-            AND t.sale_type = 'Service'
+            AND (t.sale_type = 'Service' OR (t.sale_type = 'Mixed' AND EXISTS (SELECT 1 FROM transaction_items ti WHERE ti.transaction_id = t.transaction_id AND ti.item_type = 'Service')))
         ) AS paid_service_visits,
 
         (
@@ -177,7 +177,7 @@ router.get("/:id", async (req, res) => {
         COUNT(
           DISTINCT CASE
             WHEN t.status = 'Paid'
-             AND t.sale_type = 'Service'
+             AND (t.sale_type = 'Service' OR (t.sale_type = 'Mixed' AND EXISTS (SELECT 1 FROM transaction_items ti WHERE ti.transaction_id = t.transaction_id AND ti.item_type = 'Service')))
             THEN t.transaction_id
           END
         ) AS paid_service_visits,
@@ -196,7 +196,7 @@ router.get("/:id", async (req, res) => {
         MAX(
           CASE
             WHEN t.status = 'Paid'
-             AND t.sale_type = 'Service'
+             AND (t.sale_type = 'Service' OR (t.sale_type = 'Mixed' AND EXISTS (SELECT 1 FROM transaction_items ti WHERE ti.transaction_id = t.transaction_id AND ti.item_type = 'Service')))
             THEN t.transaction_date
           END
         ) AS last_service_visit
@@ -210,27 +210,31 @@ router.get("/:id", async (req, res) => {
       [contact]
     );
 
-    // Favorite services are based on paid service records.
+    // Legacy service rows plus itemized services in mixed checkouts.
+    // Each service line is counted once; parent checkout amount is not
+    // attributed to individual services.
     const [services] = await pool.query(
-      `
-      SELECT
-        t.service,
-        COUNT(*) AS visits,
-        COALESCE(SUM(t.amount), 0) AS spending
-
-      FROM transactions t
-      LEFT JOIN appointments a
-        ON a.id = t.appointment_id
-
-      WHERE ${CONTACT_MATCH} = ?
-        AND t.status = 'Paid'
-        AND t.sale_type = 'Service'
-
-      GROUP BY t.service
-      ORDER BY visits DESC, spending DESC
-      LIMIT 10
-      `,
-      [contact]
+      `SELECT service, SUM(visits) AS visits, SUM(spending) AS spending
+       FROM (
+         SELECT t.service AS service, COUNT(*) AS visits,
+                COALESCE(SUM(t.amount), 0) AS spending
+         FROM transactions t
+         LEFT JOIN appointments a ON a.id = t.appointment_id
+         WHERE ${CONTACT_MATCH} = ? AND t.status = 'Paid'
+           AND (t.sale_type = 'Service' OR t.sale_type IS NULL)
+         GROUP BY t.service
+         UNION ALL
+         SELECT ti.item_name AS service, SUM(ti.quantity) AS visits,
+                COALESCE(SUM(ti.line_total), 0) AS spending
+         FROM transactions t
+         LEFT JOIN appointments a ON a.id = t.appointment_id
+         JOIN transaction_items ti ON ti.transaction_id = t.transaction_id
+         WHERE ${CONTACT_MATCH} = ? AND t.status = 'Paid'
+           AND t.sale_type = 'Mixed' AND ti.item_type = 'Service'
+         GROUP BY ti.item_name
+       ) service_rows
+       GROUP BY service ORDER BY visits DESC, spending DESC LIMIT 10`,
+      [contact, contact]
     );
 
     // Include all matching transaction statuses in history.
@@ -262,6 +266,27 @@ router.get("/:id", async (req, res) => {
       `,
       [contact]
     );
+
+    // Attach itemized details to grouped history without multiplying
+    // parent transaction totals.
+    const mixedIds = history.filter(row => row.sale_type === 'Mixed')
+      .map(row => row.transaction_id);
+    if (mixedIds.length) {
+      const [lines] = await pool.query(
+        `SELECT transaction_id, item_type AS type, item_name AS name,
+                quantity, unit_price, line_total
+         FROM transaction_items WHERE transaction_id IN (?)
+         ORDER BY transaction_id DESC, item_id ASC`, [mixedIds]
+      );
+      const byId = new Map();
+      for (const line of lines) {
+        if (!byId.has(line.transaction_id)) byId.set(line.transaction_id, []);
+        byId.get(line.transaction_id).push(line);
+      }
+      for (const row of history) {
+        if (row.sale_type === 'Mixed') row.items = byId.get(row.transaction_id) || [];
+      }
+    }
 
     const [rewards] = await pool.query(
       `
@@ -424,7 +449,7 @@ router.post("/:id/rewards", async (req, res) => {
 
       WHERE ${CONTACT_MATCH} = ?
         AND t.status = 'Paid'
-        AND t.sale_type = 'Service'
+        AND (t.sale_type = 'Service' OR (t.sale_type = 'Mixed' AND EXISTS (SELECT 1 FROM transaction_items ti WHERE ti.transaction_id = t.transaction_id AND ti.item_type = 'Service')))
       `,
       [contact]
     );
