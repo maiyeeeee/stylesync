@@ -7,7 +7,6 @@ import {
     useRef,
     useState,
 } from "react"
-import { LuChartNoAxesCombined, LuReceiptText, LuWallet, LuCreditCard, LuShoppingCart, LuScissors, LuUserRound, LuPhone, LuPackage, LuClipboardList, LuBanknote, LuHistory, LuSparkles } from "react-icons/lu"
 import { API_URL, apiFetch } from "../lib/sessionApi"
 import { getEmergencyRecord, reconcileEmergencySale } from "../lib/offlineDb"
 
@@ -482,6 +481,8 @@ function normalizeRequiredPhone(value) {
 /** Online walk-in multi-item checkout. Appointment checkout remains in the original POS until backend parity. */
 function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = [], products = [] }) {
   const [step, setStep] = useState("cart");
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [completedSale, setCompletedSale] = useState(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState({});
@@ -631,29 +632,48 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
       } catch (refreshError) {
         console.error("Checkout saved, but history refresh failed:", refreshError);
       }
-      setCart({}); setCustomer(""); setCustomerContact(""); setSelectedCustomer(null); setCustomerMatches([]); setCash(""); setReference("");
-      setQuote(null); setReviewed(false); setStep("cart"); setCheckoutKey(crypto.randomUUID());
-      onClose();
+      setCompletedSale({ ...result, customer, customerContact, payment, cash, reference, quote });
+      setStep("complete");
     } catch (e) {
       setSaveError(e.message || "Unable to save checkout. Check history before retrying.");
       // Preserve the idempotency key to prevent duplicate sales on retry.
     } finally { setSaving(false); }
   };
 
+  const startNewSale = () => {
+    setCart({}); setCustomer(""); setCustomerContact(""); setSelectedCustomer(null);
+    setCustomerMatches([]); setCash(""); setReference(""); setQuote(null);
+    setReviewed(false); setSaveError(""); setShowDiscount(false);
+    setCompletedSale(null); setPayment("Cash"); setStep("cart");
+    setCheckoutKey(crypto.randomUUID());
+  };
+  const printCompletedReceipt = () => {
+    if (!completedSale) return;
+    const receipt = document.getElementById("stylesync-completed-receipt");
+    if (!receipt) return;
+    const popup = window.open("", "_blank", "width=480,height=740");
+    if (!popup) { setSaveError("Please allow pop-ups to print the receipt."); return; }
+    const safe = receipt.cloneNode(true);
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>StyleSync Receipt</title><style>body{font:14px Arial,sans-serif;max-width:360px;margin:28px auto;color:#292038}h2{text-align:center;color:#6d28d9}p{margin:7px 0}.receipt-row{display:flex;justify-content:space-between;gap:16px;padding:7px 0;border-bottom:1px dashed #ddd}.receipt-total{font-weight:700;font-size:18px}button{display:none}@media print{body{margin:8px auto}}</style></head><body>${safe.innerHTML}</body></html>`;
+    popup.document.open(); popup.document.write(html); popup.document.close();
+    popup.focus(); popup.print();
+  };
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3" role="presentation">
-      <section role="dialog" aria-modal="true" aria-label="Multi-item checkout" className="flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-label="Point of sale checkout" className="stylesync-checkout-dialog flex max-h-[95vh] w-full max-w-7xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <header className="flex items-center justify-between border-b border-purple-100 px-5 py-4">
-          <div><h2 className="text-xl font-bold text-purple-950">New Sale · Multi-Item Checkout</h2><p className="text-xs text-purple-600">Online walk-in · Server-calculated promotions and loyalty · One payment</p></div>
+          <div><h2 className="text-xl font-bold text-purple-950">Point of Sale · Current Sale</h2><p className="text-xs text-purple-600">Online walk-in · Services + products · Server-calculated discounts</p></div>
           <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border px-3 py-2 text-sm">Close</button>
         </header>
         <div className="flex gap-2 border-b px-5 py-3 text-xs font-semibold text-purple-800">
-          {["cart", "payment", "review"].map((x, i) => <span key={x} className={`rounded-full px-3 py-1 ${step === x ? "bg-purple-700 text-white" : "bg-purple-50"}`}>{i + 1}. {x === "cart" ? "Cart" : x === "payment" ? "Payment" : "Review"}</span>)}
+          {["cart", "payment", "review", "complete"].map((x, i) => <span key={x} className={`rounded-full px-3 py-1 ${step === x ? "bg-purple-700 text-white" : "bg-purple-50"}`}>{i + 1}. {x === "cart" ? "Cart" : x === "payment" ? "Payment" : x === "review" ? "Review" : "Complete"}</span>)}
         </div>
         <div className="overflow-y-auto p-5">
-          {step === "cart" && <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
-            <div className="space-y-3">
+          {step === "cart" && <div className="grid items-start gap-4 xl:grid-cols-[1.12fr_0.94fr_1fr]">
+            <section aria-label="Add to sale" className="min-w-0 space-y-3 rounded-2xl border border-purple-100 bg-purple-50/30 p-4">
+              <div><h3 className="text-base font-bold text-purple-950">01 · Add to Sale</h3><p className="mt-1 text-xs text-slate-500">Choose services and products for this walk-in sale.</p></div>
               <div className="flex gap-2">
                 <input className="w-full rounded-xl border p-3 text-sm" placeholder="Search services or products" value={search} onChange={e => setSearch(e.target.value)} />
                 <select className="rounded-xl border p-2 text-sm" value={category} onChange={e => setCategory(e.target.value)}><option>All</option><option>Service</option><option>Product</option></select>
@@ -661,12 +681,23 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
               <div className="max-h-[50vh] space-y-2 overflow-y-auto">
                 {filtered.map(item => <div key={item.key} className="flex items-center justify-between gap-2 rounded-xl border p-3"><div className="min-w-0"><p className="truncate font-medium">{item.name}</p><p className="text-xs text-slate-500">{item.type} · {peso(item.price)}{item.type === "Product" ? ` · ${item.stock} available` : ""}</p></div><button type="button" disabled={item.type === "Product" && item.stock < 1} onClick={() => adjust(item, 1)} className="rounded-lg bg-purple-700 px-3 py-2 text-sm text-white disabled:opacity-40">Add</button></div>)}
               </div>
-            </div>
-            <div className="space-y-3">
+            </section>
+            <section aria-label="Current sale" className="min-w-0 space-y-3 rounded-2xl border border-purple-100 bg-white p-4">
+              <div><h3 className="text-base font-bold text-purple-950">02 · Current Sale</h3><p className="mt-1 text-xs text-slate-500">Review quantities and your subtotal.</p></div>
               <h3 className="font-bold text-purple-950">Cart · {lines.length} items</h3>
               {lines.length === 0 && <p className="text-sm text-slate-500">Add a service or product to begin.</p>}
               {lines.map(x => <div key={x.key} className="flex items-center justify-between gap-2 rounded-xl bg-purple-50 p-3"><div><p className="font-medium">{x.name}</p><p className="text-xs">{peso(x.price)} × {x.quantity}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => adjust(x, -1)} className="rounded border px-2">−</button><span>{x.quantity}</span><button type="button" onClick={() => adjust(x, 1)} disabled={x.type === "Service" || x.quantity >= x.stock} className="rounded border px-2 disabled:opacity-40">+</button></div></div>)}
               <div className="flex justify-between border-t pt-3 font-semibold"><span>Subtotal before discounts</span><span>{peso(subtotalCents / 100)}</span></div>
+              <div className="rounded-xl border border-purple-100 p-3">
+                <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-purple-900">
+                  <span>Enable Discount <span className="font-normal text-slate-500">(view eligible savings)</span></span>
+                  <input type="checkbox" checked={showDiscount} onChange={e => setShowDiscount(e.target.checked)} className="h-4 w-4 accent-purple-700" />
+                </label>
+                {showDiscount && <p className="mt-2 text-xs text-slate-600">Eligible promotions and owner-issued loyalty rewards are calculated automatically by the server at payment review. Cashiers cannot manually change discount percentages.</p>}
+              </div>
+            </section>
+            <section aria-label="Customer and payment" className="min-w-0 space-y-3 rounded-2xl border border-purple-100 bg-purple-50/30 p-4">
+              <div><h3 className="text-base font-bold text-purple-950">03 · Customer &amp; Payment</h3><p className="mt-1 text-xs text-slate-500">Confirm the customer before reviewing payment.</p></div>
               <label className="block text-sm">Customer name
                 <input value={customer} onChange={e => { setCustomer(e.target.value); setSelectedCustomer(null); setCustomerContact(""); invalidateQuote(); }} readOnly={Boolean(selectedCustomer)} maxLength={100} className="mt-1 w-full rounded-xl border p-3" placeholder="Type a name to find registered customers" />
               </label>
@@ -707,10 +738,57 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
               {selectedCustomer && <p className="text-xs text-green-800">The confirmed contact will be saved with this transaction for Customer Intelligence.</p>}
               <button type="button" onClick={previewCart} disabled={!lines.length || !customer.trim() || quoting || !navigator.onLine} className="w-full rounded-xl bg-purple-700 p-3 font-semibold text-white disabled:opacity-40">{quoting ? "Calculating…" : "Continue to payment →"}</button>
               {saveError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
-            </div>
+            </section>
           </div>}
-          {step === "payment" && quote && <div className="mx-auto max-w-lg space-y-4"><h3 className="text-xl font-bold text-purple-950">Payment</h3><p className="text-sm text-slate-600">Promotion saving: {peso(Number(quote.promotion_discount))} · Loyalty saving: {peso(Number(quote.loyalty_discount))}</p><p className="rounded-xl bg-purple-50 p-3 text-sm">Applied: <strong>{quote.discount_type === "loyalty" ? "Owner-issued loyalty" : quote.discount_type === "promotion" ? "Promotion" : "No discount"}</strong> · Discount: <strong>{peso(Number(quote.discount_amount))}</strong>{quote.reward_id && quote.discount_type !== "loyalty" ? " · Loyalty saved for later" : ""}</p><div className="flex justify-between text-xl font-bold"><span>Amount due</span><span>{peso(Number(quote.amount))}</span></div><label className="block text-sm">Payment method<select value={payment} onChange={e => { setPayment(e.target.value); setReviewed(false); }} className="mt-1 w-full rounded-xl border p-3"><option>Cash</option><option>GCash</option></select></label>{payment === "Cash" ? <label className="block text-sm">Cash received<input type="number" min="0" step="0.01" value={cash} onChange={e => { setCash(e.target.value); setReviewed(false); }} className="mt-1 w-full rounded-xl border p-3" /><span className="mt-1 block text-xs text-slate-500">Change: {peso(Math.max(0, (cashCents - payableCents) / 100))}</span></label> : <label className="block text-sm">GCash reference<input value={reference} onChange={e => { setReference(e.target.value); setReviewed(false); }} className="mt-1 w-full rounded-xl border p-3" placeholder="Verified payment reference" /></label>}<div className="flex gap-3"><button type="button" onClick={() => { setQuote(null); setStep("cart"); }} className="flex-1 rounded-xl border p-3">Back to items</button><button type="button" disabled={!canPay} onClick={() => setStep("review")} className="flex-1 rounded-xl bg-purple-700 p-3 text-white disabled:opacity-40">Review sale →</button></div></div>}
-          {step === "review" && quote && <div className="mx-auto max-w-lg space-y-3"><h3 className="text-xl font-bold text-purple-950">Final review</h3><p className="text-sm text-slate-600">{customer} · {payment}</p>{quote.items.map((x, i) => <div key={`${x.type}:${x.id}:${i}`} className="flex justify-between border-b py-2 text-sm"><span>{x.name} × {x.quantity}{Number(x.discount_amount) > 0 ? ` (−${peso(Number(x.discount_amount))})` : ""}</span><strong>{peso(Number(x.final_line_total))}</strong></div>)}<div className="flex justify-between text-sm"><span>Subtotal</span><span>{peso(Number(quote.subtotal))}</span></div><div className="flex justify-between text-sm"><span>Discount</span><span>−{peso(Number(quote.discount_amount))}</span></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{peso(Number(quote.amount))}</span></div><label className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} /><span>I verified the customer, items, discounts, and payment.</span></label><div className="flex gap-3"><button type="button" onClick={() => setStep("payment")} className="flex-1 rounded-xl border p-3">Back</button><button type="button" disabled={!reviewed || saving || !canPay || !navigator.onLine} onClick={saveCart} className="flex-1 rounded-xl bg-purple-700 p-3 text-white disabled:opacity-40">{saving ? "Saving…" : "Confirm & save sale"}</button></div>{saveError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}<p className="text-xs text-slate-500">Current online walk-in checkout only. Use the existing appointment POS for bookings and Emergency Mode until unified backend support is tested.</p></div>}
+          {step === "payment" && quote && (
+            <div className="mx-auto grid max-w-4xl gap-5 lg:grid-cols-[1fr_0.85fr]">
+              <section className="rounded-2xl border border-purple-100 bg-white p-5 shadow-sm space-y-4">
+                <div><p className="text-xs font-bold uppercase tracking-widest text-purple-500">Step 2 · Payment</p><h3 className="mt-1 text-xl font-bold text-purple-950">Choose payment method</h3><p className="mt-1 text-sm text-slate-500">Confirm payment details before final review.</p></div>
+                <div className="grid grid-cols-2 gap-3">
+                  {["Cash", "GCash"].map(method => <button key={method} type="button" aria-pressed={payment === method} onClick={() => { setPayment(method); setReviewed(false); }} className={`rounded-xl border p-4 text-left text-sm font-semibold transition-colors ${payment === method ? "border-purple-600 bg-purple-50 text-purple-900 ring-2 ring-purple-100" : "border-slate-200 bg-white text-slate-600 hover:border-purple-200"}`}>{method === "Cash" ? "₱ " : "◈ "}{method}</button>)}
+                </div>
+                {payment === "Cash" ? <label className="block text-sm font-medium text-slate-700">Cash received<input type="number" min="0" step="0.01" value={cash} onChange={e => { setCash(e.target.value); setReviewed(false); }} className="mt-2 w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-purple-400" placeholder="0.00" /><span className="mt-2 block text-sm text-emerald-700">Change due: <strong>{peso(Math.max(0, (cashCents - payableCents) / 100))}</strong></span></label> : <label className="block text-sm font-medium text-slate-700">Verified GCash reference<input value={reference} onChange={e => { setReference(e.target.value); setReviewed(false); }} className="mt-2 w-full rounded-xl border border-slate-200 p-3 outline-none focus:border-purple-400" placeholder="Enter payment reference" /><span className="mt-2 block text-xs font-normal text-slate-500">Verify payment outside StyleSync before continuing.</span></label>}
+                <div className="flex flex-wrap gap-3 pt-2"><button type="button" onClick={() => { setQuote(null); setStep("cart"); }} className="flex-1 rounded-xl border border-purple-200 px-4 py-3 text-sm font-semibold text-purple-800">← Edit cart</button><button type="button" disabled={!canPay} onClick={() => setStep("review")} className="flex-1 rounded-xl bg-purple-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-40">Review sale →</button></div>
+              </section>
+              <aside className="rounded-2xl border border-purple-100 bg-gradient-to-b from-purple-50 to-white p-5 space-y-4">
+                <p className="text-xs font-bold uppercase tracking-widest text-purple-600">Sale summary</p><div><p className="text-sm text-slate-500">Customer</p><p className="font-semibold text-purple-950">{customer}</p><p className="text-xs text-slate-500">{customerContact}</p></div>
+                <div className="space-y-2 border-t border-purple-100 pt-4 text-sm"><div className="flex justify-between gap-3"><span>Subtotal</span><strong>{peso(Number(quote.subtotal))}</strong></div><div className="flex justify-between gap-3 text-purple-700"><span>Applied discount</span><strong>−{peso(Number(quote.discount_amount))}</strong></div><p className="text-xs text-slate-500">{quote.discount_type === "loyalty" ? "Owner-issued loyalty reward" : quote.discount_type === "promotion" ? "Eligible promotion" : "No discount applied"}</p>{quote.reward_id && quote.discount_type !== "loyalty" && <p className="text-xs text-emerald-700">Loyalty reward preserved for later.</p>}</div>
+                <div className="rounded-xl bg-purple-800 p-4 text-white"><p className="text-xs text-purple-100">Amount due</p><p className="mt-1 text-3xl font-extrabold">{peso(Number(quote.amount))}</p></div>
+              </aside>
+            </div>
+          )}
+          {step === "complete" && completedSale && <div className="mx-auto max-w-2xl space-y-5 py-4">
+            <div className="text-center"><div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl font-bold text-emerald-700">✓</div><h3 className="text-2xl font-extrabold text-purple-950">Transaction Complete!</h3><p className="mt-1 text-sm text-slate-600">Payment saved successfully · Transaction #{completedSale.id}</p></div>
+            <div id="stylesync-completed-receipt" className="rounded-2xl border border-purple-200 bg-white p-6 shadow-sm">
+              <h2 className="text-center text-xl font-extrabold text-purple-900">Dahling’s Salon & Spa</h2><p className="text-center text-xs text-slate-500">StyleSync · Official Sale Receipt</p>
+              <div className="my-4 border-t border-dashed border-purple-200" />
+              <p className="text-xs text-slate-600">Receipt #{completedSale.id} · {new Date().toLocaleString("en-PH", { timeZone: "Asia/Manila" })}</p>
+              <p className="mt-1 text-sm font-semibold">{completedSale.customer}</p><p className="text-xs text-slate-500">{completedSale.customerContact}</p>
+              <div className="my-3 border-t border-dashed border-purple-200" />
+              {completedSale.quote.items.map((item, i) => <div className="receipt-row flex justify-between gap-4 border-b border-dashed py-2 text-sm" key={`${item.type}-${item.id}-${i}`}><div><p className="font-medium">{item.name} × {item.quantity}</p><p className="text-xs text-slate-500">{item.type}{Number(item.discount_amount) > 0 ? ` · Discount −${peso(Number(item.discount_amount))}` : ""}</p></div><strong>{peso(Number(item.final_line_total))}</strong></div>)}
+              <div className="receipt-row mt-3 flex justify-between text-sm"><span>Subtotal</span><span>{peso(Number(completedSale.quote.subtotal))}</span></div>
+              <div className="receipt-row flex justify-between text-sm"><span>Discount</span><span>−{peso(Number(completedSale.quote.discount_amount))}</span></div>
+              <div className="receipt-row receipt-total flex justify-between border-t py-3 text-lg font-extrabold text-purple-900"><span>Total Paid</span><span>{peso(Number(completedSale.quote.amount))}</span></div>
+              <div className="receipt-row flex justify-between text-sm"><span>Payment</span><span>{completedSale.payment}</span></div>
+              {completedSale.payment === "Cash" ? <><div className="receipt-row flex justify-between text-sm"><span>Cash received</span><span>{peso(Number(completedSale.cash))}</span></div><div className="receipt-row flex justify-between text-sm"><span>Change</span><span>{peso(Math.max(0, Number(completedSale.cash) - Number(completedSale.quote.amount)))}</span></div></> : <p className="text-xs text-slate-600">GCash reference: {completedSale.reference}</p>}
+              <p className="mt-5 text-center text-xs text-purple-800">Thank you for visiting Dahling’s Salon & Spa! 💜</p>
+            </div>
+            {saveError && <p role="alert" className="text-sm text-red-700">{saveError}</p>}
+            <div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={printCompletedReceipt} className="rounded-xl border border-purple-300 p-3 text-sm font-bold text-purple-800">Print Receipt</button><button type="button" onClick={startNewSale} className="rounded-xl bg-purple-700 p-3 text-sm font-bold text-white">New Transaction</button><button type="button" onClick={onClose} className="rounded-xl border p-3 text-sm font-semibold">View Transactions</button></div>
+          </div>}
+          {step === "review" && quote && (
+            <div className="mx-auto max-w-3xl space-y-5">
+              <div className="text-center"><p className="text-xs font-bold uppercase tracking-widest text-purple-500">Step 3 · Final confirmation</p><h3 className="mt-1 text-2xl font-extrabold text-purple-950">Payment Review</h3><p className="mt-1 text-sm text-slate-500">Check every detail before recording the sale.</p></div>
+              <div className="overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm">
+                <div className="grid gap-3 bg-purple-50 p-5 text-sm sm:grid-cols-2"><div><p className="text-xs text-slate-500">Customer</p><strong className="text-purple-950">{customer}</strong><p className="text-xs text-slate-500">{customerContact}</p></div><div><p className="text-xs text-slate-500">Payment method</p><strong className="text-purple-950">{payment}</strong>{payment === "Cash" ? <p className="text-xs text-slate-500">Received {peso(Number(cash))} · Change {peso(Math.max(0, (cashCents - payableCents) / 100))}</p> : <p className="break-all text-xs text-slate-500">Reference: {reference}</p>}</div></div>
+                <div className="space-y-3 p-5"><h4 className="text-sm font-bold text-purple-950">Items purchased</h4>{quote.items.map((x, i) => <div key={`${x.type}:${x.id}:${i}`} className="flex items-start justify-between gap-4 border-b border-dashed border-slate-200 pb-3 text-sm"><div><p className="font-semibold text-slate-800">{x.name} × {x.quantity}</p><p className="text-xs text-slate-500">{x.type}{Number(x.discount_amount) > 0 ? ` · Savings ${peso(Number(x.discount_amount))}` : ""}</p></div><strong className="whitespace-nowrap text-purple-950">{peso(Number(x.final_line_total))}</strong></div>)}<div className="flex justify-between text-sm"><span>Subtotal</span><strong>{peso(Number(quote.subtotal))}</strong></div><div className="flex justify-between text-sm text-purple-700"><span>Discount</span><strong>−{peso(Number(quote.discount_amount))}</strong></div><div className="flex items-center justify-between border-t border-purple-100 pt-4 text-lg font-extrabold text-purple-950"><span>Total to collect</span><span>{peso(Number(quote.amount))}</span></div></div>
+              </div>
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} className="mt-1 h-4 w-4 accent-purple-700" /><span>I verified the customer, items, discounts, and payment. I understand that confirming will record the transaction.</span></label>
+              {saveError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
+              <div className="grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setStep("payment")} disabled={saving} className="rounded-xl border border-purple-200 p-3 text-sm font-semibold text-purple-800 disabled:opacity-40">← Edit payment</button><button type="button" disabled={!reviewed || saving || !canPay || !navigator.onLine} onClick={saveCart} className="rounded-xl bg-purple-700 p-3 text-sm font-bold text-white disabled:opacity-40">{saving ? "Saving…" : "Confirm & save sale"}</button></div>
+              <p className="text-center text-xs text-slate-500">Online walk-in checkout only. Appointment and Emergency Mode checkout remain in the existing POS.</p>
+            </div>
+          )}
         </div>
       </section>
     </div>
@@ -2283,7 +2361,10 @@ function AdminTransactions() {
                         POS / Transactions
                     </h1>
 
-                    <p className="mt-2 text-sm text-gray-500">Manage walk-in sales, payments and appointment checkout in one place.</p>
+                    <p className="mt-2 text-sm text-gray-500">
+                        Record a sale or check out
+                        an existing appointment.
+                    </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -2376,9 +2457,8 @@ function AdminTransactions() {
                 ].map(([label, value], index) => (
                     <div
                         key={label}
-                        className={`${panel} pos-stat-card pos-stat-${index}`}
+                        className={panel}
                     >
-                        <span className="pos-stat-icon" aria-hidden="true">{[<LuChartNoAxesCombined key="sales" />, <LuReceiptText key="transactions" />, <LuWallet key="payments" />][index]}</span>
                         <p className="text-sm text-gray-500">
                             {label}
                         </p>
@@ -2395,17 +2475,15 @@ function AdminTransactions() {
 
             <div className="pos-workspace grid items-start gap-6 xl:grid-cols-2">
                 <section className={`${panel} pos-record-panel`}>
-                    <div className="pos-section-heading">
-                        <span className="pos-heading-icon" aria-hidden="true"><LuShoppingCart /></span>
-                        <div><p className="pos-eyebrow">NEW SALE</p><h2>Record a transaction</h2><p className="pos-section-subtitle">Complete the details below to record a payment.</p></div>
-                    </div>
+                    <h2 className="mb-5 text-lg font-bold text-purple-950">
+                        Record a transaction
+                    </h2>
 
                     <form onSubmit={save}>
                         <fieldset
                             disabled={disabled}
                             className="space-y-4"
                         >
-                            <div className="pos-form-step"><span className="pos-step-number"><LuUserRound /></span><div><h3>Customer details</h3><p>Choose a source and identify the customer.</p></div></div>
                             <Field label="Transaction source">
                                 <select
                                     className={input}
@@ -2505,7 +2583,6 @@ function AdminTransactions() {
                                         />
                                     </Field>
 
-                                    <div className="pos-form-step"><span className="pos-step-number"><LuScissors /></span><div><h3>Sale details</h3><p>Select the service or product and review its price.</p></div></div>
                                     <Field label="Sale type">
                                         <select
                                             className={input}
@@ -2703,7 +2780,6 @@ function AdminTransactions() {
                                 )}
                             </div>
 
-                            <div className="pos-form-step"><span className="pos-step-number"><LuCreditCard /></span><div><h3>Payment summary</h3><p>Review discounts, deposits and the amount due.</p></div></div>
                             <Field label="Original sale price before promotion, loyalty and deposit (₱)">
                                 <input
                                     required
@@ -2859,11 +2935,16 @@ function AdminTransactions() {
                     </form>
                 </section>
 
-                <section className={`${panel} pos-receipt-panel`}>
-                    <div className="pos-section-heading"><span className="pos-heading-icon" aria-hidden="true"><LuReceiptText /></span><div><p className="pos-eyebrow">PAYMENT RECORD</p><h2>Saved receipt</h2><p className="pos-section-subtitle">Your most recently selected transaction.</p></div></div>
+                <section className={panel}>
+                    <h2 className="text-lg font-bold text-purple-950">
+                        Saved receipt
+                    </h2>
 
                     {!receipt ? (
-                        <div className="pos-empty-receipt" role="status"><div className="pos-empty-receipt-icon" aria-hidden="true"><LuReceiptText /></div><h3>No receipt selected yet</h3><p>Once you save a transaction, its receipt will appear here. You can also select View in the history.</p></div>
+                        <p className="mt-5 rounded-xl border border-dashed border-purple-200 p-10 text-center text-sm text-gray-500">
+                            Save a transaction or select View
+                            in the history.
+                        </p>
                     ) : (
                         <div className="mt-5 space-y-4 text-sm">
                             <p className="font-bold text-purple-800">
@@ -2984,14 +3065,14 @@ function AdminTransactions() {
                 </section>
             </div>
 
-            <section className={`${panel} pos-history-panel`}>
+            <section className={panel}>
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-purple-500">
                             SALES RECORDS
                         </p>
 
-                        <h2 className="pos-history-title text-lg font-bold text-purple-950"><LuHistory aria-hidden="true" />
+                        <h2 className="text-lg font-bold text-purple-950">
                             Transaction history
                         </h2>
 
@@ -3256,7 +3337,7 @@ function AdminTransactions() {
                                                     }
                                                 >
                                                     Balance:{" "}
-                                                    <span className={`pos-payment-badge ${row.payment === "GCash" ? "pos-payment-gcash" : row.payment === "Cash" ? "pos-payment-cash" : ""}`}>{row.payment}</span>
+                                                    {row.payment}
                                                 </p>
                                             ) : (
                                                 <p>

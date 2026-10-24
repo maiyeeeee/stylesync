@@ -1,5 +1,3 @@
-
-
 @import "@fontsource/dm-sans/latin-400.css";
 
 @import "@fontsource/dm-sans/latin-500.css";
@@ -15,8 +13,6 @@
 @import "@fontsource/cormorant-garamond/latin-400-italic.css";
 
 @import "tailwindcss";
-
-
 
 :root {
 
@@ -56,8 +52,6 @@
 
 }
 
-
-
 @theme inline {
 
   --font-sans: "DM Sans", sans-serif;
@@ -95,8 +89,6 @@
   --color-ring: var(--ring);
 
   --radius-lg: var(--radius);
-
-
 
   /* Shared management brand palette */
 
@@ -140,8 +132,6 @@
 
 }
 
-
-
 @layer base {
 
   * {
@@ -150,8 +140,6 @@
 
   }
 
-
-
   html {
 
     scroll-behavior: smooth;
@@ -159,8 +147,6 @@
     scroll-padding-top: 100px;
 
   }
-
-
 
   body {
 
@@ -176,39 +162,23 @@
 
   }
 
-
-
   button,
-
   input,
-
   select,
-
   textarea {
-
     font: inherit;
-
   }
-
-
 
   button,
-
   [role="button"] {
-
     cursor: pointer;
-
   }
-
-
 
   button:disabled {
 
     cursor: not-allowed;
 
   }
-
-
 
   a,
 
@@ -224,8 +194,6 @@
 
   }
 
-
-
   :focus-visible {
 
     outline: 2px solid var(--ring);
@@ -233,8 +201,6 @@
     outline-offset: 4px;
 
   }
-
-
 
   ::selection {
 
@@ -244,8 +210,6 @@
 
   }
 
-
-
   img {
 
     display: block;
@@ -254,8 +218,6 @@
 
   }
 
-
-
   main:focus {
 
     outline: none;
@@ -263,8 +225,6 @@
   }
 
 }
-
-
 
 @layer components {
 
@@ -276,8 +236,6 @@
 
 }
 
-
-
 .site-container {
 
   width: min(1280px, calc(100% - 112px));
@@ -286,8 +244,6 @@
 
 }
 
-
-
 .public-site {
 
   overflow: clip;
@@ -295,8 +251,6 @@
   background: var(--background);
 
 }
-
-
 
 .announcement-bar {
 
@@ -320,8 +274,6 @@
 
 }
 
-
-
 .announcement-bar span:last-child {
 
   display: flex;
@@ -332,8 +284,6 @@
 
 }
 
-
-
 .announcement-bar svg {
 
   width: 12px;
@@ -341,8 +291,6 @@
   height: 12px;
 
 }
-
-
 
 .site-header {
 
@@ -360,8 +308,6 @@
 
 }
 
-
-
 .nav-inner {
 
   display: flex;
@@ -376,8 +322,6 @@
 
 }
 
-
-
 .brand {
 
   display: inline-flex;
@@ -391,8 +335,6 @@
   flex-shrink: 0;
 
 }
-
-
 
 .brand-mark {
 
@@ -416,8 +358,6 @@
 
 }
 
-
-
 .brand-mark > img {
 
   position: absolute;
@@ -434,8 +374,6 @@
 
 }
 
-
-
 .brand-symbol {
 
   width: 54px;
@@ -443,8 +381,6 @@
   height: 54px;
 
 }
-
-
 
 .hero-note-icon .brand-mark {
 
@@ -454,8 +390,6 @@
 
 }
 
-
-
 .hero-seal .brand-mark {
 
   width: 70px;
@@ -464,8 +398,6 @@
 
 }
 
-
-
 .care-ribbon .brand-mark {
 
   width: 26px;
@@ -473,8 +405,6 @@
   height: 26px;
 
 }
-
-
 
 .booking-summary > .brand-mark {
 
@@ -487,8 +417,6 @@
   margin-bottom: 16px;
 
 }
-
-
 
 .booking-cta .cta-brand {
 
@@ -508,8 +436,6 @@
 
 }
 
-
-
 .brand-type {
 
   display: flex;
@@ -517,8 +443,6 @@
   flex-direction: column;
 
 }
-
-
 
 .brand-type > span {
 
@@ -534,8 +458,6 @@
 
 }
 
-
-
 .brand-type small {
 
   margin-top: 6px;
@@ -548,8 +470,6 @@
 
 }
 
-
-
 .desktop-nav {
 
   display: flex;
@@ -559,8 +479,6 @@
   font-size: 12px;
 
 }
-
-
 
 .desktop-nav a {
 
@@ -572,8 +490,6 @@
 
 }
 
-
-
 .desktop-nav a:hover,
 
 .desktop-nav a.active {
@@ -581,8 +497,6 @@
   color: var(--primary);
 
 }
-
-
 
 .desktop-nav a.active::after {
 
@@ -604,8 +518,6 @@
 
 }
 
-
-
 .nav-actions {
 
   display: flex;
@@ -616,15 +528,11 @@
 
 }
 
-
-
 .mobile-menu {
 
   display: none;
 
 }
-
-
 
 .skip-link {
 
@@ -646,15 +554,11 @@
 
 }
 
-
-
 .skip-link:focus {
 
   top: 15px;
 
 }
-
-
 
 .mobile-nav {
 
@@ -665,8 +569,6 @@
   margin-block: 30px;
 
 }
-
-
 
 .mobile-nav a {
 
@@ -680,8 +582,6 @@
 
 }
 
-
-
 .mobile-nav a.active {
 
   color: var(--primary);
@@ -690,23 +590,17 @@
 
 }
 
-
-
 .sheet-overlay {
 
   animation: fade-in 0.2s ease;
 
 }
 
-
-
 .sheet-content {
 
   animation: slide-in 0.25s ease;
 
 }
-
-
 
 .eyebrow {
 
@@ -726,8 +620,6 @@
 
 }
 
-
-
 .eyebrow > span {
 
   width: 5px;
@@ -739,8 +631,6 @@
   background: #a148d0;
 
 }
-
-
 
 .home-hero {
 
@@ -758,15 +648,11 @@
 
 }
 
-
-
 .hero-copy {
 
   padding: 25px 0 20px;
 
 }
-
-
 
 .hero-copy h1 {
 
@@ -786,8 +672,6 @@
 
 }
 
-
-
 .public-site em {
 
   font-weight: 400;
@@ -795,8 +679,6 @@
   color: #8b24c8;
 
 }
-
-
 
 .hero-description {
 
@@ -809,8 +691,6 @@
   color: var(--muted-foreground);
 
 }
-
-
 
 .hero-actions {
 
@@ -826,15 +706,11 @@
 
 }
 
-
-
 .hero-actions [data-slot="button"] {
 
   font-size: 12px;
 
 }
-
-
 
 .text-link {
 
@@ -856,15 +732,11 @@
 
 }
 
-
-
 .text-link:hover {
 
   text-decoration: underline;
 
 }
-
-
 
 .text-link svg {
 
@@ -876,15 +748,11 @@
 
 }
 
-
-
 .text-link:hover svg {
 
   transform: translate(2px, -2px);
 
 }
-
-
 
 .hero-note {
 
@@ -897,8 +765,6 @@
   margin-top: 38px;
 
 }
-
-
 
 .hero-note-icon {
 
@@ -920,8 +786,6 @@
 
 }
 
-
-
 .hero-note p {
 
   font-size: 10px;
@@ -932,8 +796,6 @@
 
 }
 
-
-
 .hero-note strong {
 
   font-weight: 500;
@@ -941,8 +803,6 @@
   color: #4f4149;
 
 }
-
-
 
 .hero-visual {
 
@@ -955,8 +815,6 @@
   background: #dfd6d0;
 
 }
-
-
 
 .hero-photo {
 
@@ -973,8 +831,6 @@
   border-radius: inherit;
 
 }
-
-
 
 .hero-photo-shade {
 
@@ -998,8 +854,6 @@
 
 }
 
-
-
 .hero-photo-label {
 
   position: absolute;
@@ -1015,8 +869,6 @@
   color: #fff;
 
 }
-
-
 
 .hero-caption {
 
@@ -1038,8 +890,6 @@
 
 }
 
-
-
 .hero-caption > span {
 
   font-family: var(--font-display);
@@ -1050,15 +900,11 @@
 
 }
 
-
-
 .hero-caption em {
 
   color: #f2dce5;
 
 }
-
-
 
 .hero-caption a {
 
@@ -1080,15 +926,11 @@
 
 }
 
-
-
 .hero-caption a:hover {
 
   background: #ffffff30;
 
 }
-
-
 
 .hero-seal {
 
@@ -1126,15 +968,11 @@
 
 }
 
-
-
 .hero-seal svg {
 
   font-size: 29px;
 
 }
-
-
 
 .hero-seal span {
 
@@ -1147,8 +985,6 @@
   text-align: center;
 
 }
-
-
 
 .scroll-cue {
 
@@ -1170,15 +1006,11 @@
 
 }
 
-
-
 .scroll-cue svg {
 
   font-size: 13px;
 
 }
-
-
 
 .care-ribbon {
 
@@ -1204,8 +1036,6 @@
 
 }
 
-
-
 .care-ribbon svg {
 
   font-size: 20px;
@@ -1216,15 +1046,11 @@
 
 }
 
-
-
 .section-space {
 
   padding-block: 84px;
 
 }
-
-
 
 .section-heading {
 
@@ -1239,8 +1065,6 @@
   margin-bottom: 35px;
 
 }
-
-
 
 .section-heading h2,
 
@@ -1260,15 +1084,11 @@
 
 }
 
-
-
 .section-heading h2 {
 
   margin-top: 13px;
 
 }
-
-
 
 .section-heading > div:last-child > p {
 
@@ -1280,15 +1100,11 @@
 
 }
 
-
-
 .section-heading .text-link {
 
   margin-top: 9px;
 
 }
-
-
 
 .category-grid {
 
@@ -1299,8 +1115,6 @@
   gap: 22px;
 
 }
-
-
 
 .category-photo {
 
@@ -1316,8 +1130,6 @@
 
 }
 
-
-
 .category-photo img {
 
   width: 100%;
@@ -1330,15 +1142,11 @@
 
 }
 
-
-
 .category-card:hover .category-photo img {
 
   transform: scale(1.045);
 
 }
-
-
 
 .category-number {
 
@@ -1364,8 +1172,6 @@
 
 }
 
-
-
 .category-arrow {
 
   position: absolute;
@@ -1390,8 +1196,6 @@
 
 }
 
-
-
 .category-card h3 {
 
   font-family: var(--font-display);
@@ -1403,8 +1207,6 @@
   margin: 17px 0 5px;
 
 }
-
-
 
 .category-card p {
 
@@ -1418,8 +1220,6 @@
 
 }
 
-
-
 .our-approach {
 
   padding-block: 75px;
@@ -1427,8 +1227,6 @@
   background: #f0ebe6;
 
 }
-
-
 
 .approach-grid {
 
@@ -1441,8 +1239,6 @@
   align-items: center;
 
 }
-
-
 
 .approach-image {
 
@@ -1457,8 +1253,6 @@
   background: #d7c4b8;
 
 }
-
-
 
 .approach-image::after {
 
@@ -1480,8 +1274,6 @@
 
 }
 
-
-
 .approach-image img {
 
   height: 100%;
@@ -1491,8 +1283,6 @@
   object-fit: cover;
 
 }
-
-
 
 .approach-image span {
 
@@ -1514,15 +1304,11 @@
 
 }
 
-
-
 .approach-copy h2 {
 
   margin: 20px 0;
 
 }
-
-
 
 .approach-copy > p:not(.eyebrow) {
 
@@ -1536,8 +1322,6 @@
 
 }
 
-
-
 .care-values {
 
   display: grid;
@@ -1547,8 +1331,6 @@
   padding-block: 24px;
 
 }
-
-
 
 .care-values span {
 
@@ -2856,8 +2638,6 @@
 
 }
 
-
-
 @media (max-width: 1100px) {
 
   .site-container { width: calc(100% - 64px); }
@@ -2885,8 +2665,6 @@
   .desktop-nav { gap: 23px; }
 
 }
-
-
 
 @media (max-width: 800px) {
 
@@ -3003,8 +2781,6 @@
   .contact-photo h2 { font-size: 35px; }
 
 }
-
-
 
 @media (max-width: 580px) {
 
@@ -3148,8 +2924,6 @@
 
 }
 
-
-
 @media (prefers-reduced-motion: reduce) {
 
   *,
@@ -3170,15 +2944,11 @@
 
 }
 
-
-
 @media print {
 
   .admin-topbar { display: none; }
 
 }
-
-
 
 /* Booking page */
 
@@ -3664,8 +3434,6 @@
 
 }
 
-
-
 /* =========================================
 
    INSIGHTGLOW REPORT: PRINT-ONLY STYLES
@@ -3682,15 +3450,11 @@
 
   }
 
-
-
   body * {
 
     visibility: hidden !important;
 
   }
-
-
 
   .insightglow-print-report,
 
@@ -3700,15 +3464,11 @@
 
   }
 
-
-
   .insightglow-screen-dashboard {
 
     display: none !important;
 
   }
-
-
 
   .insightglow-print-report {
 
@@ -3734,8 +3494,6 @@
 
   }
 
-
-
   .insightglow-print-header {
 
     display: flex;
@@ -3752,8 +3510,6 @@
 
   }
 
-
-
   .insightglow-print-logo {
 
     width: 90px;
@@ -3763,8 +3519,6 @@
     object-fit: contain;
 
   }
-
-
 
   .insightglow-print-header h1 {
 
@@ -3778,8 +3532,6 @@
 
   }
 
-
-
   .insightglow-print-header h2 {
 
     font-size: 13px;
@@ -3790,8 +3542,6 @@
 
   }
 
-
-
   .insightglow-print-header p {
 
     margin: 2px 0;
@@ -3800,15 +3550,11 @@
 
   }
 
-
-
   .insightglow-print-section {
 
     margin-bottom: 22px;
 
   }
-
-
 
   .insightglow-print-section h3 {
 
@@ -3826,8 +3572,6 @@
 
   }
 
-
-
   .insightglow-print-kpis {
 
     display: grid;
@@ -3837,8 +3581,6 @@
     gap: 8px;
 
   }
-
-
 
   .insightglow-print-kpis > div {
 
@@ -3850,8 +3592,6 @@
 
   }
 
-
-
   .insightglow-print-kpis span {
 
     display: block;
@@ -3861,8 +3601,6 @@
     color: #555;
 
   }
-
-
 
   .insightglow-print-kpis strong {
 
@@ -3876,8 +3614,6 @@
 
   }
 
-
-
   .insightglow-print-section table {
 
     width: 100%;
@@ -3887,8 +3623,6 @@
     font-size: 9px;
 
   }
-
-
 
   .insightglow-print-section th,
 
@@ -3904,8 +3638,6 @@
 
   }
 
-
-
   .insightglow-print-section th {
 
     background: #f3e8ff !important;
@@ -3920,8 +3652,6 @@
 
   }
 
-
-
   .insightglow-print-section tr {
 
     break-inside: avoid;
@@ -3929,8 +3659,6 @@
     page-break-inside: avoid;
 
   }
-
-
 
   .insightglow-print-section ul {
 
@@ -3940,15 +3668,11 @@
 
   }
 
-
-
   .insightglow-print-section li {
 
     margin-bottom: 5px;
 
   }
-
-
 
   .insightglow-print-note {
 
@@ -3959,8 +3683,6 @@
     font-style: italic;
 
   }
-
-
 
   .insightglow-print-footer {
 
@@ -3980,8 +3702,6 @@
 
 }
 
-
-
 /* =========================================
 
    NORMAL WEBPAGE: HIDE PRINT-ONLY REPORT
@@ -3998,90 +3718,213 @@
 
 }
 
-
 /* InsightGlow POS refresh — scoped to Transactions only. */
+
 .insightglow-pos { --pos-violet: #8124ca; color: #25183e; }
+
 .insightglow-pos .pos-page-header h1 { font-size: clamp(26px, 2.5vw, 34px); letter-spacing: -.045em; font-weight: 750; }
+
 .insightglow-pos .pos-page-header p { color: #77708d; }
+
 .insightglow-pos .pos-page-header button { border-radius: 11px; }
+
 .insightglow-pos .pos-metrics > div {
+
   min-height: 116px; border: 1px solid #eee8f6; border-radius: 18px;
+
   background: linear-gradient(135deg,#fff 48%,#faf5ff); box-shadow: 0 7px 25px #45236709;
+
   padding: 23px 24px;
+
 }
+
 .insightglow-pos .pos-metrics > div p:first-child { color: #716b89; font-size: 12px; }
+
 .insightglow-pos .pos-metrics > div p:nth-child(2) { color: #7d22ce; font-size: clamp(22px,2.1vw,29px); }
+
 .insightglow-pos .pos-workspace { grid-template-columns: minmax(0,1.35fr) minmax(330px,1fr); gap: 16px; }
+
 .insightglow-pos .pos-workspace > section {
+
   border: 1px solid #eee8f5; border-radius: 18px; background: #fff;
+
   box-shadow: 0 6px 24px #39205a09; padding: 24px;
+
 }
+
 .insightglow-pos .pos-workspace h2 { color: #24143f; letter-spacing: -.025em; }
+
 .insightglow-pos .pos-record-panel input,
+
 .insightglow-pos .pos-record-panel select {
+
   border-radius: 10px; border-color: #e5dff0; background-color: #fff;
+
 }
+
 .insightglow-pos .pos-record-panel input:focus,
+
 .insightglow-pos .pos-record-panel select:focus { outline-color: #b983e7; }
+
 .insightglow-pos .pos-record-panel button[type="submit"] {
+
   background: #8124ca; border-radius: 10px;
+
 }
+
 @media(max-width:1100px) {
+
  .insightglow-pos .pos-workspace { grid-template-columns: minmax(0,1fr); }
+
 }
+
 @media(max-width:640px) {
+
  .insightglow-pos .pos-metrics > div { min-height: 95px; padding: 18px; }
+
  .insightglow-pos .pos-workspace > section { padding: 17px; }
+
 }
 
 /* POS redesign v2: scoped components; no changes to transaction logic. */
+
 .insightglow-pos { --pos-ink:#291b43; --pos-accent:#8725c6; }
+
 .insightglow-pos .pos-page-header {padding: 7px 0 12px;}
+
 .insightglow-pos .pos-page-header h1 {font-size:clamp(28px,2.8vw,37px);font-weight:800;letter-spacing:-.045em;color:var(--pos-ink)}
+
 .insightglow-pos .pos-page-header button {min-height:43px;box-shadow:0 4px 12px #7425ac12}
+
 .insightglow-pos .pos-metrics {gap:16px}
+
 .insightglow-pos .pos-stat-card {position:relative;min-height:144px;padding:26px 24px!important;overflow:hidden;border:1px solid #eae0f4!important;border-radius:20px!important;background:linear-gradient(125deg,#fff 25%,#f8f1ff 100%)!important;box-shadow:0 8px 24px #42245b0c}
+
 .insightglow-pos .pos-stat-card p:first-of-type {font-size:12px;font-weight:600;letter-spacing:.015em;color:#80718f}
+
 .insightglow-pos .pos-stat-card p:last-of-type {font-size:clamp(22px,2.2vw,31px);font-weight:800;color:#7c24c5;letter-spacing:-.035em;margin-top:16px}
+
 .insightglow-pos .pos-stat-icon {position:absolute;right:20px;top:20px;display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:#f0e3fb;color:#8b31c8;font-size:23px;font-weight:700}
+
 .insightglow-pos .pos-workspace {grid-template-columns:minmax(0,1.35fr) minmax(320px,.95fr);gap:18px}
+
 .insightglow-pos .pos-workspace>section,.insightglow-pos .pos-history-panel {border:1px solid #eae4f1!important;border-radius:20px!important;background:#fff!important;box-shadow:0 10px 30px #3b24500a;padding:26px!important}
+
 .insightglow-pos .pos-section-heading {display:flex;align-items:center;gap:14px;margin-bottom:27px;padding-bottom:19px;border-bottom:1px solid #f0eaf5}
+
 .insightglow-pos .pos-heading-icon {width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:#f2e7fb;color:#7f2ac0;font-size:23px;flex-shrink:0}
+
 .insightglow-pos .pos-eyebrow {font-size:10px;letter-spacing:.15em;font-weight:800;color:#a15acb;margin-bottom:4px}
+
 .insightglow-pos .pos-section-heading h2 {font-size:19px;font-weight:800;color:var(--pos-ink);letter-spacing:-.025em}
+
 .insightglow-pos .pos-section-subtitle {font-size:12px;color:#8c8196;margin-top:4px}
+
 .insightglow-pos .pos-form-step {display:flex;align-items:center;gap:12px;margin:28px 0 17px;padding:13px 14px;background:linear-gradient(90deg,#f6effc,#fff);border:1px solid #efe4f6;border-radius:12px}
+
 .insightglow-pos .pos-form-step:first-child {margin-top:0}
+
 .insightglow-pos .pos-step-number {width:33px;height:33px;display:grid;place-items:center;border-radius:10px;background:#8c30c8;color:#fff;font-size:12px;font-weight:800;flex-shrink:0}
+
 .insightglow-pos .pos-form-step h3 {font-size:14px;font-weight:800;color:#35214d}
+
 .insightglow-pos .pos-form-step p {font-size:11px;color:#8c7c9a;margin-top:2px}
+
 .insightglow-pos .pos-empty-receipt {margin-top:12px;min-height:265px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px;border:1.5px dashed #e3cbee;border-radius:15px;background:linear-gradient(145deg,#fff,#fcf8ff)}
+
 .insightglow-pos .pos-empty-receipt-icon {display:grid;place-items:center;width:62px;height:62px;border-radius:18px;background:#f3e7fb;color:#9035cb;font-size:33px;margin-bottom:16px}
+
 .insightglow-pos .pos-empty-receipt h3 {font-size:15px;font-weight:800;color:#352047}
+
 .insightglow-pos .pos-empty-receipt p {max-width:260px;font-size:12px;line-height:1.7;color:#8a7f95;margin-top:8px}
+
 .insightglow-pos .pos-history-panel {margin-top:3px}
+
 @media(max-width:1120px){.insightglow-pos .pos-workspace{grid-template-columns:1fr}}
+
 @media(max-width:640px){.insightglow-pos .pos-workspace>section,.insightglow-pos .pos-history-panel{padding:18px!important}.insightglow-pos .pos-stat-card{min-height:120px}}
 
-
 /* POS visual polish v3 — iconography and compact typography only */
+
 .insightglow-pos .pos-page-header h1{font-size:clamp(24px,2vw,29px)!important;letter-spacing:-.035em}
+
 .insightglow-pos .pos-stat-card{min-height:116px!important;padding:20px 20px 18px 82px!important;display:flex;flex-direction:column;justify-content:center}
+
 .insightglow-pos .pos-stat-card p:first-of-type{font-size:12px!important;font-weight:600!important;line-height:1.35!important;padding-right:0}
+
 .insightglow-pos .pos-stat-card p:last-of-type{font-size:clamp(19px,1.65vw,24px)!important;line-height:1.2!important;margin-top:9px!important;letter-spacing:-.025em!important;overflow-wrap:anywhere}
+
 .insightglow-pos .pos-stat-icon{left:19px!important;right:auto!important;top:50%!important;transform:translateY(-50%);width:48px!important;height:48px!important;font-size:23px!important;border-radius:14px!important;background:#f0e4ff!important;color:#8524cb!important}
+
 .insightglow-pos .pos-stat-icon svg,.insightglow-pos .pos-heading-icon svg,.insightglow-pos .pos-empty-receipt-icon svg{width:23px;height:23px;stroke-width:2.1}
+
 .insightglow-pos .pos-stat-1 .pos-stat-icon{background:#e9efff!important;color:#5c62d9!important}
+
 .insightglow-pos .pos-stat-2 .pos-stat-icon{background:#e9f8f1!important;color:#18845b!important}
+
 .insightglow-pos .pos-heading-icon{background:#f0e5fc!important;color:#8426c7!important}
+
 .insightglow-pos .pos-form-step{background:linear-gradient(90deg,#f2e7fd,#fbf8ff)!important;border-color:#eee0f8!important}
+
 .insightglow-pos .pos-step-number{background:#f0dffc!important;color:#8124ca!important;width:36px;height:36px;border-radius:11px;font-size:18px}
+
 .insightglow-pos .pos-step-number svg{width:19px;height:19px;stroke-width:2.2}
+
 .insightglow-pos .pos-history-title{display:flex;align-items:center;gap:10px}
+
 .insightglow-pos .pos-history-title svg{color:#8a2bcb;width:19px;height:19px}
+
 .insightglow-pos .pos-payment-badge{display:inline-flex;align-items:center;padding:4px 9px;border-radius:7px;font-size:11px;font-weight:700}
+
 .insightglow-pos .pos-payment-cash{background:#dff7e9;color:#167647}
+
 .insightglow-pos .pos-payment-gcash{background:#e1edff;color:#2563c9}
+
 .insightglow-pos .pos-record-panel button[type=submit]{box-shadow:0 5px 13px #8124ca22}
+
 @media(max-width:640px){.insightglow-pos .pos-stat-card{padding-left:77px!important}.insightglow-pos .pos-stat-card p:last-of-type{font-size:20px!important}}
+
+/* StyleSync POS checkout polish — isolated to the unified cart dialog. */
+.stylesync-checkout-dialog {
+  border: 1px solid #eadcf5;
+  box-shadow: 0 28px 90px rgba(55, 25, 88, .22);
+  color: #342443;
+}
+.stylesync-checkout-dialog > header {
+  background: linear-gradient(110deg, #fcf8ff, #fff);
+}
+.stylesync-checkout-dialog > header h2 {
+  font-family: "DM Sans", sans-serif;
+  letter-spacing: -.035em;
+}
+.stylesync-checkout-dialog input:not([type="checkbox"]),
+.stylesync-checkout-dialog select {
+  border-color: #e7ddef;
+  background: #fff;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.stylesync-checkout-dialog input:not([type="checkbox"]):focus,
+.stylesync-checkout-dialog select:focus {
+  outline: none;
+  border-color: #b673d9;
+  box-shadow: 0 0 0 3px rgba(182, 115, 217, .14);
+}
+.stylesync-checkout-dialog button {
+  transition: background-color .15s ease, transform .15s ease;
+}
+.stylesync-checkout-dialog button:not(:disabled):active { transform: scale(.985); }
+.stylesync-checkout-dialog button:focus-visible { outline: 2px solid #8b24c8; outline-offset: 2px; }
+.stylesync-checkout-dialog #stylesync-completed-receipt {
+  max-width: 560px;
+  margin-inline: auto;
+  border-color: #ead8f5;
+  box-shadow: 0 8px 28px rgba(85, 32, 123, .06);
+}
+@media (max-width: 640px) {
+  .stylesync-checkout-dialog { max-height: 98dvh; border-radius: 18px; }
+  .stylesync-checkout-dialog > header { padding: 15px; }
+  .stylesync-checkout-dialog > header h2 { font-size: 17px; }
+}
+@media print {
+  body:has(#stylesync-completed-receipt) .stylesync-checkout-dialog { box-shadow: none; border: none; }
+}
