@@ -811,6 +811,7 @@ function AdminTransactions() {
     const [appointments, setAppointments] = useState([])
 
     const [form, setForm] = useState(freshForm)
+    const [posTab, setPosTab] = useState("walkin")
     const [emergencySale, setEmergencySale] = useState(null)
     const [emergencyCheck, setEmergencyCheck] = useState("")
     const [emergencyMatches, setEmergencyMatches] = useState([])
@@ -2350,7 +2351,7 @@ function AdminTransactions() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    <a href="#legacy-checkout" className="rounded-xl border border-purple-300 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-800 hover:bg-purple-100">Appointment / Legacy checkout ↓</a>
+
                 <button
                     disabled={loading || busy}
                     onClick={() => load()}
@@ -2363,28 +2364,6 @@ function AdminTransactions() {
                 </div>
             </header>
 
-            {(emergencySale || emergencyCheck) && (
-                <section className="rounded-2xl border border-purple-300 bg-purple-50 p-5 text-sm text-purple-950 space-y-3">
-                    <h2 className="text-lg font-bold">Emergency Mode · Online POS Review</h2>
-                    {emergencySale && <>
-                        <p className="break-all text-xs">Offline ID: {emergencySale.offline_id}</p>
-                        <p><strong>Original:</strong> {emergencySale.payload.customer} · {emergencySale.payload.service} · cached ₱{Number(emergencySale.payload.amount || 0).toFixed(2)} · {emergencySale.payload.payment} · {emergencySale.payload.status}</p>
-                        <p>Emergency Mode uses the recorded regular service price, without promotions. Verify the amount collected and check for issued loyalty rewards. Never collect payment twice.</p>
-                        {emergencyChecking && <p>Checking server for duplicates…</p>}
-                        {emergencyMatches.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-                            <strong>Possible existing transactions — investigate before proceeding:</strong>
-                            {emergencyMatches.slice(0, 8).map((row) => <p key={row.transaction_id}>#{row.transaction_id} · {row.customer} · {row.service} · ₱{row.amount} · {dateLabel(row.transaction_date)}</p>)}
-                            <p>Same customer/service/day is only a warning, not proof. Check receipts and payment records.</p>
-                        </div>}
-                        <label className="block">Amount actually collected and verified (₱): <input type="number" min="0" step="0.01" value={emergencyCollected} onChange={(e) => setEmergencyCollected(e.target.value)} className="mt-1 w-full rounded-lg border border-purple-300 bg-white p-2" placeholder="Enter amount from cash/GCash receipt" /><span className="block text-xs mt-1">Must match the recorded regular-price total of {money(netCents / 100)}. If different, stop and resolve the difference before posting.</span></label>
-                        {emergencySale.payload?.status === "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPaidAcknowledged} onChange={(e) => setEmergencyPaidAcknowledged(e.target.checked)} /> <span>I verified the amount already collected and the recorded regular price. No second payment will be collected automatically.</span></label>}
-                        <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyConfirmed} onChange={(e) => setEmergencyConfirmed(e.target.checked)} /><span>I reviewed potential duplicates, original service and customer, regular price, loyalty status, and payment status. This is a genuine sale that has not been recorded.</span></label>
-                        {emergencySale.payload?.status !== "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPendingPaid} onChange={(e) => setEmergencyPendingPaid(e.target.checked)} /><span>This record was originally Pending. I confirm the full verified POS amount has now been collected using the recorded payment method, and I checked the payment evidence. Otherwise leave it in Needs Review.</span></label>}
-                        <p className="font-medium">The final POS confirmation is disabled until these checks are completed.</p>
-                    </>}
-                    {emergencyCheck && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-amber-900">{emergencyCheck}</p>}
-                </section>
-            )}
 
             {loadError && (
                 <p
@@ -2447,66 +2426,59 @@ function AdminTransactions() {
                 ))}
             </div>
 
-            <section aria-label="Main three-column POS" className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div><h2 className="text-xl font-bold text-purple-950">Walk-in Point of Sale</h2><p className="text-sm text-gray-500">Add services and products, review your cart, and collect payment.</p></div>
-                    <a href="#legacy-checkout" className="text-sm font-semibold text-purple-700 underline">Existing appointment or emergency checkout ↓</a>
+            <section aria-label="Unified POS checkout" className="space-y-4">
+                <div className="rounded-2xl border border-purple-200 bg-white p-3 sm:p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h2 className="text-xl font-bold text-purple-950">Checkout workspace</h2>
+                            <p className="text-sm text-gray-500">Choose a sale type. All modes share the transaction history and receipts below.</p>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" role="tablist" aria-label="Checkout mode">
+                        {[
+                            ["walkin", "Walk-in & Products", "Multi-item cart"],
+                            ["appointment", "Appointments", "Booking & deposits"],
+                            ["emergency", "Emergency Mode", "Offline & reconciliation"],
+                        ].map(([key, title, description]) => (
+                            <button key={key} type="button" role="tab" aria-selected={(emergencySale ? "emergency" : posTab) === key}
+                                onClick={() => {
+                                    setPosTab(key)
+                                    if (key === "appointment") setForm(previous => ({...previous, mode: "Appointment"}))
+                                    if (key === "emergency") setForm(previous => ({...previous, mode: "Walk-in"}))
+                                }}
+                                className={`rounded-xl border px-4 py-3 text-left transition ${ (emergencySale ? "emergency" : posTab) === key ? "border-purple-500 bg-purple-100 text-purple-950" : "border-purple-100 bg-white text-slate-600 hover:bg-purple-50"}`}>
+                                <span className="block text-sm font-bold">{title}</span>
+                                <span className="block text-xs opacity-80">{description}</span>
+                            </button>
+                        ))}
+                    </div>
                 </div>
-            <StyleSyncMultiItemCheckoutModal
-                embedded
-                open={true}
-                onClose={() => setShowMultiItemPreview(false)}
-                onSaved={async result => {
-                    setMessage(`Multi-item sale #${result.id} ${result.duplicate ? "was already recorded; no duplicate was created." : "saved successfully."}`)
-                    try {
-                        const rows = await load()
-                        const saved = rows?.find(row => String(row.transaction_id) === String(result.id))
-                        if (saved) setReceipt(saved)
-                        await loadCartItems(result.id)
-                    } catch (refreshError) {
-                        console.error("Sale saved; history refresh unavailable:", refreshError)
-                    }
-                }}
-                services={services}
-                products={products}
-            />
-            </section>
-            <details id="legacy-checkout" open={Boolean(emergencySale || emergencyCheck)} className="rounded-2xl border border-purple-200 bg-white p-4 sm:p-5">
-                <summary className="cursor-pointer text-lg font-bold text-purple-950">Appointment checkout, Emergency Mode &amp; original transaction form</summary>
-                <p className="mt-2 text-sm text-gray-500">Use this existing checkout for appointments, deposits, and emergency reconciliation. Walk-in multi-item checkout is above.</p>
-            <div className="pos-workspace grid items-start gap-6 xl:grid-cols-2">
-                <section className={`${panel} pos-record-panel`}>
-                    <h2 className="mb-5 text-lg font-bold text-purple-950">
-                        Record a transaction
-                    </h2>
-
+                <div hidden={(emergencySale ? "emergency" : posTab) !== "walkin"}>
+                    <StyleSyncMultiItemCheckoutModal
+                        embedded open={true} onClose={() => {}}
+                        onSaved={async result => {
+                            setMessage(`Multi-item sale #${result.id} ${result.duplicate ? "was already recorded; no duplicate was created." : "saved successfully."}`)
+                            try {
+                                const rows = await load()
+                                const saved = rows?.find(row => String(row.transaction_id) === String(result.id))
+                                if (saved) setReceipt(saved)
+                                await loadCartItems(result.id)
+                            } catch (refreshError) { console.error("Sale saved; history refresh unavailable:", refreshError) }
+                        }}
+                        services={services} products={products}
+                    />
+                </div>
+                <div id="legacy-checkout" hidden={(emergencySale ? "emergency" : posTab) === "walkin"}>
+                    <p className="mb-3 text-sm text-gray-600">
+                        {(emergencySale ? "emergency" : posTab) === "appointment"
+                            ? "Existing appointment checkout: booking details, deposit deduction, and remaining balance."
+                            : "Emergency and recovery checkout: original offline protections and duplicate reconciliation remain enabled."}
+                    </p>
+            <div className="pos-workspace">
                     <form onSubmit={save}>
-                        <fieldset
-                            disabled={disabled}
-                            className="space-y-4"
-                        >
-                            <Field label="Transaction source">
-                                <select
-                                    className={input}
-                                    value={form.mode}
-                                    onChange={(event) => {
-                                        setForm({
-                                            ...freshForm(),
-                                            mode:
-                                                event.target.value,
-                                        })
-                                        setError("")
-                                    }}
-                                >
-                                    <option value="Walk-in">
-                                        Walk-in / Product sale
-                                    </option>
-                                    <option value="Appointment">
-                                        Existing appointment
-                                    </option>
-                                </select>
-                            </Field>
-
+                        <fieldset disabled={disabled} className="grid items-start gap-4 xl:grid-cols-3">
+                            <section className={`${panel} min-w-0 space-y-4`} aria-label="Step 1: Select sale">
+                                <h3 className="text-base font-bold text-purple-950">01 · {booked ? "Select booking" : "Sale details"}</h3>
                             {booked ? (
                                 <>
                                     <SearchSelect
@@ -2687,6 +2659,33 @@ function AdminTransactions() {
                                 </>
                             )}
 
+                            </section>
+                            <section className={`${panel} min-w-0 space-y-4`} aria-label="Step 2: Review sale">
+                                <h3 className="text-base font-bold text-purple-950">02 · Current sale &amp; review</h3>
+                                {posTab === "emergency" && !emergencySale && !emergencyCheck && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Emergency reconciliation requires a saved offline record. Open a pending emergency sale from the offline queue before confirming; do not use ordinary checkout as a substitute.</p>}
+                            {(emergencySale || emergencyCheck) && (
+                <section className="rounded-2xl border border-purple-300 bg-purple-50 p-5 text-sm text-purple-950 space-y-3">
+                    <h2 className="text-lg font-bold">Emergency Mode · Online POS Review</h2>
+                    {emergencySale && <>
+                        <p className="break-all text-xs">Offline ID: {emergencySale.offline_id}</p>
+                        <p><strong>Original:</strong> {emergencySale.payload.customer} · {emergencySale.payload.service} · cached ₱{Number(emergencySale.payload.amount || 0).toFixed(2)} · {emergencySale.payload.payment} · {emergencySale.payload.status}</p>
+                        <p>Emergency Mode uses the recorded regular service price, without promotions. Verify the amount collected and check for issued loyalty rewards. Never collect payment twice.</p>
+                        {emergencyChecking && <p>Checking server for duplicates…</p>}
+                        {emergencyMatches.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                            <strong>Possible existing transactions — investigate before proceeding:</strong>
+                            {emergencyMatches.slice(0, 8).map((row) => <p key={row.transaction_id}>#{row.transaction_id} · {row.customer} · {row.service} · ₱{row.amount} · {dateLabel(row.transaction_date)}</p>)}
+                            <p>Same customer/service/day is only a warning, not proof. Check receipts and payment records.</p>
+                        </div>}
+                        <label className="block">Amount actually collected and verified (₱): <input type="number" min="0" step="0.01" value={emergencyCollected} onChange={(e) => setEmergencyCollected(e.target.value)} className="mt-1 w-full rounded-lg border border-purple-300 bg-white p-2" placeholder="Enter amount from cash/GCash receipt" /><span className="block text-xs mt-1">Must match the recorded regular-price total of {money(netCents / 100)}. If different, stop and resolve the difference before posting.</span></label>
+                        {emergencySale.payload?.status === "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPaidAcknowledged} onChange={(e) => setEmergencyPaidAcknowledged(e.target.checked)} /> <span>I verified the amount already collected and the recorded regular price. No second payment will be collected automatically.</span></label>}
+                        <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyConfirmed} onChange={(e) => setEmergencyConfirmed(e.target.checked)} /><span>I reviewed potential duplicates, original service and customer, regular price, loyalty status, and payment status. This is a genuine sale that has not been recorded.</span></label>
+                        {emergencySale.payload?.status !== "Paid" && <label className="flex items-start gap-2"><input type="checkbox" checked={emergencyPendingPaid} onChange={(e) => setEmergencyPendingPaid(e.target.checked)} /><span>This record was originally Pending. I confirm the full verified POS amount has now been collected using the recorded payment method, and I checked the payment evidence. Otherwise leave it in Needs Review.</span></label>}
+                        <p className="font-medium">The final POS confirmation is disabled until these checks are completed.</p>
+                    </>}
+                    {emergencyCheck && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-amber-900">{emergencyCheck}</p>}
+                </section>
+            )}
+
                             <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 text-sm">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <h3 className="font-bold text-purple-950">
@@ -2812,6 +2811,9 @@ function AdminTransactions() {
                                 </div>
                             )}
 
+                            </section>
+                            <section className={`${panel} min-w-0 space-y-4`} aria-label="Step 3: Customer and payment">
+                                <h3 className="text-base font-bold text-purple-950">03 · Payment &amp; confirmation</h3>
                             <div className="space-y-3 rounded-xl bg-gray-50 p-4 text-sm">
                                 <div className="flex justify-between gap-3">
                                     <span>Subtotal</span>
@@ -2911,6 +2913,7 @@ function AdminTransactions() {
                                 type="submit"
                                 disabled={
                                     disabled ||
+                                    (posTab === "emergency" && !emergencySale) ||
                                     Boolean(emergencySale && (emergencyChecking || emergencyCheck || !emergencyConfirmed || (emergencySale.payload?.status === "Paid" ? (!emergencyPaidAcknowledged || !emergencyCollected || toCents(emergencyCollected) !== netCents) : (!emergencyPendingPaid || !emergencyCollected || toCents(emergencyCollected) !== netCents)))) ||
                                     Boolean(unresolved) ||
                                     balanceCents < 0 ||
@@ -2932,11 +2935,11 @@ function AdminTransactions() {
                                     ? "Saving…"
                                     : "Confirm and save transaction"}
                             </button>
+                            </section>
                         </fieldset>
                     </form>
-                </section>
 
-                <section className={panel}>
+                <section className={`${panel} mt-4`}>
                     <h2 className="text-lg font-bold text-purple-950">
                         Saved receipt
                     </h2>
@@ -3066,7 +3069,8 @@ function AdminTransactions() {
                 </section>
             </div>
 
-            </details>
+                </div>
+            </section>
 
             <section className={panel}>
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
