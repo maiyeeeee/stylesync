@@ -470,6 +470,13 @@ function freshForm() {
 
 const peso = (n) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
 const moneyCents = (value) => Math.round(Number(value) * 100);
+function normalizeRequiredPhone(value) {
+  const digits = String(value ?? "").replace(/[\s()-]/g, "");
+  if (/^09\d{9}$/.test(digits)) return digits;
+  if (/^\+639\d{9}$/.test(digits)) return "0" + digits.slice(3);
+  if (/^639\d{9}$/.test(digits)) return "0" + digits.slice(2);
+  return "";
+}
 
 /** Online walk-in multi-item checkout. Appointment checkout remains in the original POS until backend parity. */
 function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = [], products = [] }) {
@@ -479,6 +486,67 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
   const [cart, setCart] = useState({});
   const [customer, setCustomer] = useState("");
   const [customerContact, setCustomerContact] = useState("");
+  // Registered customer suggestions are advisory until the cashier confirms a profile.
+  const [customerMatches, setCustomerMatches] = useState([]);
+  const [customerLookupBusy, setCustomerLookupBusy] = useState(false);
+  const [customerLookupError, setCustomerLookupError] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerLookupVersion, setCustomerLookupVersion] = useState(0);
+  const maskContact = (value) => {
+    const v = String(value || "").trim();
+    return v.length > 4 ? `${"•".repeat(Math.min(v.length - 4, 7))}${v.slice(-4)}` : "Contact unavailable";
+  };
+  useEffect(() => {
+    if (!open || selectedCustomer) return;
+    const query = customer.trim();
+    if (query.length < 2) {
+      setCustomerMatches([]);
+      setCustomerLookupError("");
+      setCustomerLookupBusy(false);
+      return;
+    }
+    let active = true;
+    const timer = setTimeout(async () => {
+      setCustomerLookupBusy(true);
+      setCustomerLookupError("");
+      try {
+        const rows = await request(`/customers?search=${encodeURIComponent(query)}`);
+        if (active) {
+          const normalized = query.toLocaleLowerCase();
+          setCustomerMatches((Array.isArray(rows) ? rows : [])
+            .filter(x => String(x.customer_name || "").toLocaleLowerCase().includes(normalized))
+            .slice(0, 8));
+        }
+      } catch (e) {
+        if (active) {
+          setCustomerMatches([]);
+          setCustomerLookupError(e.message || "Customer lookup unavailable.");
+        }
+      } finally {
+        if (active) setCustomerLookupBusy(false);
+      }
+    }, 300);
+    return () => { active = false; clearTimeout(timer); };
+  }, [open, customer, selectedCustomer, customerLookupVersion]);
+
+  const chooseRegisteredCustomer = (match) => {
+    if (!normalizeRequiredPhone(match.contact_number) || Number(match.matching_profiles) !== 1) {
+      setSaveError("This profile has a missing or duplicate contact. Ask the owner to resolve it first.");
+      return;
+    }
+    setCustomer(String(match.customer_name || ""));
+    setCustomerContact(normalizeRequiredPhone(match.contact_number));
+    setSelectedCustomer({ id: match.customer_id, name: match.customer_name, contact: normalizeRequiredPhone(match.contact_number) });
+    setCustomerMatches([]);
+    invalidateQuote();
+  };
+  const clearRegisteredCustomer = () => {
+    setSelectedCustomer(null);
+    setCustomerContact("");
+    setCustomerLookupVersion(v => v + 1);
+    invalidateQuote();
+  };
+
   const [payment, setPayment] = useState("Cash");
   const [cash, setCash] = useState("");
   const [reference, setReference] = useState("");
@@ -498,7 +566,7 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
   const subtotalCents = lines.reduce((sum, x) => sum + moneyCents(x.price) * x.quantity, 0);
   const payableCents = quote ? moneyCents(quote.amount) : subtotalCents;
   const cashCents = moneyCents(cash || 0);
-  const canPay = Boolean(quote && lines.length && customer.trim() && (payment !== "Cash" || cashCents >= payableCents) && (payment !== "GCash" || reference.trim()));
+  const canPay = Boolean(normalizeRequiredPhone(customerContact) && quote && lines.length && customer.trim() && (payment !== "Cash" || cashCents >= payableCents) && (payment !== "GCash" || reference.trim()));
   const invalidateQuote = () => { setQuote(null); setReviewed(false); setSaveError(""); setStep("cart"); };
   const itemsPayload = () => lines.map(x => ({ type: x.type, id: x.id, quantity: x.quantity }));
 
@@ -511,12 +579,26 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
   };
 
   const previewCart = async () => {
+    if (!normalizeRequiredPhone(customerContact)) {
+      setSaveError("A valid Philippine mobile number is required (09XXXXXXXXX).");
+      return;
+    }
     if (!lines.length || !customer.trim() || quoting) return;
     setQuoting(true); setSaveError(""); setQuote(null);
     try {
+      // Never silently attribute a new/walk-in sale to another registered contact.
+      if (customerContact.trim() && !selectedCustomer) {
+        const matches = await request(`/customers?search=${encodeURIComponent(customerContact.trim())}`);
+        const exact = (Array.isArray(matches) ? matches : []).filter(x =>
+          normalizeRequiredPhone(x.contact_number) === normalizeRequiredPhone(customerContact)
+        );
+        if (exact.length) {
+          throw new Error("This contact belongs to a registered profile. Search by name and select that profile, or enter a different number.");
+        }
+      }
       const result = await request("/transactions/cart/preview", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer: customer.trim(), customer_contact: customerContact.trim(), items: itemsPayload() })
+        body: JSON.stringify({ customer: customer.trim(), customer_contact: normalizeRequiredPhone(customerContact), items: itemsPayload() })
       });
       if (!result || !Number.isFinite(Number(result.amount))) throw new Error("Invalid server checkout quote.");
       setQuote(result);
@@ -532,7 +614,7 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
       const result = await request("/transactions/cart", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customer: customer.trim(), customer_contact: customerContact.trim(),
+          customer: customer.trim(), customer_contact: normalizeRequiredPhone(customerContact),
           payment, payment_reference: payment === "GCash" ? reference.trim() : undefined,
           payment_confirmed: true, checkout_key: checkoutKey,
           expected_total: quote.amount,
@@ -548,7 +630,7 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
       } catch (refreshError) {
         console.error("Checkout saved, but history refresh failed:", refreshError);
       }
-      setCart({}); setCustomer(""); setCustomerContact(""); setCash(""); setReference("");
+      setCart({}); setCustomer(""); setCustomerContact(""); setSelectedCustomer(null); setCustomerMatches([]); setCash(""); setReference("");
       setQuote(null); setReviewed(false); setStep("cart"); setCheckoutKey(crypto.randomUUID());
       onClose();
     } catch (e) {
@@ -584,8 +666,44 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
               {lines.length === 0 && <p className="text-sm text-slate-500">Add a service or product to begin.</p>}
               {lines.map(x => <div key={x.key} className="flex items-center justify-between gap-2 rounded-xl bg-purple-50 p-3"><div><p className="font-medium">{x.name}</p><p className="text-xs">{peso(x.price)} × {x.quantity}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => adjust(x, -1)} className="rounded border px-2">−</button><span>{x.quantity}</span><button type="button" onClick={() => adjust(x, 1)} disabled={x.type === "Service" || x.quantity >= x.stock} className="rounded border px-2 disabled:opacity-40">+</button></div></div>)}
               <div className="flex justify-between border-t pt-3 font-semibold"><span>Subtotal before discounts</span><span>{peso(subtotalCents / 100)}</span></div>
-              <label className="block text-sm">Customer name<input value={customer} onChange={e => { setCustomer(e.target.value); invalidateQuote(); }} maxLength={100} className="mt-1 w-full rounded-xl border p-3" placeholder="Registered client or walk-in" /></label>
-              <label className="block text-sm">Contact (optional)<input value={customerContact} onChange={e => { setCustomerContact(e.target.value); invalidateQuote(); }} maxLength={30} className="mt-1 w-full rounded-xl border p-3" placeholder="Registered number for loyalty" /></label>
+              <label className="block text-sm">Customer name
+                <input value={customer} onChange={e => { setCustomer(e.target.value); setSelectedCustomer(null); setCustomerContact(""); invalidateQuote(); }} readOnly={Boolean(selectedCustomer)} maxLength={100} className="mt-1 w-full rounded-xl border p-3" placeholder="Type a name to find registered customers" />
+              </label>
+              {selectedCustomer ? (
+                <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm">
+                  <p className="font-semibold text-green-800">✓ Registered customer confirmed</p>
+                  <p className="mt-1 text-green-900">{selectedCustomer.name} · {maskContact(selectedCustomer.contact)}</p>
+                  <button type="button" onClick={clearRegisteredCustomer} className="mt-2 text-xs font-semibold text-purple-700 underline">Different customer / change selection</button>
+                </div>
+              ) : (
+                <>
+                  {customerLookupBusy && <p className="text-xs text-purple-700">Searching registered customers…</p>}
+                  {customerLookupError && <p role="alert" className="text-xs text-amber-700">Customer search unavailable: {customerLookupError}. Verify the contact before checkout.</p>}
+                  {customerMatches.length > 0 && (
+                    <div className="rounded-xl border border-purple-200 bg-white p-2">
+                      <p className="px-2 py-1 text-xs font-semibold text-purple-800">Possible registered customers — confirm with the customer</p>
+                      {customerMatches.map(match => (
+                        <button key={match.customer_id} type="button" onClick={() => chooseRegisteredCustomer(match)}
+                          disabled={!normalizeRequiredPhone(match.contact_number) || Number(match.matching_profiles) !== 1}
+                          className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50">
+                          <span className="font-semibold">{match.customer_name}</span>
+                          <span className="ml-2 text-slate-500">{maskContact(match.contact_number)}</span>
+                          {Number(match.matching_profiles) !== 1 && <span className="block text-xs text-amber-700">Duplicate contact — owner review needed</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-slate-600">Not the same person? Enter their own number below. Never reuse another customer's number.</p>
+                </>
+              )}
+              <label className="block text-sm">Customer mobile number (required)
+                <input type="tel" required pattern="09[0-9]{9}" value={customerContact}
+                  onChange={e => { if (!selectedCustomer) { setCustomerContact(e.target.value); invalidateQuote(); } }}
+                  readOnly={Boolean(selectedCustomer)} maxLength={30}
+                  className="mt-1 w-full rounded-xl border p-3"
+                  placeholder="09XXXXXXXXX" />
+              </label>
+              {selectedCustomer && <p className="text-xs text-green-800">The confirmed contact will be saved with this transaction for Customer Intelligence.</p>}
               <button type="button" onClick={previewCart} disabled={!lines.length || !customer.trim() || quoting || !navigator.onLine} className="w-full rounded-xl bg-purple-700 p-3 font-semibold text-white disabled:opacity-40">{quoting ? "Calculating…" : "Continue to payment →"}</button>
               {saveError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
             </div>
@@ -823,6 +941,11 @@ function AdminTransactions() {
                         break
                     }
 
+                    const phone = normalizeRequiredPhone(entry.payload?.customer_contact);
+                    if (!phone) {
+                        console.error("Offline queue has no valid customer phone; manual review required.", entry.offline_id);
+                        break;
+                    }
                     await request("/transactions", {
                         method: "POST",
                         headers: {
@@ -830,6 +953,7 @@ function AdminTransactions() {
                         },
                         body: JSON.stringify({
                             ...entry.payload,
+                            customer_contact: phone,
                             offline_id: entry.offline_id,
                             offline_queued: true,
                         }),
@@ -922,6 +1046,7 @@ function AdminTransactions() {
             setEmergencySale(record)
             setEmergencyCheck("")
             setForm({ ...freshForm(), customer: record.payload.customer || "",
+                customerContact: record.payload.customer_contact || "",
                 sale_type: "Service", payment: record.payload.payment || "Cash" })
         }).catch((err) => { if (active) setEmergencyCheck(err.message) })
         return () => { active = false }
@@ -1297,6 +1422,17 @@ function AdminTransactions() {
 
         setError("")
         setMessage("")
+        const checkoutPhone = normalizeRequiredPhone(
+            form.mode === "Appointment" ? appointment?.contact_number : form.customerContact
+        )
+        if (!checkoutPhone) {
+            setError("A valid Philippine mobile number (09XXXXXXXXX) is required for every checkout, including Emergency Mode.")
+            return
+        }
+        if (emergencySale && normalizeRequiredPhone(emergencySale.payload?.customer_contact) !== checkoutPhone) {
+            setError("Phone number must match the original Emergency Mode record. Resolve the discrepancy before reconciling.")
+            return
+        }
         if (new URLSearchParams(window.location.search).has("emergency_offline_id") && !emergencySale) {
             setError("Emergency record is unavailable or already reconciled. Open normal POS without the emergency link to make a separate sale.")
             return
@@ -1513,10 +1649,7 @@ function AdminTransactions() {
 
             status: "Paid",
 
-            customer_contact:
-                booked
-                    ? loyaltyContact
-                    : form.customerContact.trim(),
+            customer_contact: checkoutPhone,
 
             loyalty_reward_id:
                 redeemingReward ? Number(activeReward.reward_id) : null,
@@ -2125,7 +2258,7 @@ function AdminTransactions() {
     }, [searchTerm, transactions])
 
     return (
-        <div className="min-w-0 space-y-6">
+        <div className="insightglow-pos min-w-0 space-y-6">
             <StyleSyncMultiItemCheckoutModal
                 open={showMultiItemPreview}
                 onClose={() => setShowMultiItemPreview(false)}
@@ -2143,7 +2276,7 @@ function AdminTransactions() {
                 services={services}
                 products={products}
             />
-            <header className="flex flex-wrap items-center justify-between gap-4">
+            <header className="pos-page-header flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-purple-950">
                         POS / Transactions
@@ -2228,7 +2361,7 @@ function AdminTransactions() {
                 </p>
             )}
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="pos-metrics grid gap-4 md:grid-cols-3">
                 {[
                     [
                         "Paid sales recorded today",
@@ -2261,8 +2394,8 @@ function AdminTransactions() {
                 ))}
             </div>
 
-            <div className="grid items-start gap-6 xl:grid-cols-2">
-                <section className={panel}>
+            <div className="pos-workspace grid items-start gap-6 xl:grid-cols-2">
+                <section className={`${panel} pos-record-panel`}>
                     <h2 className="mb-5 text-lg font-bold text-purple-950">
                         Record a transaction
                     </h2>
@@ -2353,9 +2486,10 @@ function AdminTransactions() {
                                         />
                                     </Field>
 
-                                    <Field label="Customer contact (optional — for loyalty lookup)">
+                                    <Field label="Customer mobile number (required for checkout)">
                                         <input
                                             type="tel"
+                                            required
                                             maxLength={30}
                                             autoComplete="tel"
                                             placeholder="e.g. 09XXXXXXXXX"
