@@ -56,8 +56,26 @@ function philippineDate() {
     return `${part("year")}-${part("month")}-${part("day")}`
 }
 
+
 function dayKey(value) {
-    const date = new Date(value)
+    if (!value) return ""
+
+    // API transaction timestamps are UTC without a timezone suffix.
+    // Interpret them as UTC before converting to Philippine time.
+    let date
+
+    if (value instanceof Date) {
+        date = value
+    } else {
+        const raw = String(value).trim()
+        const normalized = raw.replace(" ", "T")
+
+        const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)
+
+        date = new Date(
+            hasTimezone ? normalized : `${normalized}Z`
+        )
+    }
 
     if (Number.isNaN(date.getTime())) {
         return ""
@@ -70,6 +88,7 @@ function dayKey(value) {
         day: "2-digit",
     }).format(date)
 }
+
 
 async function request(path, options) {
     const response = await apiFetch(
