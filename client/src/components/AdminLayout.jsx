@@ -52,6 +52,7 @@ import {
 } from "../lib/sessionApi"
 
 const menuGroups = [
+    { title: "Front desk", items: [["Dashboard", "/staff/dashboard", LuLayoutDashboard]] },
     {
         title: "Workspace",
 
@@ -162,6 +163,7 @@ const allItems =
  */
 const staffPaths =
     new Set([
+        "/staff/dashboard",
         "/admin/appointments",
         "/admin/payment-review",
         "/admin/services",
@@ -222,7 +224,7 @@ function Sidebar({
 
     const homePath =
         user?.role === "user"
-            ? "/admin/appointments"
+            ? "/staff/dashboard"
             : "/admin"
 
 
@@ -256,7 +258,7 @@ const visibleMenuGroups =
                           }
 
                           // Other existing menu items
-                          return true
+                          return path !== "/staff/dashboard"
                       },
                   ),
               }))

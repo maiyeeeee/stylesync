@@ -24,6 +24,9 @@ const AdminDashboard = lazy(() =>
 const AdminRegister = lazy(() =>
     import("./pages/AdminRegister"),
 )
+const FrontDeskDashboard = lazy(() =>
+    import("./pages/FrontDeskDashboard"),
+)
 const AdminAppointments = lazy(() =>
     import("./pages/AdminAppointments"),
 )
@@ -74,6 +77,11 @@ const adminPages = [
         Page: AdminPaymentSettings,
         roles: ["owner"],
     },
+    {
+    path: "/staff/dashboard",
+    Page: FrontDeskDashboard,
+    roles: ["user"],
+},
     {
         path: "/admin/payment-review",
         Page: AdminPaymentReview,
@@ -269,15 +277,15 @@ function App() {
                         ),
                     )}
 
-                    <Route
-                        path="/staff/*"
-                        element={
-                            <Navigate
-                                to="/admin/appointments"
-                                replace
-                            />
-                        }
-                    />
+                  <Route
+    path="/staff/*"
+    element={
+        <Navigate
+            to="/staff/dashboard"
+            replace
+        />
+    }
+/>
 
                     <Route
                         path="/admin/*"
