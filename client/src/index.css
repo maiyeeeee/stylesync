@@ -3999,64 +3999,23 @@
 }
 
 
-
-/* InsightGlow POS — refined styling */
-.insightglow-pos {
-    --pos-violet: #8124ca;
-    color: #25183e;
-}
-
-.insightglow-pos .pos-page-header h1 {
-    font-size: 28px;
-    letter-spacing: -0.03em;
-    font-weight: 700;
-}
-
-.insightglow-pos .pos-page-header p {
-    color: #77708d;
-}
-
-.insightglow-pos .pos-page-header button {
-    border-radius: 11px;
-}
-
-/* POS summary cards */
+/* InsightGlow POS refresh — scoped to Transactions only. */
+.insightglow-pos { --pos-violet: #8124ca; color: #25183e; }
+.insightglow-pos .pos-page-header h1 { font-size: clamp(26px, 2.5vw, 34px); letter-spacing: -.045em; font-weight: 750; }
+.insightglow-pos .pos-page-header p { color: #77708d; }
+.insightglow-pos .pos-page-header button { border-radius: 11px; }
 .insightglow-pos .pos-metrics > div {
-    min-height: 116px;
-    border: 1px solid #eee8f6;
-    border-radius: 18px;
-    background: linear-gradient(135deg, #fff 48%, #faf5ff);
-    box-shadow: 0 7px 25px #45236709;
-    padding: 23px 24px;
+  min-height: 116px; border: 1px solid #eee8f6; border-radius: 18px;
+  background: linear-gradient(135deg,#fff 48%,#faf5ff); box-shadow: 0 7px 25px #45236709;
+  padding: 23px 24px;
 }
-
-/* Compact typography */
-.insightglow-pos .pos-metrics > div p:first-child {
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 1.5;
-    color: #756b86;
+.insightglow-pos .pos-metrics > div p:first-child { color: #716b89; font-size: 12px; }
+.insightglow-pos .pos-metrics > div p:nth-child(2) { color: #7d22ce; font-size: clamp(22px,2.1vw,29px); }
+.insightglow-pos .pos-workspace { grid-template-columns: minmax(0,1.35fr) minmax(330px,1fr); gap: 16px; }
+.insightglow-pos .pos-workspace > section {
+  border: 1px solid #eee8f5; border-radius: 18px; background: #fff;
+  box-shadow: 0 6px 24px #39205a09; padding: 24px;
 }
-
-.insightglow-pos .pos-metrics > div p:nth-child(2) {
-    font-size: 23px;
-    font-weight: 700;
-    line-height: 1.3;
-    letter-spacing: -0.02em;
-    color: #8124ca;
-}
-
-/* Mobile */
-@media (max-width: 640px) {
-    .insightglow-pos .pos-page-header h1 {
-        font-size: 24px;
-    }
-
-    .insightglow-pos .pos-metrics > div p:nth-child(2) {
-        font-size: 20px;
-    }
-}
-
 .insightglow-pos .pos-workspace h2 { color: #24143f; letter-spacing: -.025em; }
 .insightglow-pos .pos-record-panel input,
 .insightglow-pos .pos-record-panel select {
@@ -4104,3 +4063,25 @@
 .insightglow-pos .pos-history-panel {margin-top:3px}
 @media(max-width:1120px){.insightglow-pos .pos-workspace{grid-template-columns:1fr}}
 @media(max-width:640px){.insightglow-pos .pos-workspace>section,.insightglow-pos .pos-history-panel{padding:18px!important}.insightglow-pos .pos-stat-card{min-height:120px}}
+
+
+/* POS visual polish v3 — iconography and compact typography only */
+.insightglow-pos .pos-page-header h1{font-size:clamp(24px,2vw,29px)!important;letter-spacing:-.035em}
+.insightglow-pos .pos-stat-card{min-height:116px!important;padding:20px 20px 18px 82px!important;display:flex;flex-direction:column;justify-content:center}
+.insightglow-pos .pos-stat-card p:first-of-type{font-size:12px!important;font-weight:600!important;line-height:1.35!important;padding-right:0}
+.insightglow-pos .pos-stat-card p:last-of-type{font-size:clamp(19px,1.65vw,24px)!important;line-height:1.2!important;margin-top:9px!important;letter-spacing:-.025em!important;overflow-wrap:anywhere}
+.insightglow-pos .pos-stat-icon{left:19px!important;right:auto!important;top:50%!important;transform:translateY(-50%);width:48px!important;height:48px!important;font-size:23px!important;border-radius:14px!important;background:#f0e4ff!important;color:#8524cb!important}
+.insightglow-pos .pos-stat-icon svg,.insightglow-pos .pos-heading-icon svg,.insightglow-pos .pos-empty-receipt-icon svg{width:23px;height:23px;stroke-width:2.1}
+.insightglow-pos .pos-stat-1 .pos-stat-icon{background:#e9efff!important;color:#5c62d9!important}
+.insightglow-pos .pos-stat-2 .pos-stat-icon{background:#e9f8f1!important;color:#18845b!important}
+.insightglow-pos .pos-heading-icon{background:#f0e5fc!important;color:#8426c7!important}
+.insightglow-pos .pos-form-step{background:linear-gradient(90deg,#f2e7fd,#fbf8ff)!important;border-color:#eee0f8!important}
+.insightglow-pos .pos-step-number{background:#f0dffc!important;color:#8124ca!important;width:36px;height:36px;border-radius:11px;font-size:18px}
+.insightglow-pos .pos-step-number svg{width:19px;height:19px;stroke-width:2.2}
+.insightglow-pos .pos-history-title{display:flex;align-items:center;gap:10px}
+.insightglow-pos .pos-history-title svg{color:#8a2bcb;width:19px;height:19px}
+.insightglow-pos .pos-payment-badge{display:inline-flex;align-items:center;padding:4px 9px;border-radius:7px;font-size:11px;font-weight:700}
+.insightglow-pos .pos-payment-cash{background:#dff7e9;color:#167647}
+.insightglow-pos .pos-payment-gcash{background:#e1edff;color:#2563c9}
+.insightglow-pos .pos-record-panel button[type=submit]{box-shadow:0 5px 13px #8124ca22}
+@media(max-width:640px){.insightglow-pos .pos-stat-card{padding-left:77px!important}.insightglow-pos .pos-stat-card p:last-of-type{font-size:20px!important}}

@@ -7,6 +7,7 @@ import {
     useRef,
     useState,
 } from "react"
+import { LuChartNoAxesCombined, LuReceiptText, LuWallet, LuCreditCard, LuShoppingCart, LuScissors, LuUserRound, LuPhone, LuPackage, LuClipboardList, LuBanknote, LuHistory, LuSparkles } from "react-icons/lu"
 import { API_URL, apiFetch } from "../lib/sessionApi"
 import { getEmergencyRecord, reconcileEmergencySale } from "../lib/offlineDb"
 
@@ -2377,7 +2378,7 @@ function AdminTransactions() {
                         key={label}
                         className={`${panel} pos-stat-card pos-stat-${index}`}
                     >
-                        <span className="pos-stat-icon" aria-hidden="true">{["₱", "▤", "↔"][index]}</span>
+                        <span className="pos-stat-icon" aria-hidden="true">{[<LuChartNoAxesCombined key="sales" />, <LuReceiptText key="transactions" />, <LuWallet key="payments" />][index]}</span>
                         <p className="text-sm text-gray-500">
                             {label}
                         </p>
@@ -2395,7 +2396,7 @@ function AdminTransactions() {
             <div className="pos-workspace grid items-start gap-6 xl:grid-cols-2">
                 <section className={`${panel} pos-record-panel`}>
                     <div className="pos-section-heading">
-                        <span className="pos-heading-icon" aria-hidden="true">✦</span>
+                        <span className="pos-heading-icon" aria-hidden="true"><LuShoppingCart /></span>
                         <div><p className="pos-eyebrow">NEW SALE</p><h2>Record a transaction</h2><p className="pos-section-subtitle">Complete the details below to record a payment.</p></div>
                     </div>
 
@@ -2404,7 +2405,7 @@ function AdminTransactions() {
                             disabled={disabled}
                             className="space-y-4"
                         >
-                            <div className="pos-form-step"><span className="pos-step-number">01</span><div><h3>Customer details</h3><p>Choose a source and identify the customer.</p></div></div>
+                            <div className="pos-form-step"><span className="pos-step-number"><LuUserRound /></span><div><h3>Customer details</h3><p>Choose a source and identify the customer.</p></div></div>
                             <Field label="Transaction source">
                                 <select
                                     className={input}
@@ -2504,7 +2505,7 @@ function AdminTransactions() {
                                         />
                                     </Field>
 
-                                    <div className="pos-form-step"><span className="pos-step-number">02</span><div><h3>Sale details</h3><p>Select the service or product and review its price.</p></div></div>
+                                    <div className="pos-form-step"><span className="pos-step-number"><LuScissors /></span><div><h3>Sale details</h3><p>Select the service or product and review its price.</p></div></div>
                                     <Field label="Sale type">
                                         <select
                                             className={input}
@@ -2702,7 +2703,7 @@ function AdminTransactions() {
                                 )}
                             </div>
 
-                            <div className="pos-form-step"><span className="pos-step-number">03</span><div><h3>Payment summary</h3><p>Review discounts, deposits and the amount due.</p></div></div>
+                            <div className="pos-form-step"><span className="pos-step-number"><LuCreditCard /></span><div><h3>Payment summary</h3><p>Review discounts, deposits and the amount due.</p></div></div>
                             <Field label="Original sale price before promotion, loyalty and deposit (₱)">
                                 <input
                                     required
@@ -2859,10 +2860,10 @@ function AdminTransactions() {
                 </section>
 
                 <section className={`${panel} pos-receipt-panel`}>
-                    <div className="pos-section-heading"><span className="pos-heading-icon" aria-hidden="true">▤</span><div><p className="pos-eyebrow">PAYMENT RECORD</p><h2>Saved receipt</h2><p className="pos-section-subtitle">Your most recently selected transaction.</p></div></div>
+                    <div className="pos-section-heading"><span className="pos-heading-icon" aria-hidden="true"><LuReceiptText /></span><div><p className="pos-eyebrow">PAYMENT RECORD</p><h2>Saved receipt</h2><p className="pos-section-subtitle">Your most recently selected transaction.</p></div></div>
 
                     {!receipt ? (
-                        <div className="pos-empty-receipt" role="status"><div className="pos-empty-receipt-icon" aria-hidden="true">▤</div><h3>No receipt selected yet</h3><p>Once you save a transaction, its receipt will appear here. You can also select View in the history.</p></div>
+                        <div className="pos-empty-receipt" role="status"><div className="pos-empty-receipt-icon" aria-hidden="true"><LuReceiptText /></div><h3>No receipt selected yet</h3><p>Once you save a transaction, its receipt will appear here. You can also select View in the history.</p></div>
                     ) : (
                         <div className="mt-5 space-y-4 text-sm">
                             <p className="font-bold text-purple-800">
@@ -2990,7 +2991,7 @@ function AdminTransactions() {
                             SALES RECORDS
                         </p>
 
-                        <h2 className="text-lg font-bold text-purple-950">
+                        <h2 className="pos-history-title text-lg font-bold text-purple-950"><LuHistory aria-hidden="true" />
                             Transaction history
                         </h2>
 
@@ -3255,7 +3256,7 @@ function AdminTransactions() {
                                                     }
                                                 >
                                                     Balance:{" "}
-                                                    {row.payment}
+                                                    <span className={`pos-payment-badge ${row.payment === "GCash" ? "pos-payment-gcash" : row.payment === "Cash" ? "pos-payment-cash" : ""}`}>{row.payment}</span>
                                                 </p>
                                             ) : (
                                                 <p>
