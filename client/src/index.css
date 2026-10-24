@@ -3999,23 +3999,64 @@
 }
 
 
-/* InsightGlow POS refresh — scoped to Transactions only. */
-.insightglow-pos { --pos-violet: #8124ca; color: #25183e; }
-.insightglow-pos .pos-page-header h1 { font-size: clamp(26px, 2.5vw, 34px); letter-spacing: -.045em; font-weight: 750; }
-.insightglow-pos .pos-page-header p { color: #77708d; }
-.insightglow-pos .pos-page-header button { border-radius: 11px; }
+
+/* InsightGlow POS — refined styling */
+.insightglow-pos {
+    --pos-violet: #8124ca;
+    color: #25183e;
+}
+
+.insightglow-pos .pos-page-header h1 {
+    font-size: 28px;
+    letter-spacing: -0.03em;
+    font-weight: 700;
+}
+
+.insightglow-pos .pos-page-header p {
+    color: #77708d;
+}
+
+.insightglow-pos .pos-page-header button {
+    border-radius: 11px;
+}
+
+/* POS summary cards */
 .insightglow-pos .pos-metrics > div {
-  min-height: 116px; border: 1px solid #eee8f6; border-radius: 18px;
-  background: linear-gradient(135deg,#fff 48%,#faf5ff); box-shadow: 0 7px 25px #45236709;
-  padding: 23px 24px;
+    min-height: 116px;
+    border: 1px solid #eee8f6;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #fff 48%, #faf5ff);
+    box-shadow: 0 7px 25px #45236709;
+    padding: 23px 24px;
 }
-.insightglow-pos .pos-metrics > div p:first-child { color: #716b89; font-size: 12px; }
-.insightglow-pos .pos-metrics > div p:nth-child(2) { color: #7d22ce; font-size: clamp(22px,2.1vw,29px); }
-.insightglow-pos .pos-workspace { grid-template-columns: minmax(0,1.35fr) minmax(330px,1fr); gap: 16px; }
-.insightglow-pos .pos-workspace > section {
-  border: 1px solid #eee8f5; border-radius: 18px; background: #fff;
-  box-shadow: 0 6px 24px #39205a09; padding: 24px;
+
+/* Compact typography */
+.insightglow-pos .pos-metrics > div p:first-child {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.5;
+    color: #756b86;
 }
+
+.insightglow-pos .pos-metrics > div p:nth-child(2) {
+    font-size: 23px;
+    font-weight: 700;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    color: #8124ca;
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+    .insightglow-pos .pos-page-header h1 {
+        font-size: 24px;
+    }
+
+    .insightglow-pos .pos-metrics > div p:nth-child(2) {
+        font-size: 20px;
+    }
+}
+
 .insightglow-pos .pos-workspace h2 { color: #24143f; letter-spacing: -.025em; }
 .insightglow-pos .pos-record-panel input,
 .insightglow-pos .pos-record-panel select {
