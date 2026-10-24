@@ -16,23 +16,35 @@ import {
 
 import { BrandMark } from "../components/Brand"
 
-const base = (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "")
-const API = base.endsWith("/api") ? base : `${base}/api`
+const base = (
+    import.meta.env.VITE_API_URL || "/api"
+).replace(/\/+$/, "")
+
+const API = base.endsWith("/api")
+    ? base
+    : `${base}/api`
 
 const input = "booking-input"
 const button = "booking-button"
 
 const peso = (value) =>
-    Number(value || 0).toLocaleString("en-PH", {
-        style: "currency",
-        currency: "PHP",
-    })
+    Number(value || 0).toLocaleString(
+        "en-PH",
+        {
+            style: "currency",
+            currency: "PHP",
+        },
+    )
 
-const KEY = "stylesync-payment-reservation-v1"
+const KEY =
+    "stylesync-payment-reservation-v1"
 
 function readSaved() {
     try {
-        return JSON.parse(sessionStorage.getItem(KEY) || "null")
+        return JSON.parse(
+            sessionStorage.getItem(KEY) ||
+                "null",
+        )
     } catch {
         return null
     }
@@ -50,44 +62,72 @@ async function call(
     const headers = {}
 
     if (token) {
-        headers["X-Booking-Token"] = token
+        headers["X-Booking-Token"] =
+            token
     }
 
     if (method !== "GET") {
-        let response = await fetch(`${API}/auth/session`, {
-            credentials: "include",
-            cache: "no-store",
-        })
-
-        if (response.status === 401) {
-            response = await fetch(`${API}/auth/session`, {
+        let response = await fetch(
+            `${API}/auth/session`,
+            {
                 credentials: "include",
                 cache: "no-store",
-            })
+            },
+        )
+
+        if (response.status === 401) {
+            response = await fetch(
+                `${API}/auth/session`,
+                {
+                    credentials:
+                        "include",
+
+                    cache: "no-store",
+                },
+            )
         }
 
-        const session = await response.json().catch(() => null)
+        const session =
+            await response
+                .json()
+                .catch(() => null)
 
-        if (!response.ok || !session?.csrfToken) {
+        if (
+            !response.ok ||
+            !session?.csrfToken
+        ) {
             throw new Error(
                 "Refresh the page to prepare a secure booking.",
             )
         }
 
-        headers["X-CSRF-Token"] = session.csrfToken
-        headers["Content-Type"] = "application/json"
+        headers["X-CSRF-Token"] =
+            session.csrfToken
+
+        headers["Content-Type"] =
+            "application/json"
     }
 
-    const response = await fetch(`${API}${path}`, {
-        method,
-        credentials: "include",
-        cache: "no-store",
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal,
-    })
+    const response = await fetch(
+        `${API}${path}`,
+        {
+            method,
+            credentials: "include",
+            cache: "no-store",
+            headers,
 
-    const data = await response.json().catch(() => null)
+            body: body
+                ? JSON.stringify(body)
+                : undefined,
+
+            signal,
+        },
+    )
+
+    const data =
+        await response
+            .json()
+            .catch(() => null)
 
     if (!response.ok) {
         throw Object.assign(
@@ -95,8 +135,10 @@ async function call(
                 data?.error ||
                     "The booking service is temporarily unavailable. Please try again or call the salon.",
             ),
+
             {
-                status: response.status,
+                status:
+                    response.status,
             },
         )
     }
@@ -110,7 +152,10 @@ async function call(
     return data
 }
 
-function Field({ label, children }) {
+function Field({
+    label,
+    children,
+}) {
     return (
         <label className="booking-field">
             <span>{label}</span>
@@ -122,201 +167,257 @@ function Field({ label, children }) {
 function formatBookingDate(value) {
     if (!value) return ""
 
-    const text = String(value).slice(0, 10)
-    const date = new Date(`${text}T00:00:00+08:00`)
+    const text =
+        String(value).slice(0, 10)
 
-    if (Number.isNaN(date.getTime())) {
+    const date = new Date(
+        `${text}T00:00:00+08:00`,
+    )
+
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
         return text
     }
 
-    return date.toLocaleDateString("en-PH", {
-        timeZone: "Asia/Manila",
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-    })
-}
+    return date.toLocaleDateString(
+        "en-PH",
+        {
+            timeZone:
+                "Asia/Manila",
 
-function formatBookingNumber(value) {
-    const number = Number(value)
-
-    if (
-        Number.isSafeInteger(number) &&
-        number > 0
-    ) {
-        return `#${String(number).padStart(3, "0")}`
-    }
-
-    return "#—"
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+        },
+    )
 }
 
 export default function Book() {
-    const location = useLocation()
+    const location =
+        useLocation()
 
-    const [services, setServices] = useState([])
-    const [priceQuote, setPriceQuote] = useState(null)
-    const [priceChecking, setPriceChecking] = useState(false)
-    const [priceError, setPriceError] = useState("")
+    const [
+        services,
+        setServices,
+    ] = useState([])
 
-    const [form, setForm] = useState({
+    const [
+        form,
+        setForm,
+    ] = useState({
         customer_name: "",
         contact_number: "",
         email: "",
-        gender: "Prefer not to say",
-        customer_type: "Regular",
+
+        gender:
+            "Prefer not to say",
+        lgbtqia_community: "",
+
+        customer_type:
+            "Regular",
+
         service_id: "",
+
         appointment_date: "",
         appointment_time: "",
+
         notes: "",
+
         privacy_consent: false,
     })
 
-    const [entry, setEntry] = useState(readSaved)
-    const [reservation, setReservation] = useState(null)
-    const [availability, setAvailability] = useState(null)
-    const [checking, setChecking] = useState(false)
-    const [busy, setBusy] = useState(false)
-    const [error, setError] = useState("")
-    const [reviewing, setReviewing] = useState(false)
-    const [reference, setReference] = useState("")
-    const [clock, setClock] = useState(Date.now())
-    const [offset, setOffset] = useState(0)
+    const [
+        entry,
+        setEntry,
+    ] = useState(readSaved)
 
-    const lock = useRef(false)
-    const mutationVersion = useRef(0)
+    const [
+        reservation,
+        setReservation,
+    ] = useState(null)
 
-    const selected = services.find(
-        (service) =>
-            String(service.service_id) === String(form.service_id),
+    const [
+        availability,
+        setAvailability,
+    ] = useState(null)
+
+    const [
+        checking,
+        setChecking,
+    ] = useState(false)
+
+    const [
+        busy,
+        setBusy,
+    ] = useState(false)
+
+    const [
+        error,
+        setError,
+    ] = useState("")
+
+    const [
+        reviewing,
+        setReviewing,
+    ] = useState(false)
+
+    const [
+        reference,
+        setReference,
+    ] = useState("")
+
+    const [
+        clock,
+        setClock,
+    ] = useState(
+        Date.now(),
     )
-    // A quote is usable only for the currently selected service and date.
-    const priceKey = `${form.service_id}|${form.appointment_date}`
-    const validPriceQuote =
-        priceQuote?.key === priceKey &&
-        Number.isFinite(Number(priceQuote.service_total)) &&
-        Number(priceQuote.service_total) > 0 &&
-        Number.isFinite(Number(priceQuote.required_amount)) &&
-        Number(priceQuote.required_amount) > 0
 
-    useEffect(() => {
-        if (!form.service_id || !form.appointment_date || entry) {
-            setPriceQuote(null)
-            setPriceChecking(false)
-            setPriceError("")
-            return
-        }
+    const [
+        offset,
+        setOffset,
+    ] = useState(0)
 
-        const controller = new AbortController()
-        const key = `${form.service_id}|${form.appointment_date}`
+    const lock =
+        useRef(false)
 
-        setPriceQuote(null)
-        setPriceChecking(true)
-        setPriceError("")
+    const mutationVersion =
+        useRef(0)
 
-        const query = new URLSearchParams({
-            service_id: form.service_id,
-            appointment_date: form.appointment_date,
-        })
-
-        call(`/public/booking-price?${query}`, {
-            signal: controller.signal,
-        })
-            .then((data) => {
-                if (!controller.signal.aborted) {
-                    setPriceQuote({ ...data, key })
-                }
-            })
-            .catch((err) => {
-                if (!controller.signal.aborted) {
-                    setPriceError(err.message)
-                }
-            })
-            .finally(() => {
-                if (!controller.signal.aborted) {
-                    setPriceChecking(false)
-                }
-            })
-
-        return () => controller.abort()
-    }, [form.service_id, form.appointment_date, entry])
+    const selected =
+        services.find(
+            (service) =>
+                String(
+                    service.service_id,
+                ) ===
+                String(
+                    form.service_id,
+                ),
+        )
 
     const availabilityKey =
         `${form.service_id}|${form.appointment_date}|${form.appointment_time}`
 
     const validAvailability =
-        availability?.key === availabilityKey &&
-        Number(availability.available_count) > 0
+        availability?.key ===
+            availabilityKey &&
+        Number(
+            availability.available_count,
+        ) > 0
 
-    const seconds = reservation
-        ? Math.max(
-              0,
-              Math.ceil(
-                  (Date.parse(reservation.expires_at) -
-                      clock -
-                      offset) /
-                      1000,
-              ),
-          )
-        : 0
+    const seconds =
+        reservation
+            ? Math.max(
+                  0,
+                  Math.ceil(
+                      (
+                          Date.parse(
+                              reservation.expires_at,
+                          ) -
+                          clock -
+                          offset
+                      ) /
+                          1000,
+                  ),
+              )
+            : 0
 
     function accept(data) {
         setReservation(data)
 
         setOffset(
-            Date.parse(data.server_now) - Date.now(),
+            Date.parse(
+                data.server_now,
+            ) - Date.now(),
         )
     }
 
     useEffect(() => {
-        const controller = new AbortController()
+        const controller =
+            new AbortController()
 
         call("/services", {
-            signal: controller.signal,
+            signal:
+                controller.signal,
         })
             .then((rows) => {
-                if (!Array.isArray(rows)) {
-                    throw new Error("Cannot load services.")
+                if (
+                    !Array.isArray(
+                        rows,
+                    )
+                ) {
+                    throw new Error(
+                        "Cannot load services.",
+                    )
                 }
 
-                const list = rows.filter(
-                    (service) =>
-                        service.status === "Available",
-                )
+                const list =
+                    rows.filter(
+                        (service) =>
+                            service.status ===
+                            "Available",
+                    )
 
                 setServices(list)
 
-                const chosen = list.find(
-                    (service) =>
-                        service.service ===
-                        location.state?.selectedService,
-                )
+                const chosen =
+                    list.find(
+                        (service) =>
+                            service.service ===
+                            location.state
+                                ?.selectedService,
+                    )
 
                 if (chosen) {
-                    setForm((current) => ({
-                        ...current,
+                    setForm(
+                        (
+                            current,
+                        ) => ({
+                            ...current,
 
-                        service_id: String(
-                            chosen.service_id,
-                        ),
-                    }))
+                            service_id:
+                                String(
+                                    chosen.service_id,
+                                ),
+                        }),
+                    )
                 }
             })
             .catch((err) => {
-                if (!controller.signal.aborted) {
-                    setError(err.message)
+                if (
+                    !controller
+                        .signal
+                        .aborted
+                ) {
+                    setError(
+                        err.message,
+                    )
                 }
             })
 
-        const timer = setInterval(
-            () => setClock(Date.now()),
-            1000,
-        )
+        const timer =
+            setInterval(
+                () =>
+                    setClock(
+                        Date.now(),
+                    ),
+                1000,
+            )
 
         return () => {
             controller.abort()
-            clearInterval(timer)
+
+            clearInterval(
+                timer,
+            )
         }
-    }, [location.state?.selectedService])
+    }, [
+        location.state
+            ?.selectedService,
+    ])
 
     useEffect(() => {
         if (!entry?.token) {
@@ -329,7 +430,10 @@ export default function Book() {
         let running = false
 
         async function refresh() {
-            if (running || lock.current) {
+            if (
+                running ||
+                lock.current
+            ) {
                 return
             }
 
@@ -339,17 +443,23 @@ export default function Book() {
             running = true
 
             try {
-                const data = await call(
-                    "/booking-payments/reservation",
-                    {
-                        token: entry.token,
-                        signal:
-                            controller.signal,
-                    },
-                )
+                const data =
+                    await call(
+                        "/booking-payments/reservation",
+                        {
+                            token:
+                                entry.token,
+
+                            signal:
+                                controller
+                                    .signal,
+                        },
+                    )
 
                 if (
-                    !controller.signal.aborted &&
+                    !controller
+                        .signal
+                        .aborted &&
                     version ===
                         mutationVersion.current &&
                     !lock.current
@@ -359,13 +469,16 @@ export default function Book() {
                 }
             } catch (err) {
                 if (
-                    !controller.signal.aborted &&
+                    !controller
+                        .signal
+                        .aborted &&
                     version ===
                         mutationVersion.current &&
                     !lock.current
                 ) {
                     setError(
-                        err.status === 404
+                        err.status ===
+                            404
                             ? "Reservation not confirmed yet. Use Retry reservation below."
                             : err.message,
                     )
@@ -377,29 +490,26 @@ export default function Book() {
 
         refresh()
 
-        const timer = setInterval(
-            refresh,
-            10000,
-        )
+        const timer =
+            setInterval(
+                refresh,
+                10000,
+            )
 
         return () => {
             controller.abort()
-            clearInterval(timer)
+
+            clearInterval(
+                timer,
+            )
         }
     }, [entry])
 
     useEffect(() => {
-        /*
-         * IMPORTANT:
-         * Do not clear availability while the client
-         * is reviewing the booking.
-         *
-         * The selected slot was already checked before
-         * entering the review screen.
-         */
+        setAvailability(null)
+
         if (
             entry ||
-            reviewing ||
             !form.service_id ||
             !form.appointment_date ||
             !form.appointment_time
@@ -408,24 +518,24 @@ export default function Book() {
             return
         }
 
-        setAvailability(null)
-
         const controller =
             new AbortController()
 
         setChecking(true)
 
         const query =
-            new URLSearchParams({
-                service_id:
-                    form.service_id,
+            new URLSearchParams(
+                {
+                    service_id:
+                        form.service_id,
 
-                appointment_date:
-                    form.appointment_date,
+                    appointment_date:
+                        form.appointment_date,
 
-                appointment_time:
-                    form.appointment_time,
-            })
+                    appointment_time:
+                        form.appointment_time,
+                },
+            )
 
         call(
             `/appointments/availability?${query}`,
@@ -436,28 +546,36 @@ export default function Book() {
         )
             .then((data) => {
                 if (
-                    !controller.signal.aborted
+                    !controller
+                        .signal
+                        .aborted
                 ) {
                     setAvailability({
                         ...data,
-
-                        key:
-                            availabilityKey,
+                        key: availabilityKey,
                     })
                 }
             })
             .catch((err) => {
                 if (
-                    !controller.signal.aborted
+                    !controller
+                        .signal
+                        .aborted
                 ) {
-                    setError(err.message)
+                    setError(
+                        err.message,
+                    )
                 }
             })
             .finally(() => {
                 if (
-                    !controller.signal.aborted
+                    !controller
+                        .signal
+                        .aborted
                 ) {
-                    setChecking(false)
+                    setChecking(
+                        false,
+                    )
                 }
             })
 
@@ -469,7 +587,6 @@ export default function Book() {
         form.appointment_time,
         availabilityKey,
         entry,
-        reviewing,
     ])
 
     function change(event) {
@@ -480,14 +597,17 @@ export default function Book() {
             checked,
         } = event.target
 
-        setForm((current) => ({
-            ...current,
+        setForm(
+            (current) => ({
+                ...current,
 
-            [name]:
-                type === "checkbox"
-                    ? checked
-                    : value,
-        }))
+                [name]:
+                    type ===
+                    "checkbox"
+                        ? checked
+                        : value,
+            }),
+        )
 
         setError("")
     }
@@ -495,16 +615,10 @@ export default function Book() {
     function reviewBooking(event) {
         event.preventDefault()
 
-        if (priceChecking || !validPriceQuote || priceError || !total) {
-            setError("Please wait for the updated booking price before continuing.")
-            return
-        }
-
         if (!validAvailability) {
             setError(
                 "Choose an available slot first.",
             )
-
             return
         }
 
@@ -512,7 +626,6 @@ export default function Book() {
             setError(
                 "Please confirm the privacy consent before continuing.",
             )
-
             return
         }
 
@@ -525,25 +638,17 @@ export default function Book() {
         })
     }
 
-    async function reserve(event) {
+    async function reserve(
+        event,
+    ) {
         event?.preventDefault()
 
         if (lock.current) {
             return
         }
 
-        // Do not interfere with recovery of a previously saved reservation.
         if (
             !entry &&
-            (priceChecking || !validPriceQuote || priceError || !total)
-        ) {
-            setError("Booking price is not ready. Please review the updated price.")
-            return
-        }
-
-        if (
-            !entry &&
-            !reviewing &&
             !validAvailability
         ) {
             setError(
@@ -565,6 +670,7 @@ export default function Book() {
         }
 
         lock.current = true
+
         mutationVersion.current++
 
         setBusy(true)
@@ -576,27 +682,32 @@ export default function Book() {
             if (!saved) {
                 const bytes =
                     crypto.getRandomValues(
-                        new Uint8Array(32),
+                        new Uint8Array(
+                            32,
+                        ),
                     )
 
                 saved = {
                     token: Array.from(
                         bytes,
+
                         (value) =>
                             value
-                                .toString(16)
-                                .padStart(2, "0"),
+                                .toString(
+                                    16,
+                                )
+                                .padStart(
+                                    2,
+                                    "0",
+                                ),
                     ).join(""),
 
-                    payload:
-                        form,
+                    payload: form,
                 }
 
-                /*
-                 * Save before sending the reservation
-                 * request so refresh/back can continue
-                 * the same reservation.
-                 */
+                // Save the reservation key before
+                // sending the request so Back/refresh
+                // can continue the same reservation.
                 sessionStorage.setItem(
                     KEY,
                     JSON.stringify(
@@ -625,11 +736,15 @@ export default function Book() {
 
             setReviewing(false)
         } catch (err) {
-            setError(err.message)
+            setError(
+                err.message,
+            )
 
             if (
-                err.status === 400 ||
-                err.status === 409
+                err.status ===
+                    400 ||
+                err.status ===
+                    409
             ) {
                 try {
                     sessionStorage.removeItem(
@@ -648,7 +763,9 @@ export default function Book() {
         }
     }
 
-    async function submit(event) {
+    async function submit(
+        event,
+    ) {
         event.preventDefault()
 
         if (lock.current) {
@@ -656,6 +773,7 @@ export default function Book() {
         }
 
         lock.current = true
+
         mutationVersion.current++
 
         setBusy(true)
@@ -682,7 +800,9 @@ export default function Book() {
                 ),
             )
         } catch (err) {
-            setError(err.message)
+            setError(
+                err.message,
+            )
         } finally {
             lock.current = false
             setBusy(false)
@@ -704,26 +824,44 @@ export default function Book() {
         setReviewing(false)
 
         if (prefill) {
-            setForm((current) => ({
-                ...current,
-                ...prefill,
+            setForm(
+                (current) => ({
+                    ...current,
+                    ...prefill,
 
-                privacy_consent:
-                    false,
-            }))
+                    privacy_consent:
+                        false,
+                }),
+            )
         } else {
             setForm({
-                customer_name: "",
-                contact_number: "",
+                customer_name:
+                    "",
+
+                contact_number:
+                    "",
+
                 email: "",
+
                 gender:
                     "Prefer not to say",
+
+                lgbtqia_community: "",
+
                 customer_type:
                     "Regular",
-                service_id: "",
-                appointment_date: "",
-                appointment_time: "",
+
+                service_id:
+                    "",
+
+                appointment_date:
+                    "",
+
+                appointment_time:
+                    "",
+
                 notes: "",
+
                 privacy_consent:
                     false,
             })
@@ -732,16 +870,18 @@ export default function Book() {
 
     function bookSuggestedSchedule() {
         const previous =
-            entry?.payload || {}
+            entry?.payload ||
+            {}
 
         newBooking({
             ...previous,
 
-            service_id: String(
-                previous.service_id ||
-                    reservation?.service_id ||
-                    "",
-            ),
+            service_id:
+                String(
+                    previous.service_id ||
+                        reservation?.service_id ||
+                        "",
+                ),
 
             appointment_date:
                 reservation?.suggested_date
@@ -764,21 +904,19 @@ export default function Book() {
                     : "",
         })
     }
-    const total = validPriceQuote
-        ? Math.round(Number(priceQuote.service_total) * 100)
-        : 0
 
-    const down = validPriceQuote
-        ? Math.round(Number(priceQuote.required_amount) * 100)
-        : 0
+    const total =
+        Math.round(
+            Number(
+                selected?.price ||
+                    0,
+            ) * 100,
+        )
 
-    const originalTotal = validPriceQuote
-        ? Math.round(Number(priceQuote.original_service_total) * 100)
-        : 0
-
-    const promoDiscount = validPriceQuote
-        ? Math.round(Number(priceQuote.promotion_discount) * 100)
-        : 0
+    const down =
+        Math.round(
+            total / 5,
+        )
 
     const dateParts =
         new Intl.DateTimeFormat(
@@ -787,14 +925,9 @@ export default function Book() {
                 timeZone:
                     "Asia/Manila",
 
-                year:
-                    "numeric",
-
-                month:
-                    "2-digit",
-
-                day:
-                    "2-digit",
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
             },
         ).formatToParts(
             new Date(),
@@ -803,8 +936,7 @@ export default function Book() {
     const part = (key) =>
         dateParts.find(
             (item) =>
-                item.type ===
-                key,
+                item.type === key,
         )?.value
 
     const today =
@@ -830,24 +962,32 @@ export default function Book() {
                 id="main-content"
                 tabIndex={-1}
             >
-                                <div className="page-intro site-container">
+                <div className="page-intro site-container">
                     <p className="eyebrow">
-                        YOUR NEXT MOMENT OF
-                        SELF-CARE
+                        YOUR NEXT MOMENT
+                        OF SELF-CARE
                     </p>
 
                     <h1>
-                        Make time for{" "}
-                        <em>you.</em>
+                        Make time
+                        for{" "}
+                        <em>
+                            you.
+                        </em>
                     </h1>
 
                     <p>
-                        A fresh look or a
-                        well-deserved pause.
+                        A fresh look
+                        or a
+                        well-deserved
+                        pause.
+
                         <br />
-                        Your next escape is
-                        just a few details
-                        away.
+
+                        Your next
+                        escape is
+                        just a few
+                        details away.
                     </p>
                 </div>
 
@@ -900,7 +1040,9 @@ export default function Book() {
                                             )}
                                         </span>
 
-                                        {label}
+                                        {
+                                            label
+                                        }
                                     </li>
                                 ),
                             )}
@@ -936,7 +1078,9 @@ export default function Book() {
                                     role="alert"
                                     className="mb-5 rounded-xl bg-red-50 p-4 text-red-700"
                                 >
-                                    {error}
+                                    {
+                                        error
+                                    }
                                 </p>
                             )}
 
@@ -944,7 +1088,8 @@ export default function Book() {
                                 !reservation ? (
                                     <div className="space-y-4">
                                         <p>
-                                            Checking your
+                                            Checking
+                                            your
                                             reservation…
                                         </p>
 
@@ -967,14 +1112,7 @@ export default function Book() {
                                 ) : (
                                     <div className="space-y-5">
                                         <div className="rounded-xl bg-purple-50 p-4 text-purple-900">
-                                            <p className="text-xs font-semibold uppercase tracking-wider text-purple-600">
-                                                Booking{" "}
-                                                {formatBookingNumber(
-                                                    reservation.booking_number,
-                                                )}
-                                            </p>
-
-                                            <p className="mt-1 font-bold">
+                                            <p className="font-bold">
                                                 {reservation.customer_name ||
                                                     entry
                                                         ?.payload
@@ -1003,9 +1141,12 @@ export default function Book() {
 
                                         <p className="text-sm leading-relaxed text-gray-600">
                                             Appointment
-                                            approval or
-                                            decline updates
-                                            will be sent to{" "}
+                                            approval
+                                            or
+                                            decline
+                                            updates
+                                            will be
+                                            sent to{" "}
                                             <strong>
                                                 {reservation.email ||
                                                     entry
@@ -1040,10 +1181,15 @@ export default function Book() {
                                                 0 ? (
                                                     <>
                                                         <p className="text-sm text-gray-600">
-                                                            Scan or
-                                                            save this
-                                                            QR and pay
-                                                            the exact
+                                                            Scan
+                                                            or
+                                                            save
+                                                            this
+                                                            QR
+                                                            and
+                                                            pay
+                                                            the
+                                                            exact
                                                             amount
                                                             below.
                                                             Submit
@@ -1146,34 +1292,55 @@ export default function Book() {
                                                     </>
                                                 ) : (
                                                     <p className="rounded-xl bg-amber-50 p-4">
-                                                        The payment
-                                                        window has
+                                                        The
+                                                        payment
+                                                        window
+                                                        has
                                                         ended.
-                                                        Checking the
+                                                        Checking
+                                                        the
                                                         final
                                                         reservation
-                                                        status… Do
-                                                        not send a
-                                                        new payment.
+                                                        status…
+                                                        Do
+                                                        not
+                                                        send
+                                                        a
+                                                        new
+                                                        payment.
                                                     </p>
                                                 )}
 
                                                 <p className="text-xs text-gray-500">
-                                                    If no payment
-                                                    reference is
+                                                    If no
+                                                    payment
+                                                    reference
+                                                    is
                                                     submitted
-                                                    within 15
-                                                    minutes, the
-                                                    reservation is
-                                                    cancelled. If
-                                                    you paid but
-                                                    could not
-                                                    submit in
-                                                    time, contact
-                                                    the salon and
-                                                    keep your
-                                                    receipt. Do
-                                                    not pay twice.
+                                                    within
+                                                    15
+                                                    minutes,
+                                                    the
+                                                    reservation
+                                                    is
+                                                    cancelled.
+                                                    If you
+                                                    paid but
+                                                    could
+                                                    not
+                                                    submit
+                                                    in
+                                                    time,
+                                                    contact
+                                                    the
+                                                    salon
+                                                    and
+                                                    keep
+                                                    your
+                                                    receipt.
+                                                    Do not
+                                                    pay
+                                                    twice.
                                                 </p>
                                             </>
                                         ) : reservation.payment_status ===
@@ -1194,8 +1361,10 @@ export default function Book() {
 
                                                     <p className="mt-2 text-sm">
                                                         Please
-                                                        arrive on
-                                                        time for
+                                                        arrive
+                                                        on
+                                                        time
+                                                        for
                                                         your
                                                         scheduled
                                                         appointment
@@ -1214,7 +1383,8 @@ export default function Book() {
                                                 <p className="text-sm text-gray-500">
                                                     Payment
                                                     status:
-                                                    Verified ·
+                                                    Verified
+                                                    ·
                                                     Appointment
                                                     status:
                                                     Approved
@@ -1229,7 +1399,8 @@ export default function Book() {
                                                         newBooking()
                                                     }
                                                 >
-                                                    Start another
+                                                    Start
+                                                    another
                                                     booking
                                                 </button>
                                             </>
@@ -1245,7 +1416,8 @@ export default function Book() {
                                                     <p className="font-bold">
                                                         Your
                                                         appointment
-                                                        request was
+                                                        request
+                                                        was
                                                         declined.
                                                     </p>
 
@@ -1315,57 +1487,18 @@ export default function Book() {
                                             </>
                                         ) : (
                                             <>
-                                                {reservation.payment_status ===
-                                                "Rejected" ? (
-                                                    <div
-                                                        role="status"
-                                                        className="rounded-xl bg-red-50 p-5 text-red-900"
-                                                    >
-                                                        <p className="font-bold">
-                                                            Payment was rejected.
-                                                        </p>
-
-                                                        {reservation.review_note && (
-                                                            <div className="mt-3">
-                                                                <p className="text-sm font-semibold">
-                                                                    Reason:
-                                                                </p>
-
-                                                                <p className="mt-1 text-sm leading-relaxed">
-                                                                    {
-                                                                        reservation.review_note
-                                                                    }
-                                                                </p>
-                                                            </div>
-                                                        )}
-
-                                                        <p className="mt-3 text-sm leading-relaxed">
-                                                            This reservation
-                                                            is closed and its
-                                                            slot has been
-                                                            released. If you
-                                                            already sent
-                                                            payment or believe
-                                                            this was a mistake,
-                                                            please contact the
-                                                            salon and keep your
-                                                            receipt.
-                                                        </p>
-                                                    </div>
-                                                ) : (
-                                                    <p
-                                                        role="status"
-                                                        className="rounded-xl bg-purple-50 p-4 text-purple-900"
-                                                    >
-                                                        {reservation.payment_status ===
-                                                        "Awaiting Verification"
-                                                            ? "Your payment details were submitted. Please wait while the salon verifies the payment and confirms your booking."
-                                                            : reservation.payment_status ===
-                                                                "Verified"
-                                                              ? `Payment verified. Appointment status: ${reservation.appointment_status}.`
-                                                              : "This reservation is closed and its slot has been released. If you sent a payment, contact the salon with your receipt."}
-                                                    </p>
-                                                )}
+                                                <p
+                                                    role="status"
+                                                    className="rounded-xl bg-purple-50 p-4 text-purple-900"
+                                                >
+                                                    {reservation.payment_status ===
+                                                    "Awaiting Verification"
+                                                        ? "Your payment details were submitted. The salon will verify receipt before reviewing your appointment."
+                                                        : reservation.payment_status ===
+                                                            "Verified"
+                                                          ? `Payment verified. Appointment status: ${reservation.appointment_status}.`
+                                                          : "This reservation is closed and its slot has been released. If you sent a payment, contact the salon with your receipt."}
+                                                </p>
 
                                                 <p className="text-sm text-gray-500">
                                                     Payment
@@ -1384,7 +1517,8 @@ export default function Book() {
                                                         newBooking()
                                                     }
                                                 >
-                                                    Start another
+                                                    Start
+                                                    another
                                                     booking
                                                 </button>
                                             </>
@@ -1392,35 +1526,26 @@ export default function Book() {
                                     </div>
                                 )
                             ) : reviewing ? (
-                                                                <div className="space-y-6">
+                                <div className="space-y-6">
                                     <div>
                                         <p className="eyebrow">
-                                            BEFORE YOU
-                                            CONTINUE
+                                            BEFORE YOU CONTINUE
                                         </p>
 
                                         <h3 className="mt-2 text-xl font-bold text-purple-950">
-                                            Please review
-                                            your booking
+                                            Please review your booking
                                         </h3>
 
-                                        <p className="mt-2 text-sm leading-relaxed text-gray-500">
-                                            Make sure your
-                                            personal and
-                                            appointment
-                                            information
-                                            below is
-                                            correct before
-                                            proceeding to
-                                            payment.
+                                        <p className="mt-2 text-sm leading-6 text-gray-600">
+                                            Make sure your information and appointment details are
+                                            correct before proceeding to payment.
                                         </p>
                                     </div>
 
                                     <div className="overflow-hidden rounded-2xl border border-purple-100 bg-white">
                                         <div className="border-b border-purple-100 bg-purple-50 px-5 py-4">
                                             <p className="font-semibold text-purple-950">
-                                                Personal
-                                                details
+                                                Customer information
                                             </p>
                                         </div>
 
@@ -1431,22 +1556,17 @@ export default function Book() {
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
-                                                    {
-                                                        form.customer_name
-                                                    }
+                                                    {form.customer_name}
                                                 </p>
                                             </div>
 
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Contact
-                                                    number
+                                                    Contact number
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
-                                                    {
-                                                        form.contact_number
-                                                    }
+                                                    {form.contact_number}
                                                 </p>
                                             </div>
 
@@ -1456,22 +1576,17 @@ export default function Book() {
                                                 </p>
 
                                                 <p className="mt-1 break-all font-semibold text-gray-900">
-                                                    {
-                                                        form.email
-                                                    }
+                                                    {form.email}
                                                 </p>
                                             </div>
 
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Customer
-                                                    type
+                                                    Customer type
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
-                                                    {
-                                                        form.customer_type
-                                                    }
+                                                    {form.customer_type}
                                                 </p>
                                             </div>
 
@@ -1481,9 +1596,7 @@ export default function Book() {
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
-                                                    {
-                                                        form.gender
-                                                    }
+                                                    {form.gender}
                                                 </p>
                                             </div>
                                         </div>
@@ -1492,8 +1605,7 @@ export default function Book() {
                                     <div className="overflow-hidden rounded-2xl border border-purple-100 bg-white">
                                         <div className="border-b border-purple-100 bg-purple-50 px-5 py-4">
                                             <p className="font-semibold text-purple-950">
-                                                Appointment
-                                                details
+                                                Appointment details
                                             </p>
                                         </div>
 
@@ -1504,15 +1616,13 @@ export default function Book() {
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
-                                                    {
-                                                        selected?.service
-                                                    }
+                                                    {selected?.service}
                                                 </p>
                                             </div>
 
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Final service price
+                                                    Service price
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
@@ -1523,29 +1633,9 @@ export default function Book() {
                                                 </p>
                                             </div>
 
-                                            {validPriceQuote && promoDiscount > 0 && (
-                                                <>
-                                                    <div>
-                                                        <p className="text-gray-500">Original service price</p>
-                                                        <p className="mt-1 font-semibold text-gray-900 line-through">
-                                                            {peso(originalTotal / 100)}
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-gray-500">
-                                                            {priceQuote.promotion_title || "Promotion"} ({priceQuote.promotion_percent}% OFF)
-                                                        </p>
-                                                        <p className="mt-1 font-semibold text-emerald-700">
-                                                            −{peso(promoDiscount / 100)}
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            )}
-
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Appointment
-                                                    date
+                                                    Appointment date
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
@@ -1557,14 +1647,12 @@ export default function Book() {
 
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Appointment
-                                                    time
+                                                    Appointment time
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
                                                     {availability?.start_time ||
                                                         form.appointment_time}
-
                                                     {availability?.end_time
                                                         ? `–${availability.end_time}`
                                                         : ""}
@@ -1573,9 +1661,7 @@ export default function Book() {
 
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Required
-                                                    20% down
-                                                    payment
+                                                    Required down payment
                                                 </p>
 
                                                 <p className="mt-1 font-bold text-purple-800">
@@ -1588,9 +1674,7 @@ export default function Book() {
 
                                             <div>
                                                 <p className="text-gray-500">
-                                                    Remaining
-                                                    salon
-                                                    balance
+                                                    Remaining salon balance
                                                 </p>
 
                                                 <p className="mt-1 font-semibold text-gray-900">
@@ -1605,14 +1689,11 @@ export default function Book() {
                                             {form.notes?.trim() && (
                                                 <div className="sm:col-span-2">
                                                     <p className="text-gray-500">
-                                                        Additional
-                                                        notes
+                                                        Additional notes
                                                     </p>
 
                                                     <p className="mt-1 whitespace-pre-wrap font-semibold text-gray-900">
-                                                        {
-                                                            form.notes
-                                                        }
+                                                        {form.notes}
                                                     </p>
                                                 </div>
                                             )}
@@ -1621,50 +1702,23 @@ export default function Book() {
 
                                     <div className="rounded-xl bg-amber-50 p-4 text-sm leading-6 text-amber-900">
                                         <p className="font-semibold">
-                                            Please check
-                                            your details
-                                            carefully.
+                                            Please check your details carefully.
                                         </p>
 
                                         <p className="mt-1">
-                                            After you
-                                            continue,
-                                            your selected
-                                            schedule will
-                                            be
-                                            temporarily
-                                            reserved for
-                                            15 minutes
-                                            and you will
-                                            be directed
-                                            to the GCash
-                                            payment step.
-                                            Complete the
-                                            required 20%
-                                            down payment
-                                            and submit
-                                            your payment
-                                            reference
-                                            within the
-                                            reservation
-                                            period.
+                                            After you continue, your selected schedule will be
+                                            temporarily reserved for 15 minutes and you will be
+                                            directed to the GCash payment step. Complete the required
+                                            20% down payment and submit your payment reference within
+                                            the reservation period.
                                         </p>
                                     </div>
 
                                     <div className="rounded-xl bg-purple-50 p-4 text-sm leading-6 text-purple-900">
-                                        Your booking is
-                                        not yet confirmed
-                                        at this stage.
-                                        After your
-                                        payment details
-                                        are submitted,
-                                        Dahling&apos;s
-                                        Escape Salon
-                                        &amp; Spa will
-                                        verify the
-                                        payment and
-                                        confirm your
-                                        appointment.
+                                        Your booking will be confirmed after Dahling&apos;s Escape
+                                        Salon &amp; Spa verifies your payment. Please wait for the
+                                        salon&apos;s confirmation after submitting your payment
+                                        details.
                                     </div>
 
                                     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -1680,6 +1734,12 @@ export default function Book() {
                                                 setError(
                                                     "",
                                                 )
+
+                                                window.scrollTo({
+                                                    top: 0,
+                                                    behavior:
+                                                        "smooth",
+                                                })
                                             }}
                                             className="rounded-xl border border-purple-200 bg-white px-5 py-3 font-semibold text-purple-800 transition hover:bg-purple-50"
                                         >
@@ -1689,11 +1749,7 @@ export default function Book() {
                                         <button
                                             type="button"
                                             disabled={
-                                                busy ||
-                                                priceChecking ||
-                                                !validPriceQuote ||
-                                                Boolean(priceError) ||
-                                                !total
+                                                busy
                                             }
                                             onClick={() =>
                                                 reserve()
@@ -1724,8 +1780,10 @@ export default function Book() {
                                             <span>
                                                 01
                                             </span>{" "}
-                                            A little
-                                            about you
+                                            A
+                                            little
+                                            about
+                                            you
                                         </h3>
 
                                         <Field label="Full name">
@@ -1791,13 +1849,18 @@ export default function Book() {
                                             />
 
                                             <p className="mt-2 text-xs leading-relaxed text-gray-500">
-                                                We will
-                                                use this
-                                                email to
-                                                send your
+                                                We
+                                                will
+                                                use
+                                                this
+                                                email
+                                                to
+                                                send
+                                                your
                                                 appointment
                                                 approval
-                                                or decline
+                                                or
+                                                decline
                                                 update.
                                             </p>
                                         </Field>
@@ -1818,7 +1881,8 @@ export default function Book() {
                                                 >
                                                     <option>
                                                         Prefer
-                                                        not to
+                                                        not
+                                                        to
                                                         say
                                                     </option>
 
@@ -1829,7 +1893,28 @@ export default function Book() {
                                                     <option>
                                                         Male
                                                     </option>
+
+                                                    <option value="Non-binary">Non-binary</option>
+                                                    <option value="Self-described">Another gender identity</option>
                                                 </select>
+                                            </Field>
+
+                                            <Field label="LGBTQIA+ community identification (optional)">
+                                                <select
+                                                    className={input}
+                                                    name="lgbtqia_community"
+                                                    value={form.lgbtqia_community || ""}
+                                                    onChange={change}
+                                                >
+                                                    <option value="">Not recorded / Skip</option>
+                                                    <option value="Yes">Yes</option>
+                                                    <option value="No">No</option>
+                                                    <option value="Prefer not to say">Prefer not to say</option>
+                                                </select>
+                                                <p className="mt-2 text-xs text-gray-500">
+                                                    Optional self-identification for aggregate Gender and Development reporting.
+                                                    This does not affect booking or salon services. Choose Skip if you do not wish to disclose.
+                                                </p>
                                             </Field>
 
                                             <Field label="Customer type">
@@ -1873,8 +1958,10 @@ export default function Book() {
                                             <span>
                                                 02
                                             </span>{" "}
-                                            Your moment
-                                            of care
+                                            Your
+                                            moment
+                                            of
+                                            care
                                         </h3>
 
                                         <Field label="Service">
@@ -1892,7 +1979,8 @@ export default function Book() {
                                                 }
                                             >
                                                 <option value="">
-                                                    Select a
+                                                    Select
+                                                    a
                                                     service
                                                 </option>
 
@@ -1914,7 +2002,8 @@ export default function Book() {
                                                             ·{" "}
                                                             {service.duration_minutes ||
                                                                 60}{" "}
-                                                            min ·{" "}
+                                                            min
+                                                            ·{" "}
                                                             {peso(
                                                                 service.price,
                                                             )}
@@ -1964,12 +2053,17 @@ export default function Book() {
                                         </div>
 
                                         <p className="text-xs text-gray-500">
-                                            Times use
+                                            Times
+                                            use
                                             Philippine
-                                            time. Choose
-                                            a slot more
-                                            than 15
-                                            minutes from
+                                            time.
+                                            Choose
+                                            a slot
+                                            more
+                                            than
+                                            15
+                                            minutes
+                                            from
                                             now.
                                         </p>
 
@@ -2051,45 +2145,29 @@ export default function Book() {
                                         )}
 
                                         {selected && (
-                                            <div className="rounded-xl bg-purple-50 p-4 text-sm text-purple-900" aria-live="polite">
-                                                {!form.appointment_date ? (
-                                                    <p>Select an appointment date to see the final price and deposit.</p>
-                                                ) : priceChecking || (!validPriceQuote && !priceError) ? (
-                                                    <p>Checking service price and promotions…</p>
-                                                ) : priceError ? (
-                                                    <p role="alert" className="text-red-700">{priceError}</p>
-                                                ) : (
-                                                    <div className="space-y-2">
-                                                        {promoDiscount > 0 && (
-                                                            <>
-                                                                <div className="flex justify-between gap-3">
-                                                                    <span>Original price</span>
-                                                                    <span className="line-through">{peso(originalTotal / 100)}</span>
-                                                                </div>
-                                                                <div className="flex justify-between gap-3 text-emerald-700">
-                                                                    <span>{priceQuote.promotion_title || "Promotion"} ({priceQuote.promotion_percent}% OFF)</span>
-                                                                    <strong>−{peso(promoDiscount / 100)}</strong>
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                        <div className="flex justify-between gap-3">
-                                                            <span>Final service total</span>
-                                                            <strong>{peso(total / 100)}</strong>
-                                                        </div>
-                                                        <div className="flex justify-between gap-3">
-                                                            <span>Required deposit (20%)</span>
-                                                            <strong>{peso(down / 100)}</strong>
-                                                        </div>
-                                                        <div className="flex justify-between gap-3">
-                                                            <span>Estimated salon balance</span>
-                                                            <strong>{peso((total - down) / 100)}</strong>
-                                                        </div>
-                                                        <p className="pt-1 text-xs text-purple-700">
-                                                            Price is finalized when your reservation is created.
-                                                        </p>
-                                                    </div>
+                                            <p className="rounded-xl bg-purple-50 p-4 text-purple-800">
+                                                Required
+                                                down
+                                                payment
+                                                (20%):{" "}
+                                                <strong>
+                                                    {peso(
+                                                        down /
+                                                            100,
+                                                    )}
+                                                </strong>
+
+                                                <br />
+
+                                                Estimated
+                                                salon
+                                                balance:{" "}
+                                                {peso(
+                                                    (total -
+                                                        down) /
+                                                        100,
                                                 )}
-                                            </div>
+                                            </p>
                                         )}
 
                                         <Field label="Additional notes">
@@ -2134,20 +2212,28 @@ export default function Book() {
                                                     Privacy
                                                     Consent.
                                                 </strong>{" "}
-                                                I confirm
-                                                that the
+                                                I
+                                                confirm
+                                                that
+                                                the
                                                 information
-                                                I provided
-                                                is accurate
+                                                I
+                                                provided
+                                                is
+                                                accurate
                                                 and I
-                                                consent to
+                                                consent
+                                                to
                                                 Dahling’s
                                                 Escape
                                                 Salon
-                                                &amp; Spa
+                                                &
+                                                Spa
                                                 collecting
-                                                and using
-                                                my name,
+                                                and
+                                                using
+                                                my
+                                                name,
                                                 contact
                                                 number,
                                                 email
@@ -2165,7 +2251,8 @@ export default function Book() {
                                                 verification,
                                                 appointment
                                                 updates,
-                                                and salon
+                                                and
+                                                salon
                                                 recordkeeping.
                                             </span>
                                         </label>
@@ -2173,20 +2260,27 @@ export default function Book() {
                                         <p className="text-xs leading-relaxed text-gray-500">
                                             Your
                                             information
-                                            will be used
-                                            for salon
-                                            booking and
+                                            will be
+                                            used
+                                            for
+                                            salon
+                                            booking
+                                            and
                                             related
                                             customer
                                             communication.
                                             Passwords,
-                                            PINs, OTPs,
+                                            PINs,
+                                            OTPs,
                                             and
                                             electronic-wallet
                                             credentials
-                                            are not
-                                            requested by
-                                            this booking
+                                            are
+                                            not
+                                            requested
+                                            by
+                                            this
+                                            booking
                                             form.
                                         </p>
 
@@ -2195,9 +2289,6 @@ export default function Book() {
                                             disabled={
                                                 busy ||
                                                 checking ||
-                                                priceChecking ||
-                                                !validPriceQuote ||
-                                                Boolean(priceError) ||
                                                 !validAvailability ||
                                                 !total ||
                                                 !form.privacy_consent
@@ -2216,16 +2307,20 @@ export default function Book() {
                             <BrandMark />
 
                             <p className="eyebrow">
-                                A LITTLE CARE, A
-                                LITTLE CLARITY
+                                A LITTLE
+                                CARE, A
+                                LITTLE
+                                CLARITY
                             </p>
 
                             <h2>
-                                Your escape,
+                                Your
+                                escape,
                                 <br />
 
                                 <em>
-                                    made simple.
+                                    made
+                                    simple.
                                 </em>
                             </h2>
 
@@ -2236,17 +2331,24 @@ export default function Book() {
 
                                 <div>
                                     <h3>
-                                        Choose your
+                                        Choose
+                                        your
                                         moment
                                     </h3>
 
                                     <p>
-                                        Pick your
-                                        service and a
-                                        time that
-                                        works for
-                                        you. We’ll
-                                        check staff
+                                        Pick
+                                        your
+                                        service
+                                        and a
+                                        time
+                                        that
+                                        works
+                                        for
+                                        you.
+                                        We’ll
+                                        check
+                                        staff
                                         availability.
                                     </p>
                                 </div>
@@ -2259,18 +2361,23 @@ export default function Book() {
 
                                 <div>
                                     <h3>
-                                        Save your spot
+                                        Save
+                                        your
+                                        spot
                                     </h3>
 
                                     <p>
-                                        Review your
-                                        booking, then
-                                        pay the 20%
-                                        deposit via
-                                        GCash and
-                                        submit your
+                                        Pay a
+                                        20%
+                                        deposit
+                                        via
+                                        GCash
+                                        and
+                                        submit
+                                        your
                                         reference
-                                        within 15
+                                        within
+                                        15
                                         minutes.
                                     </p>
                                 </div>
@@ -2283,15 +2390,23 @@ export default function Book() {
 
                                 <div>
                                     <h3>
-                                        Leave the rest
-                                        to us
+                                        Leave
+                                        the
+                                        rest
+                                        to
+                                        us
                                     </h3>
 
                                     <p>
-                                        Our team will
-                                        verify your
-                                        payment and
-                                        confirm your
+                                        Our
+                                        team
+                                        will
+                                        verify
+                                        your
+                                        payment
+                                        and
+                                        review
+                                        your
                                         appointment.
                                     </p>
                                 </div>
@@ -2301,7 +2416,11 @@ export default function Book() {
                                 <LuClock />
 
                                 <span>
-                                    8:00 AM – 7:00 PM
+                                    8:00
+                                    AM –
+                                    7:00
+                                    PM
+
                                     <br />
 
                                     <small>
@@ -2319,19 +2438,24 @@ export default function Book() {
                             <LuHeart />
 
                             <h3>
-                                A little help?
+                                A little
+                                help?
                             </h3>
 
                             <p>
-                                We’re here to
-                                help you plan
-                                the right
+                                We’re
+                                here to
+                                help you
+                                plan the
+                                right
                                 visit.
                             </p>
 
                             <a href="tel:09695619380">
                                 <LuPhone />{" "}
-                                0969 561 9380
+                                0969
+                                561
+                                9380
                             </a>
                         </div>
                     </aside>
