@@ -198,7 +198,6 @@ function pendingRow(entry) {
 
         historical_date_only:
             Boolean(payload.historical_date),
-
         transaction_date:
             payload.historical_date
                 ? `${payload.historical_date}T12:00:00+08:00`
@@ -403,6 +402,7 @@ function SearchSelect({
                         }
                     }
                 }}
+
             />
 
             {open && !disabled && (
@@ -471,11 +471,7 @@ function freshForm() {
 const peso = (n) => new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" }).format(n);
 const moneyCents = (value) => Math.round(Number(value) * 100);
 
-/**
- * UI-only checkout modal. Does NOT send payment, save sales, or update inventory.
- * Pass catalog records with { id, name, price, type: 'Service'|'Product', stock? }.
- * Integrate with an atomic multi-item backend endpoint before enabling real checkout.
- */
+/** Online walk-in multi-item checkout. Appointment checkout remains in the original POS until backend parity. */
 function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = [], products = [] }) {
   const [step, setStep] = useState("cart");
   const [search, setSearch] = useState("");
@@ -488,84 +484,119 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
   const [reference, setReference] = useState("");
   const [reviewed, setReviewed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [quoting, setQuoting] = useState(false);
+  const [quote, setQuote] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [checkoutKey, setCheckoutKey] = useState(() => crypto.randomUUID());
+
+  const catalog = useMemo(() => [
+    ...services.map(s => ({ key: `s:${s.service_id ?? s.id}`, id: s.service_id ?? s.id, name: s.service ?? s.name, type: "Service", price: Number(s.price), status: s.status })),
+    ...products.map(p => ({ key: `p:${p.id ?? p.item_id}`, id: p.id ?? p.item_id, name: p.name, type: "Product", price: Number(p.price ?? p.selling_price), stock: Number(p.stock) })),
+  ].filter(x => x.id != null && x.name && Number.isFinite(x.price) && x.price >= 0 && (x.type !== "Service" || !x.status || x.status === "Available")), [services, products]);
+  const filtered = catalog.filter(x => (category === "All" || x.type === category) && x.name.toLowerCase().includes(search.toLowerCase()));
+  const lines = catalog.filter(x => (cart[x.key] || 0) > 0).map(x => ({ ...x, quantity: cart[x.key] }));
+  const subtotalCents = lines.reduce((sum, x) => sum + moneyCents(x.price) * x.quantity, 0);
+  const payableCents = quote ? moneyCents(quote.amount) : subtotalCents;
+  const cashCents = moneyCents(cash || 0);
+  const canPay = Boolean(quote && lines.length && customer.trim() && (payment !== "Cash" || cashCents >= payableCents) && (payment !== "GCash" || reference.trim()));
+  const invalidateQuote = () => { setQuote(null); setReviewed(false); setSaveError(""); setStep("cart"); };
+  const itemsPayload = () => lines.map(x => ({ type: x.type, id: x.id, quantity: x.quantity }));
+
+  const adjust = (item, delta) => {
+    invalidateQuote();
+    setCart(current => {
+      const next = Math.max(0, (current[item.key] || 0) + delta);
+      return { ...current, [item.key]: item.type === "Service" ? Math.min(next, 1) : Math.min(next, Math.max(0, Math.min(100, item.stock))) };
+    });
+  };
+
+  const previewCart = async () => {
+    if (!lines.length || !customer.trim() || quoting) return;
+    setQuoting(true); setSaveError(""); setQuote(null);
+    try {
+      const result = await request("/transactions/cart/preview", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer: customer.trim(), customer_contact: customerContact.trim(), items: itemsPayload() })
+      });
+      if (!result || !Number.isFinite(Number(result.amount))) throw new Error("Invalid server checkout quote.");
+      setQuote(result);
+      setStep("payment");
+    } catch (e) { setSaveError(e.message || "Unable to preview checkout."); }
+    finally { setQuoting(false); }
+  };
+
   const saveCart = async () => {
-    if (!reviewed || saving) return;
+    if (!reviewed || !canPay || !quote || saving) return;
     setSaving(true); setSaveError("");
     try {
       const result = await request("/transactions/cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customer: customer.trim(), customer_contact: customerContact.trim(), payment, payment_reference: payment === "GCash" ? reference.trim() : undefined,
-          payment_confirmed: true, checkout_key: checkoutKey, expected_total: (totalCents / 100).toFixed(2),
-          items: lines.map(x => ({ type: x.type, id: x.id, quantity: x.quantity }))
+          customer: customer.trim(), customer_contact: customerContact.trim(),
+          payment, payment_reference: payment === "GCash" ? reference.trim() : undefined,
+          payment_confirmed: true, checkout_key: checkoutKey,
+          expected_total: quote.amount,
+          expected_discount_amount: quote.discount_amount,
+          expected_reward_id: quote.reward_id,
+          items: itemsPayload()
         })
       });
-      await onSaved?.(result);
-      setCart({}); setCustomer(""); setCustomerContact(""); setCash(""); setReference(""); setReviewed(false); setStep("cart");
-      setCheckoutKey(crypto.randomUUID());
+      // The sale is committed once the server responds successfully.
+      // A history refresh failure must never turn a successful payment into a retry prompt.
+      try {
+        await onSaved?.(result);
+      } catch (refreshError) {
+        console.error("Checkout saved, but history refresh failed:", refreshError);
+      }
+      setCart({}); setCustomer(""); setCustomerContact(""); setCash(""); setReference("");
+      setQuote(null); setReviewed(false); setStep("cart"); setCheckoutKey(crypto.randomUUID());
       onClose();
-    } catch (e) { setSaveError(e.message || "Unable to save checkout."); }
-    finally { setSaving(false); }
+    } catch (e) {
+      setSaveError(e.message || "Unable to save checkout. Check history before retrying.");
+      // Preserve the idempotency key to prevent duplicate sales on retry.
+    } finally { setSaving(false); }
   };
 
-  const catalog = useMemo(() => [
-    ...services.map((s) => ({ key: `s:${s.service_id ?? s.id}`, id: s.service_id ?? s.id, name: s.service ?? s.name, type: "Service", price: Number(s.price) })),
-    ...products.map((p) => ({ key: `p:${p.id ?? p.item_id}`, id: p.id ?? p.item_id, name: p.name, type: "Product", price: Number(p.price ?? p.selling_price), stock: Number(p.stock) })),
-  ].filter((x) => x.id != null && x.name && Number.isFinite(x.price) && x.price >= 0), [services, products]);
-  const filtered = catalog.filter((x) => (category === "All" || x.type === category) && x.name.toLowerCase().includes(search.toLowerCase()));
-  const lines = catalog.filter((x) => (cart[x.key] || 0) > 0).map((x) => ({ ...x, quantity: cart[x.key] }));
-  const totalCents = lines.reduce((sum, x) => sum + moneyCents(x.price) * x.quantity, 0);
-  const cashCents = moneyCents(cash || 0);
-  const canPay = lines.length > 0 && customer.trim() && (payment !== "Cash" || cashCents >= totalCents) && (payment !== "GCash" || reference.trim());
-  const adjust = (item, delta) => {
-    setReviewed(false);
-    setCart((current) => {
-      const next = Math.max(0, (current[item.key] || 0) + delta);
-      return { ...current, [item.key]: item.type === "Product" ? Math.min(next, item.stock) : next };
-    });
-  };
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3" role="presentation">
-      <section role="dialog" aria-modal="true" aria-label="Multi-item checkout preview" className="flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-label="Multi-item checkout" className="flex max-h-[95vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <header className="flex items-center justify-between border-b border-purple-100 px-5 py-4">
-          <div><h2 className="text-xl font-bold text-purple-950">New Sale · Multi-Item Checkout</h2><p className="text-xs text-purple-600">Online checkout · Server-verified catalog prices · One payment</p></div>
-          <button type="button" onClick={onClose} className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50">Close</button>
+          <div><h2 className="text-xl font-bold text-purple-950">New Sale · Multi-Item Checkout</h2><p className="text-xs text-purple-600">Online walk-in · Server-calculated promotions and loyalty · One payment</p></div>
+          <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border px-3 py-2 text-sm">Close</button>
         </header>
-        <div className="flex gap-2 border-b px-5 py-3 text-sm">
-          {["cart", "payment", "review"].map((s, i) => <span key={s} className={`rounded-full px-3 py-1 ${step === s ? "bg-purple-700 text-white" : "bg-purple-50 text-purple-700"}`}>{i + 1}. {s === "cart" ? "Items" : s === "payment" ? "Payment" : "Review"}</span>)}
+        <div className="flex gap-2 border-b px-5 py-3 text-xs font-semibold text-purple-800">
+          {["cart", "payment", "review"].map((x, i) => <span key={x} className={`rounded-full px-3 py-1 ${step === x ? "bg-purple-700 text-white" : "bg-purple-50"}`}>{i + 1}. {x === "cart" ? "Cart" : x === "payment" ? "Payment" : "Review"}</span>)}
         </div>
         <div className="overflow-y-auto p-5">
-          {step === "cart" && <div className="grid gap-5 lg:grid-cols-[1.35fr_1fr]">
+          {step === "cart" && <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
             <div className="space-y-3">
-              <input className="w-full rounded-xl border border-purple-200 p-3 outline-purple-500" placeholder="Search services or products" value={search} onChange={(e) => setSearch(e.target.value)} />
-              <div className="flex gap-2">{["All", "Service", "Product"].map((x) => <button type="button" key={x} onClick={() => setCategory(x)} className={`rounded-full px-4 py-2 text-sm ${category === x ? "bg-purple-700 text-white" : "bg-purple-50 text-purple-700"}`}>{x === "All" ? "All items" : `${x}s`}</button>)}</div>
-              <div className="max-h-80 space-y-2 overflow-y-auto">{filtered.map((x) => <div key={x.key} className="flex items-center justify-between gap-3 rounded-xl border p-3"><div className="min-w-0"><p className="font-semibold text-slate-800">{x.name}</p><p className="text-xs text-slate-500">{x.type} · {peso(x.price)}{x.type === "Product" ? ` · ${x.stock} in stock` : ""}</p></div><button type="button" onClick={() => adjust(x, 1)} disabled={x.type === "Product" && (cart[x.key] || 0) >= x.stock} className="rounded-lg bg-purple-700 px-3 py-2 text-sm text-white disabled:opacity-40">+ Add</button></div>)}{filtered.length === 0 && <p className="p-4 text-sm text-slate-500">No matching items.</p>}</div>
+              <div className="flex gap-2">
+                <input className="w-full rounded-xl border p-3 text-sm" placeholder="Search services or products" value={search} onChange={e => setSearch(e.target.value)} />
+                <select className="rounded-xl border p-2 text-sm" value={category} onChange={e => setCategory(e.target.value)}><option>All</option><option>Service</option><option>Product</option></select>
+              </div>
+              <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+                {filtered.map(item => <div key={item.key} className="flex items-center justify-between gap-2 rounded-xl border p-3"><div className="min-w-0"><p className="truncate font-medium">{item.name}</p><p className="text-xs text-slate-500">{item.type} · {peso(item.price)}{item.type === "Product" ? ` · ${item.stock} available` : ""}</p></div><button type="button" disabled={item.type === "Product" && item.stock < 1} onClick={() => adjust(item, 1)} className="rounded-lg bg-purple-700 px-3 py-2 text-sm text-white disabled:opacity-40">Add</button></div>)}
+              </div>
             </div>
-            <div className="space-y-3 rounded-2xl bg-purple-50 p-4">
-              <h3 className="font-bold text-purple-950">Current cart</h3>
-              <input className="w-full rounded-xl border bg-white p-3" placeholder="Customer name" value={customer} onChange={(e) => setCustomer(e.target.value)} />
-              <label className="block text-xs font-medium text-purple-900">Customer contact (for matching a registered customer profile)
-                <input type="tel" maxLength={30} className="mt-1 w-full rounded-xl border bg-white p-3 text-sm" placeholder="e.g. 09XXXXXXXXX" value={customerContact} onChange={(e) => setCustomerContact(e.target.value)} />
-              </label>
-              <p className="text-xs text-purple-700">Use the exact contact number saved in Customers to link this purchase to the correct profile. Leave blank for walk-ins without a registered profile.</p>
-              {lines.map((x) => <div key={x.key} className="flex items-center justify-between gap-2 border-b border-purple-100 py-2"><div className="min-w-0 flex-1"><p className="text-sm font-medium">{x.name}</p><p className="text-xs text-slate-500">{peso(x.price)} · {x.type}</p></div><button type="button" onClick={() => adjust(x, -1)} className="rounded border bg-white px-2">−</button><span className="w-5 text-center text-sm">{x.quantity}</span><button type="button" onClick={() => adjust(x, 1)} disabled={x.type === "Product" && x.quantity >= x.stock} className="rounded border bg-white px-2 disabled:opacity-40">+</button></div>)}
-              {lines.length === 0 && <p className="text-sm text-slate-500">Add services and products to begin.</p>}
-              <div className="flex justify-between border-t border-purple-200 pt-3 font-bold text-purple-950"><span>Total</span><span>{peso(totalCents / 100)}</span></div>
-              <button type="button" disabled={!lines.length || !customer.trim()} onClick={() => setStep("payment")} className="w-full rounded-xl bg-purple-700 p-3 font-semibold text-white disabled:opacity-40">Continue to payment →</button>
+            <div className="space-y-3">
+              <h3 className="font-bold text-purple-950">Cart · {lines.length} items</h3>
+              {lines.length === 0 && <p className="text-sm text-slate-500">Add a service or product to begin.</p>}
+              {lines.map(x => <div key={x.key} className="flex items-center justify-between gap-2 rounded-xl bg-purple-50 p-3"><div><p className="font-medium">{x.name}</p><p className="text-xs">{peso(x.price)} × {x.quantity}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => adjust(x, -1)} className="rounded border px-2">−</button><span>{x.quantity}</span><button type="button" onClick={() => adjust(x, 1)} disabled={x.type === "Service" || x.quantity >= x.stock} className="rounded border px-2 disabled:opacity-40">+</button></div></div>)}
+              <div className="flex justify-between border-t pt-3 font-semibold"><span>Subtotal before discounts</span><span>{peso(subtotalCents / 100)}</span></div>
+              <label className="block text-sm">Customer name<input value={customer} onChange={e => { setCustomer(e.target.value); invalidateQuote(); }} maxLength={100} className="mt-1 w-full rounded-xl border p-3" placeholder="Registered client or walk-in" /></label>
+              <label className="block text-sm">Contact (optional)<input value={customerContact} onChange={e => { setCustomerContact(e.target.value); invalidateQuote(); }} maxLength={30} className="mt-1 w-full rounded-xl border p-3" placeholder="Registered number for loyalty" /></label>
+              <button type="button" onClick={previewCart} disabled={!lines.length || !customer.trim() || quoting || !navigator.onLine} className="w-full rounded-xl bg-purple-700 p-3 font-semibold text-white disabled:opacity-40">{quoting ? "Calculating…" : "Continue to payment →"}</button>
+              {saveError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
             </div>
           </div>}
-          {step === "payment" && <div className="mx-auto max-w-lg space-y-4"><div className="rounded-2xl bg-purple-50 p-5"><p className="text-sm text-purple-700">Total to collect</p><p className="text-3xl font-bold text-purple-950">{peso(totalCents / 100)}</p><p className="text-sm">{customer} · {lines.length} different items</p></div><fieldset className="flex gap-5"><legend className="mb-2 font-semibold">Payment method</legend>{["Cash", "GCash"].map((x) => <label key={x} className="flex gap-2"><input type="radio" checked={payment === x} onChange={() => setPayment(x)} />{x}</label>)}</fieldset>{payment === "Cash" ? <><label className="block text-sm font-semibold">Cash received (₱)<input type="number" min="0" step="0.01" value={cash} onChange={(e) => setCash(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label><p className="text-sm">Change: <strong>{peso(Math.max(0, cashCents - totalCents) / 100)}</strong></p></> : <label className="block text-sm font-semibold">GCash reference<input value={reference} onChange={(e) => setReference(e.target.value)} className="mt-1 w-full rounded-xl border p-3" placeholder="Verified payment reference" /></label>}<div className="flex gap-3"><button type="button" onClick={() => setStep("cart")} className="flex-1 rounded-xl border p-3">Back</button><button type="button" disabled={!canPay} onClick={() => setStep("review")} className="flex-1 rounded-xl bg-purple-700 p-3 text-white disabled:opacity-40">Review sale →</button></div></div>}
-          {step === "review" && <div className="mx-auto max-w-lg space-y-3"><h3 className="text-xl font-bold text-purple-950">Final review</h3><p className="text-sm text-slate-600">{customer} · {payment}</p>{lines.map((x) => <div key={x.key} className="flex justify-between border-b py-2 text-sm"><span>{x.name} × {x.quantity}</span><strong>{peso((moneyCents(x.price) * x.quantity) / 100)}</strong></div>)}<div className="flex justify-between text-lg font-bold"><span>Total</span><span>{peso(totalCents / 100)}</span></div><label className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm"><input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} /><span>I verified the customer, items, quantities, and payment.</span></label><div className="flex gap-3"><button type="button" onClick={() => setStep("payment")} className="flex-1 rounded-xl border p-3">Back</button><button type="button" disabled={!reviewed || saving || !navigator.onLine} onClick={saveCart} className="flex-1 rounded-xl bg-purple-700 p-3 text-white disabled:opacity-40">{saving ? "Saving…" : "Confirm & save sale"}</button></div>{saveError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}<p className="text-xs text-slate-500">Online walk-in sales only. Regular catalog prices; no promotions, loyalty redemption, or booked appointments in this checkout.</p></div>}
+          {step === "payment" && quote && <div className="mx-auto max-w-lg space-y-4"><h3 className="text-xl font-bold text-purple-950">Payment</h3><p className="text-sm text-slate-600">Promotion saving: {peso(Number(quote.promotion_discount))} · Loyalty saving: {peso(Number(quote.loyalty_discount))}</p><p className="rounded-xl bg-purple-50 p-3 text-sm">Applied: <strong>{quote.discount_type === "loyalty" ? "Owner-issued loyalty" : quote.discount_type === "promotion" ? "Promotion" : "No discount"}</strong> · Discount: <strong>{peso(Number(quote.discount_amount))}</strong>{quote.reward_id && quote.discount_type !== "loyalty" ? " · Loyalty saved for later" : ""}</p><div className="flex justify-between text-xl font-bold"><span>Amount due</span><span>{peso(Number(quote.amount))}</span></div><label className="block text-sm">Payment method<select value={payment} onChange={e => { setPayment(e.target.value); setReviewed(false); }} className="mt-1 w-full rounded-xl border p-3"><option>Cash</option><option>GCash</option></select></label>{payment === "Cash" ? <label className="block text-sm">Cash received<input type="number" min="0" step="0.01" value={cash} onChange={e => { setCash(e.target.value); setReviewed(false); }} className="mt-1 w-full rounded-xl border p-3" /><span className="mt-1 block text-xs text-slate-500">Change: {peso(Math.max(0, (cashCents - payableCents) / 100))}</span></label> : <label className="block text-sm">GCash reference<input value={reference} onChange={e => { setReference(e.target.value); setReviewed(false); }} className="mt-1 w-full rounded-xl border p-3" placeholder="Verified payment reference" /></label>}<div className="flex gap-3"><button type="button" onClick={() => { setQuote(null); setStep("cart"); }} className="flex-1 rounded-xl border p-3">Back to items</button><button type="button" disabled={!canPay} onClick={() => setStep("review")} className="flex-1 rounded-xl bg-purple-700 p-3 text-white disabled:opacity-40">Review sale →</button></div></div>}
+          {step === "review" && quote && <div className="mx-auto max-w-lg space-y-3"><h3 className="text-xl font-bold text-purple-950">Final review</h3><p className="text-sm text-slate-600">{customer} · {payment}</p>{quote.items.map((x, i) => <div key={`${x.type}:${x.id}:${i}`} className="flex justify-between border-b py-2 text-sm"><span>{x.name} × {x.quantity}{Number(x.discount_amount) > 0 ? ` (−${peso(Number(x.discount_amount))})` : ""}</span><strong>{peso(Number(x.final_line_total))}</strong></div>)}<div className="flex justify-between text-sm"><span>Subtotal</span><span>{peso(Number(quote.subtotal))}</span></div><div className="flex justify-between text-sm"><span>Discount</span><span>−{peso(Number(quote.discount_amount))}</span></div><div className="flex justify-between text-lg font-bold"><span>Total</span><span>{peso(Number(quote.amount))}</span></div><label className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} /><span>I verified the customer, items, discounts, and payment.</span></label><div className="flex gap-3"><button type="button" onClick={() => setStep("payment")} className="flex-1 rounded-xl border p-3">Back</button><button type="button" disabled={!reviewed || saving || !canPay || !navigator.onLine} onClick={saveCart} className="flex-1 rounded-xl bg-purple-700 p-3 text-white disabled:opacity-40">{saving ? "Saving…" : "Confirm & save sale"}</button></div>{saveError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}<p className="text-xs text-slate-500">Current online walk-in checkout only. Use the existing appointment POS for bookings and Emergency Mode until unified backend support is tested.</p></div>}
         </div>
       </section>
     </div>
   );
 }
-
 
 function AdminTransactions() {
     const [showMultiItemPreview, setShowMultiItemPreview] = useState(false)
@@ -1362,6 +1393,7 @@ function AdminTransactions() {
             return
         }
 
+
         if (
             !booked &&
             productSale &&
@@ -1561,6 +1593,7 @@ function AdminTransactions() {
                             localReceipt.transaction_id
                     ),
                 ])
+
 
                 if (
                     productSale &&
@@ -1829,15 +1862,22 @@ function AdminTransactions() {
             )
         }
 
-        line(
-            "p",
-            `Item / service: ${receipt.service}`
-        )
-
-        line(
-            "p",
-            `Quantity: ${receipt.quantity ?? 1}`
-        )
+        const purchasedItems = cartHistory[receipt.transaction_id]
+        if (Array.isArray(purchasedItems) && purchasedItems.length > 0) {
+            line("h2", "Purchased items")
+            purchasedItems.forEach((item) => {
+                line("p", `${item.name} (${item.type}) × ${item.quantity} — ${money(item.final_line_total)}`)
+                if (Number(item.discount_amount || 0) > 0) {
+                    line("p", `  Item discount: −${money(item.discount_amount)}`)
+                }
+            })
+        } else {
+            line("p", `Item / service: ${receipt.service}`)
+            line("p", `Quantity: ${receipt.quantity ?? 1}`)
+            if (receipt.sale_type === "Mixed") {
+                line("p", "Item details unavailable. Check the on-screen receipt before printing.")
+            }
+        }
 
         if (
             Number(receipt.discount_amount || 0) > 0
@@ -2090,9 +2130,15 @@ function AdminTransactions() {
                 open={showMultiItemPreview}
                 onClose={() => setShowMultiItemPreview(false)}
                 onSaved={async result => {
-                    await load()
-                    await loadCartItems(result.id)
-                    setMessage(`Multi-item sale #${result.id} saved successfully.`)
+                    setMessage(`Multi-item sale #${result.id} ${result.duplicate ? "was already recorded; no duplicate was created." : "saved successfully."}`)
+                    try {
+                        const rows = await load()
+                        const saved = rows?.find(row => String(row.transaction_id) === String(result.id))
+                        if (saved) setReceipt(saved)
+                        await loadCartItems(result.id)
+                    } catch (refreshError) {
+                        console.error("Sale saved; history refresh unavailable:", refreshError)
+                    }
                 }}
                 services={services}
                 products={products}
@@ -2354,6 +2400,7 @@ function AdminTransactions() {
                                         key={form.sale_type}
                                         label={
                                             productSale
+
                                                 ? "Find and select a product"
                                                 : "Find and select a service"
                                         }
@@ -2706,7 +2753,7 @@ function AdminTransactions() {
                                     {cartHistory[receipt.transaction_id].map((item, i) => (
                                         <div key={i} className="flex justify-between gap-2 py-1 text-xs">
                                             <span>{item.name} ({item.type}) × {item.quantity}</span>
-                                            <strong>{money(item.line_total)}</strong>
+                                            <strong>{money(item.final_line_total)}</strong>
                                         </div>
                                     ))}
                                 </div>
@@ -2755,6 +2802,7 @@ function AdminTransactions() {
                                         receipt.deposit_applied
                                     ),
                                 ],
+
                                 [
                                     "Balance collected",
                                     money(
@@ -3029,7 +3077,7 @@ function AdminTransactions() {
                                                     <button type="button" className="text-xs font-semibold text-purple-700 underline" onClick={() => loadCartItems(row.transaction_id)}>View purchased items</button>
                                                     {Array.isArray(cartHistory[row.transaction_id]) && (
                                                         <ul className="mt-2 space-y-1 text-xs text-gray-700">
-                                                            {cartHistory[row.transaction_id].map((item, i) => <li key={i}>{item.name} × {item.quantity} — {money(item.line_total)}</li>)}
+                                                            {cartHistory[row.transaction_id].map((item, i) => <li key={i}>{item.name} × {item.quantity} — {money(item.final_line_total)}</li>)}
                                                         </ul>
                                                     )}
                                                 </div>
