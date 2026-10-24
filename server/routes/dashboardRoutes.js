@@ -173,21 +173,51 @@ router.get("/", async (req, res) => {
             [days - 1],
         )
 
-        const [salesMix] = await connection.query(
-            `
-      SELECT
-        COALESCE(sale_type, 'Service') AS type,
-        SUM(amount) AS sales
-      FROM transactions
-      WHERE status = 'Paid'
-        AND transaction_date >=
-          DATE_SUB(CURDATE(), INTERVAL ? DAY)
-        AND transaction_date <= NOW()
-      GROUP BY COALESCE(sale_type, 'Service')
-      ORDER BY sales DESC
-      `,
-            [days - 1],
-        )
+
+const [salesMix] = await connection.query(
+  `
+  SELECT
+    category AS type,
+    ROUND(SUM(sales), 2) AS sales
+  FROM (
+    -- Regular service and product transactions
+    SELECT
+      CASE
+        WHEN sale_type = 'Product' THEN 'Product'
+        ELSE 'Service'
+      END AS category,
+      amount AS sales
+    FROM transactions
+    WHERE status = 'Paid'
+      AND (sale_type IS NULL OR sale_type <> 'Mixed')
+      AND transaction_date >=
+        DATE_SUB(CURDATE(), INTERVAL ? DAY)
+      AND transaction_date <= NOW()
+
+    UNION ALL
+
+    -- Mixed-cart service and product items
+    SELECT
+      CASE
+        WHEN ti.item_type = 'Product' THEN 'Product'
+        ELSE 'Service'
+      END AS category,
+      COALESCE(ti.final_line_total, ti.line_total) AS sales
+    FROM transactions t
+    INNER JOIN transaction_items ti
+      ON ti.transaction_id = t.transaction_id
+    WHERE t.status = 'Paid'
+      AND t.sale_type = 'Mixed'
+      AND t.transaction_date >=
+        DATE_SUB(CURDATE(), INTERVAL ? DAY)
+      AND t.transaction_date <= NOW()
+  ) AS combined_sales
+  GROUP BY category
+  ORDER BY sales DESC
+  `,
+  [days - 1, days - 1],
+);
+
 
         const [todaySchedule] = await connection.query(`
       SELECT

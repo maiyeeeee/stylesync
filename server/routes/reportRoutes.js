@@ -238,6 +238,49 @@ router.get("/", async (req, res) => {
       [startDate, endDate]
     )
 
+    // Actual payment collections, separated from sale revenue.
+    // Deposits are recorded on their verification date.
+    // Checkout payments exclude any deposit already applied.
+    const [paymentCollectionRows] = await connection.query(
+      `SELECT
+         paymentMethod,
+         ROUND(SUM(collected), 2) AS collected,
+         SUM(paymentEvents) AS paymentEvents
+       FROM (
+         -- POS balance collected at checkout
+         SELECT
+           COALESCE(NULLIF(TRIM(t.payment), ''), 'Not recorded')
+             AS paymentMethod,
+           GREATEST(
+             t.amount - COALESCE(bda.amount_applied, 0),
+             0
+           ) AS collected,
+           1 AS paymentEvents
+         FROM transactions t
+         LEFT JOIN booking_deposit_applications bda
+           ON bda.transaction_id = t.transaction_id
+         WHERE t.status = 'Paid'
+           AND t.transaction_date >= ?
+           AND t.transaction_date < ?
+
+         UNION ALL
+
+         -- Verified booking deposits (including unredeemed deposits)
+         SELECT
+           COALESCE(NULLIF(TRIM(bd.payment_method), ''), 'Not recorded')
+             AS paymentMethod,
+           COALESCE(bd.verified_amount, 0) AS collected,
+           1 AS paymentEvents
+         FROM booking_deposits bd
+         WHERE bd.payment_status = 'Verified'
+           AND bd.verified_at >= ?
+           AND bd.verified_at < ?
+       ) collection_rows
+       GROUP BY paymentMethod
+       ORDER BY collected DESC`,
+      [startDate, endDate, startDate, endDate]
+    );
+
     const [topSellingServiceRows] = await connection.query(
       `SELECT service, SUM(transactions) AS transactions,
               SUM(quantity) AS quantity, SUM(revenue) AS revenue
@@ -250,9 +293,13 @@ router.get("/", async (req, res) => {
            AND transaction_date >= ? AND transaction_date < ?
          GROUP BY service
          UNION ALL
-         SELECT ti.item_name AS service, COUNT(*) AS transactions,
-                SUM(ti.quantity) AS quantity, SUM(ti.line_total) AS revenue
-         FROM transaction_items ti JOIN transactions t ON t.transaction_id = ti.transaction_id
+         SELECT ti.item_name AS service,
+       COUNT(*) AS transactions,
+       SUM(ti.quantity) AS quantity,
+       SUM(COALESCE(ti.final_line_total, ti.line_total)) AS revenue
+         FROM transaction_items ti
+         JOIN transactions t
+         ON t.transaction_id = ti.transaction_id
          WHERE t.status = 'Paid' AND t.sale_type = 'Mixed' AND ti.item_type = 'Service'
            AND t.transaction_date >= ? AND t.transaction_date < ?
          GROUP BY ti.item_name
@@ -291,6 +338,13 @@ router.get("/", async (req, res) => {
         transactions: Number(row.transactions || 0),
         revenue: Number(row.revenue || 0),
       })),
+
+paymentCollections: paymentCollectionRows.map((row) => ({
+  paymentMethod: row.paymentMethod,
+  paymentEvents: Number(row.paymentEvents || 0),
+  collected: Number(row.collected || 0),
+})),
+
       topSellingServices: topSellingServiceRows.map((row) => ({
         service: row.service,
         transactions: Number(row.transactions || 0),
@@ -587,8 +641,10 @@ router.get("/", async (req, res) => {
            AND transaction_date >= ? AND transaction_date < ?
          GROUP BY service
          UNION ALL
-         SELECT ti.item_name AS service, COUNT(*) AS paidTransactions,
-                SUM(ti.quantity) AS unitsSold, SUM(ti.line_total) AS revenue
+         SELECT ti.item_name AS service,
+       COUNT(*) AS paidTransactions,
+       SUM(ti.quantity) AS unitsSold,
+       SUM(COALESCE(ti.final_line_total, ti.line_total)) AS revenue
          FROM transaction_items ti JOIN transactions t ON t.transaction_id = ti.transaction_id
          WHERE t.status = 'Paid' AND t.sale_type = 'Mixed' AND ti.item_type = 'Service'
            AND t.transaction_date >= ? AND t.transaction_date < ?

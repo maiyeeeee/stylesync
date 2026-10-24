@@ -225,7 +225,10 @@ router.get("/:id", async (req, res) => {
          GROUP BY t.service
          UNION ALL
          SELECT ti.item_name AS service, SUM(ti.quantity) AS visits,
-                COALESCE(SUM(ti.line_total), 0) AS spending
+               COALESCE(
+  SUM(COALESCE(ti.final_line_total, ti.line_total)),
+  0
+) AS spending
          FROM transactions t
          LEFT JOIN appointments a ON a.id = t.appointment_id
          JOIN transaction_items ti ON ti.transaction_id = t.transaction_id
@@ -274,7 +277,11 @@ router.get("/:id", async (req, res) => {
     if (mixedIds.length) {
       const [lines] = await pool.query(
         `SELECT transaction_id, item_type AS type, item_name AS name,
-                quantity, unit_price, line_total
+              quantity,
+unit_price,
+line_total,
+discount_amount,
+COALESCE(final_line_total, line_total) AS final_line_total
          FROM transaction_items WHERE transaction_id IN (?)
          ORDER BY transaction_id DESC, item_id ASC`, [mixedIds]
       );
