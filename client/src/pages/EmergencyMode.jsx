@@ -78,6 +78,7 @@ function RecordDetails({ record }) {
     const rows = record.record_type === "sale"
         ? [
             ["Customer", payload.customer],
+            ["Customer mobile", payload.customer_contact],
             ["Sale type", payload.sale_type],
             ["Service / product", payload.service],
             ["Service ID", payload.service_id],
@@ -554,11 +555,27 @@ function EmergencyMode() {
                 return
             }
 
+            const rawPhone = String(fields.get("customer_contact") || "")
+                .replace(/[\s()-]/g, "")
+
+            const customerContact = /^\+639\d{9}$/.test(rawPhone)
+                ? `0${rawPhone.slice(3)}`
+                : /^639\d{9}$/.test(rawPhone)
+                    ? `0${rawPhone.slice(2)}`
+                    : rawPhone
+
+            if (!/^09\d{9}$/.test(customerContact)) {
+                setError("Enter a valid customer mobile number (09XXXXXXXXX).")
+                return
+            }
+
             payload = {
                 customer:
                     fields.get(
                         "customer",
                     ),
+
+                customer_contact: customerContact,
 
                 sale_type:
                     saleType,
@@ -1650,6 +1667,19 @@ function SaleFields({
                     className={
                         inputClass
                     }
+                />
+            </Field>
+
+            <Field label="Customer mobile number">
+                <input
+                    name="customer_contact"
+                    type="tel"
+                    inputMode="tel"
+                    required
+                    placeholder="09XXXXXXXXX"
+                    pattern="(09[0-9]{9}|\+639[0-9]{9}|639[0-9]{9})"
+                    title="Enter a valid Philippine mobile number."
+                    className={inputClass}
                 />
             </Field>
 

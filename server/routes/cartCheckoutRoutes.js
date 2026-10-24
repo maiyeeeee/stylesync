@@ -1,6 +1,5 @@
 
 const express = require('express');
-const crypto = require('node:crypto');
 const db = require('../db');
 const { getPromotionPrice } = require('../utils/promotionPricing');
 
@@ -58,24 +57,50 @@ const normalName = value =>
     .toLocaleLowerCase('en');
 
 const percentageDiscount = (amount, percent) =>
-  Math.round(amount * Math.round(percent * 100) / 10000);
+  Math.round(
+    amount * Math.round(percent * 100) / 10000
+  );
+
+// Required Philippine mobile number.
+// Accepts 09XXXXXXXXX, +639XXXXXXXXX,
+// and 639XXXXXXXXX.
+// Saves everything as 09XXXXXXXXX.
+function normalizeRequiredPhone(value) {
+  const digits = String(value ?? '')
+    .replace(/[\s()-]/g, '');
+
+  if (/^09\d{9}$/.test(digits)) {
+    return digits;
+  }
+
+  if (/^\+639\d{9}$/.test(digits)) {
+    return '0' + digits.slice(3);
+  }
+
+  if (/^639\d{9}$/.test(digits)) {
+    return '0' + digits.slice(2);
+  }
+
+  return null;
+}
 
 const validate = body => {
   const customer = String(body.customer || '')
     .trim()
     .replace(/\s+/g, ' ');
 
-  const contact = String(body.customer_contact || '').trim();
+  const contact = normalizeRequiredPhone(
+    body.customer_contact
+  );
 
   if (!customer || customer.length > 100) {
     throw err('Enter a valid customer name.');
   }
 
-  if (
-    contact.length > 30 ||
-    (contact && !/^[+0-9 ()-]{7,30}$/.test(contact))
-  ) {
-    throw err('Enter a valid customer contact number.');
+  if (!contact) {
+    throw err(
+      'A valid customer mobile number (09XXXXXXXXX) is required.'
+    );
   }
 
   if (
@@ -112,14 +137,26 @@ const validate = body => {
 
     seen.add(key);
 
-    return { type, itemId, quantity };
+    return {
+      type,
+      itemId,
+      quantity
+    };
   });
 
-  return { customer, contact, entries };
+  return {
+    customer,
+    contact,
+    entries
+  };
 };
 
 async function priceCart(conn, body, lock) {
-  const { customer, contact, entries } = validate(body);
+  const {
+    customer,
+    contact,
+    entries
+  } = validate(body);
 
   let subtotal = 0;
   let serviceSubtotal = 0;
@@ -178,8 +215,10 @@ async function priceCart(conn, body, lock) {
 
       x.name = rows[0].name;
       x.unit = cents(rows[0].price);
+
       x.remaining =
         Number(rows[0].stock) - x.quantity;
+
       x.alertLevel = Number(rows[0].alertLevel);
       x.promoDiscount = 0;
       x.promoId = null;
@@ -297,9 +336,8 @@ async function priceCart(conn, body, lock) {
     }
   }
 
-  // Automatically choose the discount with
-  // the greater actual peso savings.
-  // Promotion wins ties to preserve loyalty.
+  // Loyalty wins only when its discount is
+  // greater than the active promotion.
   const winner =
     reward && loyaltyDiscount > promoTotal
       ? 'loyalty'
@@ -321,8 +359,7 @@ async function priceCart(conn, body, lock) {
     );
   }
 
-  // Allocate discounts to service lines only.
-  // Preserve the exact total in centavos.
+  // Allocate discounts to service lines.
   if (winner === 'loyalty') {
     let allocated = 0;
 
@@ -395,9 +432,7 @@ function summary(cart) {
   };
 }
 
-/**
- * Preview checkout without saving anything.
- */
+// Preview checkout without saving anything.
 router.post('/preview', async (req, res) => {
   let conn;
 
@@ -408,6 +443,9 @@ router.post('/preview', async (req, res) => {
     ) {
       throw err('Not authorized.', 403);
     }
+
+    // Validate before opening a database connection.
+    validate(req.body || {});
 
     conn = await pool.getConnection();
 
@@ -437,9 +475,7 @@ router.post('/preview', async (req, res) => {
   }
 });
 
-/**
- * Save complete multi-item checkout.
- */
+// Save complete multi-item checkout.
 router.post('/', async (req, res) => {
   let conn;
   let begun = false;
@@ -482,21 +518,22 @@ router.post('/', async (req, res) => {
 
     const key = String(body.checkout_key || '');
 
-if (
-  !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(key)
-) {
-  throw err('Invalid checkout key.');
-}
+    if (
+      !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(key)
+    ) {
+      throw err('Invalid checkout key.');
+    }
 
-// Validate customer name, contact, and cart items
-// BEFORE opening a database connection.
-validate(body);
+    // Important: reject missing or invalid contact
+    // BEFORE opening a database connection.
+    validate(body);
 
-conn = await pool.getConnection();
+    conn = await pool.getConnection();
 
-await conn.beginTransaction();
-begun = true;
-    // Prevent the same checkout from being recorded twice.
+    await conn.beginTransaction();
+    begun = true;
+
+    // Duplicate checkout protection.
     const [existing] = await conn.query(
       `SELECT transaction_id
        FROM transactions
@@ -515,14 +552,13 @@ begun = true;
       });
     }
 
-    // Recalculate prices and discounts on the server.
     const cart = await priceCart(
       conn,
       body,
       true
     );
 
-    // Confirm the cashier reviewed the current quote.
+    // Check that checkout matches the preview.
     if (
       String(body.expected_total) !==
         money(cart.total) ||
@@ -545,6 +581,7 @@ begun = true;
         ? cart.reward.percent
         : null;
 
+    // Save parent transaction.
     const [result] = await conn.query(
       `INSERT INTO transactions
        (
@@ -574,7 +611,7 @@ begun = true;
        )`,
       [
         cart.customer,
-        cart.contact || null,
+        cart.contact,
         `Multi-item checkout (${cart.entries.length} items)`,
         money(cart.total),
         body.payment,
@@ -598,7 +635,7 @@ begun = true;
       ]
     );
 
-    // Save each service and product separately.
+    // Save each purchased item.
     for (const x of cart.entries) {
       await conn.query(
         `INSERT INTO transaction_items
@@ -631,7 +668,7 @@ begun = true;
         ]
       );
 
-      // Deduct stock only for products.
+      // Deduct product stock.
       if (x.type === 'Product') {
         const status =
           x.remaining === 0
@@ -659,7 +696,6 @@ begun = true;
           );
         }
 
-        // Record an auditable inventory movement.
         await conn.query(
           `INSERT INTO inventory_movements
            (
@@ -678,7 +714,7 @@ begun = true;
       }
     }
 
-    // Redeem loyalty only if it beats the promotion.
+    // Redeem loyalty reward only if loyalty wins.
     if (cart.winner === 'loyalty') {
       const [updated] = await conn.query(
         `UPDATE ig_loyalty_rewards
@@ -705,7 +741,7 @@ begun = true;
       }
     }
 
-    // Commit the transaction, items, stock and reward together.
+    // Commit all changes together.
     await conn.commit();
     begun = false;
 
@@ -748,9 +784,7 @@ begun = true;
   }
 });
 
-/**
- * Fetch purchased items for receipt/history.
- */
+// Fetch purchased items for receipt/history.
 router.get('/:transactionId', async (req, res) => {
   try {
     if (

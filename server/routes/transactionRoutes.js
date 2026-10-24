@@ -2,6 +2,9 @@ const express = require("express")
 const router = express.Router()
 const db = require("../db")
 const promiseDb = db.promise()
+const {
+    normalizeRequiredPhone
+} = require("../middleware/requirePosCustomerPhone")
 router.use("/cart", require("./cartCheckoutRoutes"))
 // Promotions are selected on the server, never by cashier-provided percentages.
 const { getPromotionPrice } = require("../utils/promotionPricing")
@@ -774,13 +777,34 @@ router.post("/", async (req, res) => {
                 )
             }
             // The appointment record is authoritative.
-            customer =
-                appointment.customer_name
-            service =
-                appointment.service
-            customerContact = String(
-                appointment.contact_number || ""
-            ).trim() || null
+            // The appointment record remains authoritative
+// for the customer's identity and booked service.
+customer = appointment.customer_name
+service = appointment.service
+
+// Require the appointment's saved phone number
+// to be valid before completing checkout.
+const appointmentPhone = normalizeRequiredPhone(
+    appointment.contact_number
+)
+
+if (!appointmentPhone) {
+    throw problem(
+        "This appointment has no valid customer mobile number. Please ask the owner to correct the appointment contact before checkout.",
+        409
+    )
+}
+
+// Prevent a cashier from accidentally using
+// another customer's phone number.
+if (customerContact !== appointmentPhone) {
+    throw problem(
+        "The POS customer phone number does not match the appointment contact. Refresh the appointment details before checkout.",
+        409
+    )
+}
+
+customerContact = appointmentPhone
             // ========================================
             // VERIFIED BOOKING DEPOSIT
             // ========================================

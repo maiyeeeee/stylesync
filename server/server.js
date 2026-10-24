@@ -14,6 +14,8 @@ const serviceRoutes = require("./routes/serviceRoutes")
 const appointmentRoutes = require("./routes/appointments")
 const inventoryRoutes = require("./routes/inventoryRoutes")
 const transactionRoutes = require("./routes/transactionRoutes")
+const requirePosCustomerPhone =
+    require("./middleware/requirePosCustomerPhone")
 const discountRoutes = require("./routes/discountRoutes")
 const customerRoutes = require("./routes/customerRoutes")
 const recommendationRoutes = require("./routes/recommendationRoutes")
@@ -452,7 +454,12 @@ api.use(
     },
     inventoryRoutes,
 )
-api.use("/transactions", requireTeamMember, transactionRoutes)
+api.use(
+    "/transactions",
+    requireTeamMember,
+    requirePosCustomerPhone,
+    transactionRoutes
+)
 api.get("/public/promotions", async (req, res) => {
     try {
         const db = require("./db")
