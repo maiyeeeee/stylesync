@@ -4033,3 +4033,33 @@
  .insightglow-pos .pos-metrics > div { min-height: 95px; padding: 18px; }
  .insightglow-pos .pos-workspace > section { padding: 17px; }
 }
+
+/* POS redesign v2: scoped components; no changes to transaction logic. */
+.insightglow-pos { --pos-ink:#291b43; --pos-accent:#8725c6; }
+.insightglow-pos .pos-page-header {padding: 7px 0 12px;}
+.insightglow-pos .pos-page-header h1 {font-size:clamp(28px,2.8vw,37px);font-weight:800;letter-spacing:-.045em;color:var(--pos-ink)}
+.insightglow-pos .pos-page-header button {min-height:43px;box-shadow:0 4px 12px #7425ac12}
+.insightglow-pos .pos-metrics {gap:16px}
+.insightglow-pos .pos-stat-card {position:relative;min-height:144px;padding:26px 24px!important;overflow:hidden;border:1px solid #eae0f4!important;border-radius:20px!important;background:linear-gradient(125deg,#fff 25%,#f8f1ff 100%)!important;box-shadow:0 8px 24px #42245b0c}
+.insightglow-pos .pos-stat-card p:first-of-type {font-size:12px;font-weight:600;letter-spacing:.015em;color:#80718f}
+.insightglow-pos .pos-stat-card p:last-of-type {font-size:clamp(22px,2.2vw,31px);font-weight:800;color:#7c24c5;letter-spacing:-.035em;margin-top:16px}
+.insightglow-pos .pos-stat-icon {position:absolute;right:20px;top:20px;display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:#f0e3fb;color:#8b31c8;font-size:23px;font-weight:700}
+.insightglow-pos .pos-workspace {grid-template-columns:minmax(0,1.35fr) minmax(320px,.95fr);gap:18px}
+.insightglow-pos .pos-workspace>section,.insightglow-pos .pos-history-panel {border:1px solid #eae4f1!important;border-radius:20px!important;background:#fff!important;box-shadow:0 10px 30px #3b24500a;padding:26px!important}
+.insightglow-pos .pos-section-heading {display:flex;align-items:center;gap:14px;margin-bottom:27px;padding-bottom:19px;border-bottom:1px solid #f0eaf5}
+.insightglow-pos .pos-heading-icon {width:44px;height:44px;display:grid;place-items:center;border-radius:14px;background:#f2e7fb;color:#7f2ac0;font-size:23px;flex-shrink:0}
+.insightglow-pos .pos-eyebrow {font-size:10px;letter-spacing:.15em;font-weight:800;color:#a15acb;margin-bottom:4px}
+.insightglow-pos .pos-section-heading h2 {font-size:19px;font-weight:800;color:var(--pos-ink);letter-spacing:-.025em}
+.insightglow-pos .pos-section-subtitle {font-size:12px;color:#8c8196;margin-top:4px}
+.insightglow-pos .pos-form-step {display:flex;align-items:center;gap:12px;margin:28px 0 17px;padding:13px 14px;background:linear-gradient(90deg,#f6effc,#fff);border:1px solid #efe4f6;border-radius:12px}
+.insightglow-pos .pos-form-step:first-child {margin-top:0}
+.insightglow-pos .pos-step-number {width:33px;height:33px;display:grid;place-items:center;border-radius:10px;background:#8c30c8;color:#fff;font-size:12px;font-weight:800;flex-shrink:0}
+.insightglow-pos .pos-form-step h3 {font-size:14px;font-weight:800;color:#35214d}
+.insightglow-pos .pos-form-step p {font-size:11px;color:#8c7c9a;margin-top:2px}
+.insightglow-pos .pos-empty-receipt {margin-top:12px;min-height:265px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:26px;border:1.5px dashed #e3cbee;border-radius:15px;background:linear-gradient(145deg,#fff,#fcf8ff)}
+.insightglow-pos .pos-empty-receipt-icon {display:grid;place-items:center;width:62px;height:62px;border-radius:18px;background:#f3e7fb;color:#9035cb;font-size:33px;margin-bottom:16px}
+.insightglow-pos .pos-empty-receipt h3 {font-size:15px;font-weight:800;color:#352047}
+.insightglow-pos .pos-empty-receipt p {max-width:260px;font-size:12px;line-height:1.7;color:#8a7f95;margin-top:8px}
+.insightglow-pos .pos-history-panel {margin-top:3px}
+@media(max-width:1120px){.insightglow-pos .pos-workspace{grid-template-columns:1fr}}
+@media(max-width:640px){.insightglow-pos .pos-workspace>section,.insightglow-pos .pos-history-panel{padding:18px!important}.insightglow-pos .pos-stat-card{min-height:120px}}

@@ -2282,10 +2282,7 @@ function AdminTransactions() {
                         POS / Transactions
                     </h1>
 
-                    <p className="mt-2 text-sm text-gray-500">
-                        Record a sale or check out
-                        an existing appointment.
-                    </p>
+                    <p className="mt-2 text-sm text-gray-500">Manage walk-in sales, payments and appointment checkout in one place.</p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -2378,8 +2375,9 @@ function AdminTransactions() {
                 ].map(([label, value], index) => (
                     <div
                         key={label}
-                        className={panel}
+                        className={`${panel} pos-stat-card pos-stat-${index}`}
                     >
+                        <span className="pos-stat-icon" aria-hidden="true">{["₱", "▤", "↔"][index]}</span>
                         <p className="text-sm text-gray-500">
                             {label}
                         </p>
@@ -2396,15 +2394,17 @@ function AdminTransactions() {
 
             <div className="pos-workspace grid items-start gap-6 xl:grid-cols-2">
                 <section className={`${panel} pos-record-panel`}>
-                    <h2 className="mb-5 text-lg font-bold text-purple-950">
-                        Record a transaction
-                    </h2>
+                    <div className="pos-section-heading">
+                        <span className="pos-heading-icon" aria-hidden="true">✦</span>
+                        <div><p className="pos-eyebrow">NEW SALE</p><h2>Record a transaction</h2><p className="pos-section-subtitle">Complete the details below to record a payment.</p></div>
+                    </div>
 
                     <form onSubmit={save}>
                         <fieldset
                             disabled={disabled}
                             className="space-y-4"
                         >
+                            <div className="pos-form-step"><span className="pos-step-number">01</span><div><h3>Customer details</h3><p>Choose a source and identify the customer.</p></div></div>
                             <Field label="Transaction source">
                                 <select
                                     className={input}
@@ -2504,6 +2504,7 @@ function AdminTransactions() {
                                         />
                                     </Field>
 
+                                    <div className="pos-form-step"><span className="pos-step-number">02</span><div><h3>Sale details</h3><p>Select the service or product and review its price.</p></div></div>
                                     <Field label="Sale type">
                                         <select
                                             className={input}
@@ -2701,6 +2702,7 @@ function AdminTransactions() {
                                 )}
                             </div>
 
+                            <div className="pos-form-step"><span className="pos-step-number">03</span><div><h3>Payment summary</h3><p>Review discounts, deposits and the amount due.</p></div></div>
                             <Field label="Original sale price before promotion, loyalty and deposit (₱)">
                                 <input
                                     required
@@ -2856,16 +2858,11 @@ function AdminTransactions() {
                     </form>
                 </section>
 
-                <section className={panel}>
-                    <h2 className="text-lg font-bold text-purple-950">
-                        Saved receipt
-                    </h2>
+                <section className={`${panel} pos-receipt-panel`}>
+                    <div className="pos-section-heading"><span className="pos-heading-icon" aria-hidden="true">▤</span><div><p className="pos-eyebrow">PAYMENT RECORD</p><h2>Saved receipt</h2><p className="pos-section-subtitle">Your most recently selected transaction.</p></div></div>
 
                     {!receipt ? (
-                        <p className="mt-5 rounded-xl border border-dashed border-purple-200 p-10 text-center text-sm text-gray-500">
-                            Save a transaction or select View
-                            in the history.
-                        </p>
+                        <div className="pos-empty-receipt" role="status"><div className="pos-empty-receipt-icon" aria-hidden="true">▤</div><h3>No receipt selected yet</h3><p>Once you save a transaction, its receipt will appear here. You can also select View in the history.</p></div>
                     ) : (
                         <div className="mt-5 space-y-4 text-sm">
                             <p className="font-bold text-purple-800">
@@ -2986,7 +2983,7 @@ function AdminTransactions() {
                 </section>
             </div>
 
-            <section className={panel}>
+            <section className={`${panel} pos-history-panel`}>
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-purple-500">
