@@ -479,7 +479,7 @@ function normalizeRequiredPhone(value) {
 }
 
 /** Online walk-in multi-item checkout. Appointment checkout remains in the original POS until backend parity. */
-function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = [], products = [] }) {
+function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = [], products = [], embedded = false }) {
   const [step, setStep] = useState("cart");
   const [showDiscount, setShowDiscount] = useState(false);
   const [completedSale, setCompletedSale] = useState(null);
@@ -661,16 +661,16 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
 
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3" role="presentation">
-      <section role="dialog" aria-modal="true" aria-label="Point of sale checkout" className="stylesync-checkout-dialog flex max-h-[95vh] w-full max-w-7xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+    <div className={embedded ? "w-full min-w-0" : "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3"} role="presentation">
+      <section role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : "true"} aria-label="Point of sale checkout" className={embedded ? "stylesync-checkout-dialog flex w-full min-w-0 flex-col rounded-3xl border border-purple-100 bg-white shadow-sm" : "stylesync-checkout-dialog flex max-h-[95vh] w-full max-w-7xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"}>
         <header className="flex items-center justify-between border-b border-purple-100 px-5 py-4">
           <div><h2 className="text-xl font-bold text-purple-950">Point of Sale · Current Sale</h2><p className="text-xs text-purple-600">Online walk-in · Services + products · Server-calculated discounts</p></div>
-          <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border px-3 py-2 text-sm">Close</button>
+          {!embedded && <button type="button" onClick={onClose} disabled={saving} className="rounded-xl border px-3 py-2 text-sm">Close</button>}
         </header>
         <div className="flex gap-2 border-b px-5 py-3 text-xs font-semibold text-purple-800">
           {["cart", "payment", "review", "complete"].map((x, i) => <span key={x} className={`rounded-full px-3 py-1 ${step === x ? "bg-purple-700 text-white" : "bg-purple-50"}`}>{i + 1}. {x === "cart" ? "Cart" : x === "payment" ? "Payment" : x === "review" ? "Review" : "Complete"}</span>)}
         </div>
-        <div className="overflow-y-auto p-5">
+        <div className={embedded ? "p-4 sm:p-5" : "overflow-y-auto p-5"}>
           {step === "cart" && <div className="grid items-start gap-4 xl:grid-cols-[1.12fr_0.94fr_1fr]">
             <section aria-label="Add to sale" className="min-w-0 space-y-3 rounded-2xl border border-purple-100 bg-purple-50/30 p-4">
               <div><h3 className="text-base font-bold text-purple-950">01 · Add to Sale</h3><p className="mt-1 text-xs text-slate-500">Choose services and products for this walk-in sale.</p></div>
@@ -774,7 +774,7 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
               <p className="mt-5 text-center text-xs text-purple-800">Thank you for visiting Dahling’s Salon & Spa! 💜</p>
             </div>
             {saveError && <p role="alert" className="text-sm text-red-700">{saveError}</p>}
-            <div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={printCompletedReceipt} className="rounded-xl border border-purple-300 p-3 text-sm font-bold text-purple-800">Print Receipt</button><button type="button" onClick={startNewSale} className="rounded-xl bg-purple-700 p-3 text-sm font-bold text-white">New Transaction</button><button type="button" onClick={onClose} className="rounded-xl border p-3 text-sm font-semibold">View Transactions</button></div>
+            <div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={printCompletedReceipt} className="rounded-xl border border-purple-300 p-3 text-sm font-bold text-purple-800">Print Receipt</button><button type="button" onClick={startNewSale} className="rounded-xl bg-purple-700 p-3 text-sm font-bold text-white">New Transaction</button>{!embedded && <button type="button" onClick={onClose} className="rounded-xl border p-3 text-sm font-semibold">View Transactions</button>}</div>
           </div>}
           {step === "review" && quote && (
             <div className="mx-auto max-w-3xl space-y-5">
@@ -796,7 +796,6 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
 }
 
 function AdminTransactions() {
-    const [showMultiItemPreview, setShowMultiItemPreview] = useState(false)
     const [cartHistory, setCartHistory] = useState({})
     const [cartHistoryError, setCartHistoryError] = useState("")
     const loadCartItems = async (transactionId) => {
@@ -2338,23 +2337,6 @@ function AdminTransactions() {
 
     return (
         <div className="insightglow-pos min-w-0 space-y-6">
-            <StyleSyncMultiItemCheckoutModal
-                open={showMultiItemPreview}
-                onClose={() => setShowMultiItemPreview(false)}
-                onSaved={async result => {
-                    setMessage(`Multi-item sale #${result.id} ${result.duplicate ? "was already recorded; no duplicate was created." : "saved successfully."}`)
-                    try {
-                        const rows = await load()
-                        const saved = rows?.find(row => String(row.transaction_id) === String(result.id))
-                        if (saved) setReceipt(saved)
-                        await loadCartItems(result.id)
-                    } catch (refreshError) {
-                        console.error("Sale saved; history refresh unavailable:", refreshError)
-                    }
-                }}
-                services={services}
-                products={products}
-            />
             <header className="pos-page-header flex flex-wrap items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-purple-950">
@@ -2368,15 +2350,7 @@ function AdminTransactions() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        disabled={loading || busy || !navigator.onLine}
-                        onClick={() => setShowMultiItemPreview(true)}
-                        className="rounded-xl border border-purple-300 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-800 hover:bg-purple-100 disabled:opacity-50"
-                        title="Online multi-item walk-in checkout"
-                    >
-                        Multi-item checkout
-                    </button>
+                    <a href="#legacy-checkout" className="rounded-xl border border-purple-300 bg-purple-50 px-4 py-3 text-sm font-semibold text-purple-800 hover:bg-purple-100">Appointment / Legacy checkout ↓</a>
                 <button
                     disabled={loading || busy}
                     onClick={() => load()}
@@ -2473,6 +2447,33 @@ function AdminTransactions() {
                 ))}
             </div>
 
+            <section aria-label="Main three-column POS" className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div><h2 className="text-xl font-bold text-purple-950">Walk-in Point of Sale</h2><p className="text-sm text-gray-500">Add services and products, review your cart, and collect payment.</p></div>
+                    <a href="#legacy-checkout" className="text-sm font-semibold text-purple-700 underline">Existing appointment or emergency checkout ↓</a>
+                </div>
+            <StyleSyncMultiItemCheckoutModal
+                embedded
+                open={true}
+                onClose={() => setShowMultiItemPreview(false)}
+                onSaved={async result => {
+                    setMessage(`Multi-item sale #${result.id} ${result.duplicate ? "was already recorded; no duplicate was created." : "saved successfully."}`)
+                    try {
+                        const rows = await load()
+                        const saved = rows?.find(row => String(row.transaction_id) === String(result.id))
+                        if (saved) setReceipt(saved)
+                        await loadCartItems(result.id)
+                    } catch (refreshError) {
+                        console.error("Sale saved; history refresh unavailable:", refreshError)
+                    }
+                }}
+                services={services}
+                products={products}
+            />
+            </section>
+            <details id="legacy-checkout" open={Boolean(emergencySale || emergencyCheck)} className="rounded-2xl border border-purple-200 bg-white p-4 sm:p-5">
+                <summary className="cursor-pointer text-lg font-bold text-purple-950">Appointment checkout, Emergency Mode &amp; original transaction form</summary>
+                <p className="mt-2 text-sm text-gray-500">Use this existing checkout for appointments, deposits, and emergency reconciliation. Walk-in multi-item checkout is above.</p>
             <div className="pos-workspace grid items-start gap-6 xl:grid-cols-2">
                 <section className={`${panel} pos-record-panel`}>
                     <h2 className="mb-5 text-lg font-bold text-purple-950">
@@ -3064,6 +3065,8 @@ function AdminTransactions() {
                     )}
                 </section>
             </div>
+
+            </details>
 
             <section className={panel}>
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
