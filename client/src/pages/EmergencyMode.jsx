@@ -178,11 +178,63 @@ function EmergencyMode() {
 
     const [statusFilter, setStatusFilter] =
         useState("All")
+        const [sharedSales, setSharedSales] = useState([])
+const [sharedLoading, setSharedLoading] = useState(false)
+const [sharedError, setSharedError] = useState("")
+const [sharedLoaded, setSharedLoaded] = useState(false)
+const [historyTab, setHistoryTab] = useState("local")
 
     const lock = useRef(false)
 
     const busy = Boolean(operation)
+const loadSharedSales = useCallback(async () => {
+    if (!navigator.onLine) {
+        setSharedError("Connect to the internet to view shared sales history.")
+        return
+    }
 
+    setSharedLoading(true)
+    setSharedError("")
+
+    try {
+        const response = await apiFetch(`${API_URL}/transactions`)
+
+        if (!response.ok) {
+            throw new Error("Unable to load shared sales history.")
+        }
+
+        const data = await response.json()
+
+        // Support an array response or a wrapped transactions array.
+        const transactions = Array.isArray(data)
+            ? data
+            : Array.isArray(data?.transactions)
+              ? data.transactions
+              : null
+
+        if (!transactions) {
+            throw new Error("Unexpected transactions response.")
+        }
+
+        const emergencyTransactions = transactions
+            .filter((transaction) =>
+                String(transaction.offline_id ?? "").trim() !== ""
+            )
+            .sort((a, b) =>
+                Number(b.transaction_id || 0) -
+                Number(a.transaction_id || 0)
+            )
+
+        setSharedSales(emergencyTransactions)
+        setSharedLoaded(true)
+    } catch (err) {
+        setSharedError(
+            err.message || "Unable to load shared sales history."
+        )
+    } finally {
+        setSharedLoading(false)
+    }
+}, [])
     const refreshRecords = useCallback(
         async () => {
             const current =
@@ -1339,7 +1391,155 @@ function EmergencyMode() {
                     </fieldset>
                 </form>
             </section>
+<div
+    className="flex flex-wrap gap-2"
+    role="tablist"
+    aria-label="Emergency records history"
+>
+    <button
+        type="button"
+        role="tab"
+        aria-selected={historyTab === "local"}
+        onClick={() => setHistoryTab("local")}
+        className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${
+            historyTab === "local"
+                ? "bg-purple-700 text-white"
+                : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+        }`}
+    >
+        Local Queue (This Device)
+    </button>
 
+    <button
+        type="button"
+        role="tab"
+        aria-selected={historyTab === "shared"}
+        onClick={() => {
+            setHistoryTab("shared")
+
+            if (!sharedLoaded && !sharedLoading) {
+                loadSharedSales()
+            }
+        }}
+        className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${
+            historyTab === "shared"
+                ? "bg-purple-700 text-white"
+                : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+        }`}
+    >
+        Shared Sales History
+    </button>
+</div>
+
+{historyTab === "shared" && (
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3 p-5">
+            <div>
+                <h3 className="text-lg font-bold text-purple-950">
+                    Shared Emergency Sales History
+                </h3>
+                <p className="mt-1 text-xs leading-relaxed text-gray-500">
+                    Completed emergency sales saved on the server.
+                    Visible across devices when connected.
+                    Pending local records are not included.
+                </p>
+            </div>
+
+            <button
+                type="button"
+                disabled={sharedLoading || !online}
+                onClick={loadSharedSales}
+                className={buttonClass}
+            >
+                {sharedLoading ? "Refreshing…" : "Refresh history"}
+            </button>
+        </div>
+
+        {sharedError && (
+            <p
+                role="alert"
+                className="mx-5 mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-800"
+            >
+                {sharedError}
+            </p>
+        )}
+
+        <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left text-sm">
+                <thead className="border-y border-purple-100 bg-purple-50 text-purple-900">
+                    <tr>
+                        {[
+                            "Transaction",
+                            "Customer",
+                            "Amount",
+                            "Payment",
+                            "Recorded",
+                        ].map((heading) => (
+                            <th
+                                key={heading}
+                                scope="col"
+                                className="px-5 py-3 text-xs font-semibold"
+                            >
+                                {heading}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {sharedSales.map((sale) => (
+                        <tr
+                            key={sale.transaction_id}
+                            className="border-b border-gray-100"
+                        >
+                            <td className="px-5 py-4 font-semibold text-purple-800">
+                                #{sale.transaction_id}
+                            </td>
+                            <td className="px-5 py-4">
+                                {sale.customer || "—"}
+                            </td>
+                            <td className="whitespace-nowrap px-5 py-4">
+                                {Number.isFinite(
+                                    Number(sale.total_amount)
+                                ) && sale.total_amount != null
+                                    ? `₱${Number(sale.total_amount).toFixed(2)}`
+                                    : "—"}
+                            </td>
+                            <td className="px-5 py-4">
+                                {sale.payment || "—"}
+                            </td>
+                            <td className="whitespace-nowrap px-5 py-4 text-xs text-gray-600">
+                                {sale.created_at
+                                    ? formatDate(sale.created_at)
+                                    : "—"}
+                            </td>
+                        </tr>
+                    ))}
+
+                    {!sharedSales.length && (
+                        <tr>
+                            <td
+                                colSpan={5}
+                                className="px-5 py-8 text-center text-gray-500"
+                            >
+                                {sharedLoading
+                                    ? "Loading shared sales…"
+                                    : sharedError
+                                      ? "History could not be loaded."
+                                      : "No synced emergency sales found."}
+                            </td>
+                        </tr>
+                    )}
+                </tbody>
+            </table>
+        </div>
+
+        <p className="px-5 py-4 text-xs leading-relaxed text-gray-500">
+            This is a read-only server history. It does not
+            synchronize, approve, or reconcile pending records.
+        </p>
+    </section>
+)}
             <section className="min-w-0 overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4 p-5">
                     <div>
@@ -1348,7 +1548,12 @@ function EmergencyMode() {
                             record
                             queue
                         </h3>
-
+<section
+    hidden={historyTab !== "local"}
+    className={`min-w-0 overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-sm ${
+        historyTab !== "local" ? "!hidden" : ""
+    }`}
+></section>
                         <p className="mt-1 text-xs text-gray-500">
                             Recorded
                             times
@@ -1874,3 +2079,4 @@ function SaleFields({
 }
 
 export default EmergencyMode
+
