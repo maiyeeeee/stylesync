@@ -1509,14 +1509,14 @@ const loadSharedSales = useCallback(async () => {
                                 {sale.payment || "—"}
                             </td>
                             <td className="whitespace-nowrap px-5 py-4 text-xs text-gray-600">
-                                sale.transaction_date
-    ? formatDate(
-        String(sale.transaction_date).includes("T")
-            ? sale.transaction_date
-            : `${String(sale.transaction_date).replace(" ", "T")}Z`
-      )
-    : "—"
-                            </td>
+    {sale.transaction_date
+        ? formatDate(
+              String(sale.transaction_date).includes("T")
+                  ? sale.transaction_date
+                  : `${String(sale.transaction_date).replace(" ", "T")}Z`
+          )
+        : "—"}
+</td>
                         </tr>
                     ))}
 
