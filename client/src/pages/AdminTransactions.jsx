@@ -2459,20 +2459,20 @@ function AdminTransactions() {
                             ["appointment", "Appointments", "Booking & deposits"],
                             ["emergency", "Emergency Mode", "Offline & reconciliation"],
                         ].map(([key, title, description]) => (
-                            <button key={key} type="button" role="tab" aria-selected={(emergencySale ? "emergency" : posTab) === key}
+                            <button key={key} type="button" role="tab" aria-selected={posTab === key}
                                 onClick={() => {
                                     setPosTab(key)
                                     if (key === "appointment") setForm(previous => ({...previous, mode: "Appointment"}))
                                     if (key === "emergency") setForm(previous => ({...previous, mode: "Walk-in"}))
                                 }}
-                                className={`rounded-xl border px-4 py-3 text-left transition ${ (emergencySale ? "emergency" : posTab) === key ? "border-purple-500 bg-purple-100 text-purple-950" : "border-purple-100 bg-white text-slate-600 hover:bg-purple-50"}`}>
+                                className={`rounded-xl border px-4 py-3 text-left transition ${ posTab === key? "border-purple-500 bg-purple-100 text-purple-950" : "border-purple-100 bg-white text-slate-600 hover:bg-purple-50"}`}>
                                 <span className="block text-sm font-bold">{title}</span>
                                 <span className="block text-xs opacity-80">{description}</span>
                             </button>
                         ))}
                     </div>
                 </div>
-                <div hidden={(emergencySale ? "emergency" : posTab) !== "walkin"}>
+                <div hidden={posTab !== "walkin"}>
                     <StyleSyncMultiItemCheckoutModal
                         embedded open={true} onClose={() => {}}
                         onSaved={async result => {
@@ -2487,9 +2487,9 @@ function AdminTransactions() {
                         services={services} products={products}
                     />
                 </div>
-                <div id="legacy-checkout" hidden={(emergencySale ? "emergency" : posTab) === "walkin"}>
+                <div id="legacy-checkout" hidden={posTab === "walkin"}>
                     <p className="mb-3 text-sm text-gray-600">
-                        {(emergencySale ? "emergency" : posTab) === "appointment"
+                       {posTab === "appointment"
                             ? "Existing appointment checkout: booking details, deposit deduction, and remaining balance."
                             : "Emergency and recovery checkout: original offline protections and duplicate reconciliation remain enabled."}
                     </p>
