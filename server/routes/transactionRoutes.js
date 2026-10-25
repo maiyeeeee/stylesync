@@ -1446,6 +1446,31 @@ winningPromotionId,
                 )
             }
         }
+
+        // ============================================
+// COMPLETE PAID APPOINTMENT AFTER POS CHECKOUT
+// ============================================
+// This runs inside the same database transaction
+// as the sale, deposit application, and loyalty update.
+
+if (appointmentId) {
+    const [completion] = await connection.query(
+        `
+        UPDATE appointments
+        SET status = 'Completed'
+        WHERE id = ?
+          AND status IN ('Approved', 'Completed')
+        `,
+        [appointmentId]
+    )
+
+    if (completion.affectedRows !== 1) {
+        throw problem(
+            "Unable to complete the appointment. Checkout was not saved.",
+            409
+        )
+    }
+}
         // ============================================
         // COMMIT THE COMPLETE CHECKOUT
         // ============================================

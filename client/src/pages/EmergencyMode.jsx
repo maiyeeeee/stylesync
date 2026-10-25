@@ -1500,18 +1500,22 @@ const loadSharedSales = useCallback(async () => {
                             </td>
                             <td className="whitespace-nowrap px-5 py-4">
                                 {Number.isFinite(
-                                    Number(sale.total_amount)
-                                ) && sale.total_amount != null
-                                    ? `₱${Number(sale.total_amount).toFixed(2)}`
+                                    Number(sale.amount)
+                                ) && sale.amount != null
+                                    ? `₱${Number(sale.amount).toFixed(2)}`
                                     : "—"}
                             </td>
                             <td className="px-5 py-4">
                                 {sale.payment || "—"}
                             </td>
                             <td className="whitespace-nowrap px-5 py-4 text-xs text-gray-600">
-                                {sale.created_at
-                                    ? formatDate(sale.created_at)
-                                    : "—"}
+                                sale.transaction_date
+    ? formatDate(
+        String(sale.transaction_date).includes("T")
+            ? sale.transaction_date
+            : `${String(sale.transaction_date).replace(" ", "T")}Z`
+      )
+    : "—"
                             </td>
                         </tr>
                     ))}
