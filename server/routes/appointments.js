@@ -319,13 +319,11 @@ async function sendAppointmentStatusEmail({
             })
 
         if (result?.error) {
-            console.error(
-                "Appointment email failed:",
-                result.error.name ||
-                    result.error
-                        .message ||
-                    "RESEND_ERROR",
-            )
+           console.error("Appointment email failed:", {
+  name: result.error.name,
+  message: result.error.message,
+  statusCode: result.error.statusCode,
+});
 
             return {
                 sent: false,
@@ -348,12 +346,10 @@ async function sendAppointmentStatusEmail({
                 null,
         }
     } catch (error) {
-        console.error(
-            "Appointment email failed:",
-            error?.name ||
-                error?.message ||
-                "RESEND_FAILED",
-        )
+        console.error("Appointment email exception:", {
+  name: error?.name,
+  message: error?.message,
+});
 
         return {
             sent: false,
