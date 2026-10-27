@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from "react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+} from "recharts"
 
 import { API_URL, apiFetch } from "../lib/sessionApi"
 
@@ -182,6 +193,13 @@ function AdminGAD() {
     }, [summary])
 
     const customerTotal = [...totals.values()].reduce((sum, count) => sum + count, 0)
+const genderChartData = GROUPS
+    .map((group) => ({
+        name: group.name,
+        value: totals.get(group.name) || 0,
+        color: group.color,
+    }))
+    .filter((item) => item.value > 0)
 
     const services = useMemo(() => {
         const grouped = new Map()
@@ -213,6 +231,23 @@ function AdminGAD() {
     }, [preferences])
 
     const bookingTotal = services.reduce((sum, item) => sum + item.total, 0)
+    const customerTypeBreakdown = useMemo(() => {
+    const grouped = new Map()
+
+    preferences.forEach((item) => {
+        const type = String(item.customer_type || "Not recorded").trim() || "Not recorded"
+        const current = grouped.get(type) || 0
+
+        grouped.set(type, current + item.total_bookings)
+    })
+
+    return [...grouped.entries()]
+        .map(([type, bookings]) => ({
+            type,
+            bookings,
+        }))
+        .sort((a, b) => b.bookings - a.bookings || a.type.localeCompare(b.type))
+}, [preferences])
 
     const leadingServices = services.length
         ? services.filter((item) => item.total === services[0].total)
@@ -353,46 +388,93 @@ function AdminGAD() {
 
             <div className="grid gap-6 xl:grid-cols-3">
                 <Panel
-                    title="Customer profile distribution"
-                    subtitle="Share of registered customer records"
-                >
-                    {!customerTotal ? (
-                        <Empty>No customer profiles available.</Empty>
-                    ) : (
-                        <div className="space-y-5">
-                            {GROUPS.map((group) => {
-                                const count = totals.get(group.name)
-                                const percentage = (count / customerTotal) * 100
+    title="Customer profile distribution"
+    subtitle="Gender distribution of registered customer records"
+>
+    {!customerTotal ? (
+        <Empty>No customer profiles available.</Empty>
+    ) : (
+        <div className="space-y-5">
+            <div className="relative mx-auto h-[240px] w-full max-w-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie
+                            data={genderChartData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={68}
+                            outerRadius={95}
+                            paddingAngle={2}
+                            stroke="#ffffff"
+                            strokeWidth={2}
+                        >
+                            {genderChartData.map((entry) => (
+                                <Cell
+                                    key={entry.name}
+                                    fill={entry.color}
+                                />
+                            ))}
+                        </Pie>
 
-                                return (
-                                    <div key={group.name}>
-                                        <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                                            <span className="text-gray-600">{group.name}</span>
+                        <Tooltip
+                            formatter={(value, name) => [
+                                `${number(value)} profiles`,
+                                name,
+                            ]}
+                        />
+                    </PieChart>
+                </ResponsiveContainer>
 
-                                            <span className="font-semibold text-gray-900">
-                                                {number(count)}
-                                                <span className="ml-2 font-normal text-gray-500">
-                                                    {percentage.toFixed(1)}%
-                                                </span>
-                                            </span>
-                                        </div>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-3xl font-bold text-purple-950">
+                        {number(customerTotal)}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                        Profile records
+                    </span>
+                </div>
+            </div>
 
-                                        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                                            <div
-                                                className="h-full rounded-full"
-                                                style={{
-                                                    width: `${percentage}%`,
-                                                    backgroundColor: group.color,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                )
-                            })}
+            <div className="space-y-3">
+                {GROUPS.map((group) => {
+                    const count = totals.get(group.name) || 0
+                    const percentage = (count / customerTotal) * 100
+
+                    return (
+                        <div
+                            key={group.name}
+                            className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-3"
+                        >
+                            <div className="flex min-w-0 items-center gap-2">
+                                <span
+                                    className="h-3 w-3 shrink-0 rounded-full"
+                                    style={{ backgroundColor: group.color }}
+                                />
+                                <span className="text-sm text-gray-700">
+                                    {group.name}
+                                </span>
+                            </div>
+
+                            <span className="shrink-0 text-sm font-semibold text-purple-950">
+                                {number(count)}
+                                <span className="ml-2 font-normal text-gray-500">
+                                    {percentage.toFixed(1)}%
+                                </span>
+                            </span>
                         </div>
-                    )}
-                </Panel>
+                    )
+                })}
+            </div>
 
+            <p className="text-xs leading-relaxed text-gray-500">
+                Counts represent customer profile records, not
+                necessarily unique individuals.
+            </p>
+        </div>
+    )}
+</Panel>
                 <div className="min-w-0 xl:col-span-2">
                     <Panel
                         title="Bookings by service and recorded gender"
@@ -404,7 +486,7 @@ function AdminGAD() {
                             <>
                                 <div className="overflow-x-auto">
                                     <div
-                                        className="min-w-[500px]"
+                                        className="min-w-[420px] sm:min-w-[500px]"
                                         style={{
                                             height: Math.max(240, chartServices.length * 48),
                                         }}
@@ -482,7 +564,110 @@ function AdminGAD() {
                     </Panel>
                 </div>
             </div>
+<Panel
+    title="Bookings by customer type"
+    subtitle="Share of recorded bookings across customer categories"
+>
+    {!customerTypeBreakdown.length ? (
+        <Empty>No customer-type booking data available.</Empty>
+    ) : (
+        <div className="grid gap-6 lg:grid-cols-2 lg:items-center">
+            <div className="relative mx-auto h-[250px] w-full max-w-[340px]">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie
+                            data={customerTypeBreakdown}
+                            dataKey="bookings"
+                            nameKey="type"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={65}
+                            outerRadius={100}
+                            paddingAngle={2}
+                            stroke="#ffffff"
+                            strokeWidth={2}
+                        >
+                            {customerTypeBreakdown.map((entry, index) => (
+                                <Cell
+                                    key={entry.type}
+                                    fill={
+                                        [
+                                            "#7c3aed",
+                                            "#db2777",
+                                            "#0891b2",
+                                            "#64748b",
+                                            "#d97706",
+                                        ][index % 5]
+                                    }
+                                />
+                            ))}
+                        </Pie>
 
+                        <Tooltip
+                            formatter={(value) => [
+                                `${number(value)} bookings`,
+                                "Recorded bookings",
+                            ]}
+                        />
+                    </PieChart>
+                </ResponsiveContainer>
+
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-3xl font-bold text-purple-950">
+                        {number(bookingTotal)}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                        Total bookings
+                    </span>
+                </div>
+            </div>
+
+            <div className="min-w-0 overflow-x-auto">
+                <table className="w-full min-w-[280px] text-left text-sm">
+                    <thead className="bg-purple-50 text-purple-900">
+                        <tr>
+                            <th className="rounded-tl-xl px-4 py-3">
+                                Customer type
+                            </th>
+                            <th className="px-4 py-3 text-right">
+                                Bookings
+                            </th>
+                            <th className="rounded-tr-xl px-4 py-3 text-right">
+                                Share
+                            </th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {customerTypeBreakdown.map((item) => (
+                            <tr
+                                key={item.type}
+                                className="border-b border-gray-100"
+                            >
+                                <td className="px-4 py-4 font-medium text-gray-700">
+                                    {item.type}
+                                </td>
+                                <td className="px-4 py-4 text-right font-semibold text-purple-900">
+                                    {number(item.bookings)}
+                                </td>
+                                <td className="px-4 py-4 text-right text-gray-600">
+                                    {bookingTotal
+                                        ? `${((item.bookings / bookingTotal) * 100).toFixed(1)}%`
+                                        : "0.0%"}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    )}
+
+    <p className="mt-5 text-xs leading-relaxed text-gray-500">
+        Based on recorded appointments across all dates and statuses.
+        These figures count bookings, not unique customers.
+    </p>
+</Panel>
             <Panel
                 title="Booking breakdown"
                 subtitle="Search affects this table only. Summary cards and charts remain all-time."
