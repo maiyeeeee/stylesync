@@ -45,6 +45,7 @@ const emptyReport = {
     categories: [], paidServices: [], requestedServices: [],
   },
   mostRequestedServices: [],
+  staffAnalytics: { scope: "Paid booked services only", staff: [] },
   salesAnalytics: {
     previousPeriod: { startDate: "", endDate: "", sales: 0, transactions: 0 },
     salesByType: [],
@@ -665,6 +666,7 @@ function ReportCategoryIcon({ name }) {
     services: <><circle cx="6" cy="6" r="2" /><circle cx="6" cy="18" r="2" /><path d="M8 8l11 11M8 16L19 5M14 10l5-5" /></>,
     discounts: <><path d="M12 2l9 9v6l-6 5-12-12V4a2 2 0 0 1 2-2z" /><circle cx="7.5" cy="7.5" r="1" /></>,
     inventory: <><path d="M12 2 21 7v10l-9 5-9-5V7z" /><path d="m3 7 9 5 9-5M12 12v10" /></>,
+    staff: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></>,
   }
   return (
     <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -825,6 +827,16 @@ function AdminReports() {
               salesByType: Array.isArray(data.salesAnalytics?.salesByType) ? data.salesAnalytics.salesByType : [],
               paymentBreakdown: Array.isArray(data.salesAnalytics?.paymentBreakdown) ? data.salesAnalytics.paymentBreakdown : [],
               topSellingServices: Array.isArray(data.salesAnalytics?.topSellingServices) ? data.salesAnalytics.topSellingServices : [],
+            },
+            staffAnalytics: {
+              scope: data.staffAnalytics?.scope || "Paid booked services only",
+              staff: Array.isArray(data.staffAnalytics?.staff)
+                ? data.staffAnalytics.staff.map((item) => ({
+                    ...item,
+                    paidAppointments: Number(item.paidAppointments || 0),
+                    attributedRevenue: Number(item.attributedRevenue || 0),
+                  }))
+                : [],
             },
             discountAnalytics: {
               ...emptyReport.discountAnalytics,
@@ -1292,13 +1304,14 @@ function AdminReports() {
         )}
 
         {/* CATEGORY NAVIGATION */}
-        <nav aria-label="Report categories" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <nav aria-label="Report categories" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {[
             { id: "sales", title: "Sales", description: "Revenue & transactions", icon: "sales" },
             { id: "appointments", title: "Appointments", description: "Booking activity", icon: "appointments" },
             { id: "services", title: "Services", description: "Service performance", icon: "services" },
             { id: "discounts", title: "Promotions & Discounts", description: "Promo & loyalty analytics", icon: "discounts" },
             { id: "inventory", title: "Inventory", description: "Stock & inventory", icon: "inventory" },
+            { id: "staff", title: "Staff Performance", description: "Booked-service sales", icon: "staff" },
           ].map((category) => {
             const selected = activeCategory === category.id
             return (
@@ -2906,6 +2919,46 @@ function AdminReports() {
               </div>
             </article>
             <p className="text-xs text-gray-500">Usage counts represent paid transactions, not necessarily unique customers. All charts show recorded values only; no forecasting is used.</p>
+          </section>
+        )}
+
+        {activeCategory === "staff" && (
+          <section className={`${panel} overflow-hidden`}>
+            <div className="border-b border-purple-100 p-5">
+              <h2 className="text-lg font-bold text-purple-950">Staff Sales Performance</h2>
+              <p className="mt-2 text-sm text-gray-600">
+                Paid, completed appointments linked to an assigned staff member in the selected transaction-date period.
+                Revenue is the final paid service transaction amount after applicable discounts.
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                Scope: {report.staffAnalytics.scope}. Walk-in sales, product sales, and mixed-cart sales are excluded.
+                These figures are not total staff sales or commissions.
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[620px] text-left text-sm">
+                <thead className="bg-purple-50 text-purple-950">
+                  <tr>
+                    <th className="px-5 py-3">Staff Member</th>
+                    <th className="px-5 py-3">Role</th>
+                    <th className="px-5 py-3 text-right">Paid Appointments</th>
+                    <th className="px-5 py-3 text-right">Attributed Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.staffAnalytics.staff.length ? report.staffAnalytics.staff.map((item) => (
+                    <tr key={item.staffId} className="border-t border-gray-100">
+                      <td className="px-5 py-3 font-semibold text-gray-900">{item.staffName || "Unnamed staff"}</td>
+                      <td className="px-5 py-3 text-gray-600">{item.staffRole || "—"}</td>
+                      <td className="px-5 py-3 text-right tabular-nums">{item.paidAppointments}</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums">{money(item.attributedRevenue)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">No staff performance data available for this period.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
 
