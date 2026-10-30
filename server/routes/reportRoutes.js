@@ -354,6 +354,55 @@ paymentCollections: paymentCollectionRows.map((row) => ({
     }
 
     // ====================================
+    // STAFF SALES PERFORMANCE (READ-ONLY)
+    // ====================================
+    // Counts paid, completed appointment-linked service sales only.
+    // Walk-ins, mixed carts, and products are excluded.
+
+    const [staffPerformanceRows] = await connection.query(
+      `SELECT
+         s.staff_id AS staffId,
+         s.name AS staffName,
+         s.role AS staffRole,
+         s.active_status AS activeStatus,
+         COUNT(DISTINCT t.appointment_id) AS paidAppointments,
+         COALESCE(SUM(t.amount), 0) AS attributedRevenue
+       FROM staff s
+       LEFT JOIN appointments a
+         ON a.staff_id = s.staff_id
+         AND a.status = 'Completed'
+       LEFT JOIN transactions t
+         ON t.appointment_id = a.id
+         AND t.status = 'Paid'
+         AND t.sale_type = 'Service'
+         AND t.transaction_date >= ?
+         AND t.transaction_date < ?
+       GROUP BY
+         s.staff_id,
+         s.name,
+         s.role,
+         s.active_status
+       ORDER BY
+         attributedRevenue DESC,
+         paidAppointments DESC,
+         s.name ASC`,
+      [startDate, endDate]
+    )
+
+    const staffAnalytics = {
+      scope: "Paid booked services only",
+      staff: staffPerformanceRows.map((row) => ({
+        staffId: Number(row.staffId),
+        staffName: row.staffName,
+        staffRole: row.staffRole,
+        activeStatus: row.activeStatus,
+        paidAppointments: Number(row.paidAppointments || 0),
+        attributedRevenue: Number(row.attributedRevenue || 0),
+      })),
+    }
+
+
+    // ====================================
     // PROMOTION & LOYALTY DISCOUNT ANALYTICS
     // ====================================
     // Read-only: only completed Paid POS transactions are counted.
@@ -930,6 +979,7 @@ paymentCollections: paymentCollectionRows.map((row) => ({
       salesAnalytics,
       serviceAnalytics,
       appointmentAnalytics,
+      staffAnalytics,
 
       // Applied discounts on paid sales in the selected period.
       discountAnalytics,
