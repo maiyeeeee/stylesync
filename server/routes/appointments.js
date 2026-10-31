@@ -26,15 +26,15 @@ const {
 
 
 
-    getAvailableStaff,
+    getAvailableStaff,
 
 
 
-    reserveAvailableStaff,
+    reserveAvailableStaff,
 
 
 
-    resolveService,
+    resolveService,
 
 
 
@@ -71,27 +71,27 @@ async function nextBookingNumber(connection) {
 
 
 
-    const [rows] = await connection.query(
+    const [rows] = await connection.query(
 
 
 
-        `SELECT last_number
+        `SELECT last_number
 
 
 
-         FROM booking_number_sequence
+         FROM booking_number_sequence
 
 
 
-         WHERE id = 1
+         WHERE id = 1
 
 
 
-         FOR UPDATE`,
+         FOR UPDATE`,
 
 
 
-    )
+    )
 
 
 
@@ -99,19 +99,19 @@ async function nextBookingNumber(connection) {
 
 
 
-    if (!rows.length) {
+    if (!rows.length) {
 
 
 
-        const error = new Error(
+        const error = new Error(
 
 
 
-            "Booking number sequence is not initialized.",
+            "Booking number sequence is not initialized.",
 
 
 
-        )
+        )
 
 
 
@@ -119,7 +119,7 @@ async function nextBookingNumber(connection) {
 
 
 
-        error.status = 500
+        error.status = 500
 
 
 
@@ -127,11 +127,11 @@ async function nextBookingNumber(connection) {
 
 
 
-        throw error
+        throw error
 
 
 
-    }
+    }
 
 
 
@@ -139,19 +139,19 @@ async function nextBookingNumber(connection) {
 
 
 
-    const bookingNumber =
+    const bookingNumber =
 
 
 
-        Number(
+        Number(
 
 
 
-            rows[0].last_number,
+            rows[0].last_number,
 
 
 
-        ) + 1
+        ) + 1
 
 
 
@@ -159,35 +159,35 @@ async function nextBookingNumber(connection) {
 
 
 
-    await connection.query(
+    await connection.query(
 
 
 
-        `UPDATE booking_number_sequence
+        `UPDATE booking_number_sequence
 
 
 
-         SET last_number = ?
+         SET last_number = ?
 
 
 
-         WHERE id = 1`,
+         WHERE id = 1`,
 
 
 
-        [
+        [
 
 
 
-            bookingNumber,
+            bookingNumber,
 
 
 
-        ],
+        ],
 
 
 
-    )
+    )
 
 
 
@@ -195,7 +195,7 @@ async function nextBookingNumber(connection) {
 
 
 
-    return bookingNumber
+    return bookingNumber
 
 
 
@@ -211,31 +211,15 @@ function getResendClient() {
 
 
 
-    const apiKey = String(
+    const apiKey = String(
 
 
 
-        process.env.RESEND_API_KEY || "",
+        process.env.RESEND_API_KEY || "",
 
 
 
-    ).trim()
-
-
-
-
-
-
-
-    if (!apiKey) {
-
-
-
-        return null
-
-
-
-    }
+    ).trim()
 
 
 
@@ -243,7 +227,23 @@ function getResendClient() {
 
 
 
-    return new Resend(apiKey)
+    if (!apiKey) {
+
+
+
+        return null
+
+
+
+    }
+
+
+
+
+
+
+
+    return new Resend(apiKey)
 
 
 
@@ -259,15 +259,15 @@ function validEmail(value) {
 
 
 
-    const email = String(
+    const email = String(
 
 
 
-        value || "",
+        value || "",
 
 
 
-    ).trim()
+    ).trim()
 
 
 
@@ -275,31 +275,31 @@ function validEmail(value) {
 
 
 
-    return (
+    return (
 
 
 
-        email.length > 0 &&
+        email.length > 0 &&
 
 
 
-        email.length <= 100 &&
+        email.length <= 100 &&
 
 
 
-        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
 
 
 
-            email,
+            email,
 
 
 
-        )
+        )
 
 
 
-    )
+    )
 
 
 
@@ -315,7 +315,7 @@ function formatDateForEmail(value) {
 
 
 
-    if (!value) return ""
+    if (!value) return ""
 
 
 
@@ -323,7 +323,7 @@ function formatDateForEmail(value) {
 
 
 
-    let text
+    let text
 
 
 
@@ -331,51 +331,51 @@ function formatDateForEmail(value) {
 
 
 
-    if (
+    if (
 
 
 
-        value instanceof Date &&
+        value instanceof Date &&
 
 
 
-        !Number.isNaN(
+        !Number.isNaN(
 
 
 
-            value.getTime(),
+            value.getTime(),
 
 
 
-        )
+        )
 
 
 
-    ) {
+    ) {
 
 
 
-        text =
+        text =
 
 
 
-            new Intl.DateTimeFormat(
+            new Intl.DateTimeFormat(
 
 
 
-                "en-CA",
+                "en-CA",
 
 
 
-                {
+                {
 
 
 
-                    timeZone:
+                    timeZone:
 
 
 
-                        "Asia/Manila",
+                        "Asia/Manila",
 
 
 
@@ -383,11 +383,11 @@ function formatDateForEmail(value) {
 
 
 
-                    year:
+                    year:
 
 
 
-                        "numeric",
+                        "numeric",
 
 
 
@@ -395,11 +395,11 @@ function formatDateForEmail(value) {
 
 
 
-                    month:
+                    month:
 
 
 
-                        "2-digit",
+                        "2-digit",
 
 
 
@@ -407,47 +407,47 @@ function formatDateForEmail(value) {
 
 
 
-                    day:
+                    day:
 
 
 
-                        "2-digit",
+                        "2-digit",
 
 
 
-                },
+                },
 
 
 
-            ).format(value)
+            ).format(value)
 
 
 
-    } else {
+    } else {
 
 
 
-        text =
+        text =
 
 
 
-            String(value).slice(
+            String(value).slice(
 
 
 
-                0,
+                0,
 
 
 
-                10,
+                10,
 
 
 
-            )
+            )
 
 
 
-    }
+    }
 
 
 
@@ -455,15 +455,15 @@ function formatDateForEmail(value) {
 
 
 
-    const date = new Date(
+    const date = new Date(
 
 
 
-        `${text}T00:00:00+08:00`,
+        `${text}T00:00:00+08:00`,
 
 
 
-    )
+    )
 
 
 
@@ -471,31 +471,31 @@ function formatDateForEmail(value) {
 
 
 
-    if (
+    if (
 
 
 
-        Number.isNaN(
+        Number.isNaN(
 
 
 
-            date.getTime(),
+            date.getTime(),
 
 
 
-        )
+        )
 
 
 
-    ) {
+    ) {
 
 
 
-        return text
+        return text
 
 
 
-    }
+    }
 
 
 
@@ -503,23 +503,23 @@ function formatDateForEmail(value) {
 
 
 
-    return date.toLocaleDateString(
+    return date.toLocaleDateString(
 
 
 
-        "en-PH",
+        "en-PH",
 
 
 
-        {
+        {
 
 
 
-            timeZone:
+            timeZone:
 
 
 
-                "Asia/Manila",
+                "Asia/Manila",
 
 
 
@@ -527,11 +527,11 @@ function formatDateForEmail(value) {
 
 
 
-            month:
+            month:
 
 
 
-                "long",
+                "long",
 
 
 
@@ -539,11 +539,11 @@ function formatDateForEmail(value) {
 
 
 
-            day:
+            day:
 
 
 
-                "numeric",
+                "numeric",
 
 
 
@@ -551,19 +551,19 @@ function formatDateForEmail(value) {
 
 
 
-            year:
+            year:
 
 
 
-                "numeric",
+                "numeric",
 
 
 
-        },
+        },
 
 
 
-    )
+    )
 
 
 
@@ -579,7 +579,7 @@ function formatTimeForEmail(value) {
 
 
 
-    if (!value) return ""
+    if (!value) return ""
 
 
 
@@ -587,27 +587,27 @@ function formatTimeForEmail(value) {
 
 
 
-    return String(
+    return String(
 
 
 
-        value,
+        value,
 
 
 
-    ).slice(
+    ).slice(
 
 
 
-        0,
+        0,
 
 
 
-        5,
+        5,
 
 
 
-    )
+    )
 
 
 
@@ -623,23 +623,23 @@ async function sendAppointmentStatusEmail({
 
 
 
-    appointment,
+    appointment,
 
 
 
-    status,
+    status,
 
 
 
-    declineReason,
+    declineReason,
 
 
 
-    suggestedDate,
+    suggestedDate,
 
 
 
-    suggestedTime,
+    suggestedTime,
 
 
 
@@ -647,23 +647,23 @@ async function sendAppointmentStatusEmail({
 
 
 
-    const recipient =
+    const recipient =
 
 
 
-        String(
+        String(
 
 
 
-            appointment?.email ||
+            appointment?.email ||
 
 
 
-                "",
+                "",
 
 
 
-        ).trim()
+        ).trim()
 
 
 
@@ -671,31 +671,31 @@ async function sendAppointmentStatusEmail({
 
 
 
-    if (!validEmail(recipient)) {
+    if (!validEmail(recipient)) {
 
 
 
-        return {
+        return {
 
 
 
-            sent: false,
+            sent: false,
 
 
 
-            reason:
+            reason:
 
 
 
-                "No valid customer email.",
+                "No valid customer email.",
 
 
 
-        }
+        }
 
 
 
-    }
+    }
 
 
 
@@ -703,51 +703,51 @@ async function sendAppointmentStatusEmail({
 
 
 
-    if (
+    if (
 
 
 
-        ![
+        ![
 
 
 
-            "Approved",
+            "Approved",
 
 
 
-            "Declined",
+            "Declined",
 
 
 
-        ].includes(status)
+        ].includes(status)
 
 
 
-    ) {
+    ) {
 
 
 
-        return {
+        return {
 
 
 
-            sent: false,
+            sent: false,
 
 
 
-            reason:
+            reason:
 
 
 
-                "No email required for this status.",
+                "No email required for this status.",
 
 
 
-        }
+        }
 
 
 
-    }
+    }
 
 
 
@@ -755,11 +755,11 @@ async function sendAppointmentStatusEmail({
 
 
 
-    const resend =
+    const resend =
 
 
 
-        getResendClient()
+        getResendClient()
 
 
 
@@ -767,19 +767,19 @@ async function sendAppointmentStatusEmail({
 
 
 
-    if (!resend) {
+    if (!resend) {
 
 
 
-        console.error(
+        console.error(
 
 
 
-            "Appointment email skipped: RESEND_API_KEY is missing.",
+            "Appointment email skipped: RESEND_API_KEY is missing.",
 
 
 
-        )
+        )
 
 
 
@@ -787,27 +787,27 @@ async function sendAppointmentStatusEmail({
 
 
 
-        return {
+        return {
 
 
 
-            sent: false,
+            sent: false,
 
 
 
-            reason:
+            reason:
 
 
 
-                "Email provider is not configured.",
+                "Email provider is not configured.",
 
 
 
-        }
+        }
 
 
 
-    }
+    }
 
 
 
@@ -815,19 +815,19 @@ async function sendAppointmentStatusEmail({
 
 
 
-    const from = String(
+    const from = String(
 
 
 
-        process.env.RESEND_FROM ||
+        process.env.RESEND_FROM ||
 
 
 
-            "StyleSync <onboarding@resend.dev>",
+            "StyleSync <onboarding@resend.dev>",
 
 
 
-    ).trim()
+    ).trim()
 
 
 
@@ -835,23 +835,23 @@ async function sendAppointmentStatusEmail({
 
 
 
-    const customerName =
+    const customerName =
 
 
 
-        String(
+        String(
 
 
 
-            appointment.customer_name ||
+            appointment.customer_name ||
 
 
 
-                "Customer",
+                "Customer",
 
 
 
-        ).trim()
+        ).trim()
 
 
 
@@ -859,23 +859,23 @@ async function sendAppointmentStatusEmail({
 
 
 
-    const service =
+    const service =
 
 
 
-        String(
+        String(
 
 
 
-            appointment.service ||
+            appointment.service ||
 
 
 
-                "Salon service",
+                "Salon service",
 
 
 
-        ).trim()
+        ).trim()
 
 
 
@@ -883,19 +883,19 @@ async function sendAppointmentStatusEmail({
 
 
 
-    const appointmentDate =
+    const appointmentDate =
 
 
 
-        formatDateForEmail(
+        formatDateForEmail(
 
 
 
-            appointment.appointment_date,
+            appointment.appointment_date,
 
 
 
-        )
+        )
 
 
 
@@ -903,19 +903,19 @@ async function sendAppointmentStatusEmail({
 
 
 
-    const appointmentTime =
+    const appointmentTime =
 
 
 
-        formatTimeForEmail(
+        formatTimeForEmail(
 
 
 
-            appointment.appointment_time,
+            appointment.appointment_time,
 
 
 
-        )
+        )
 
 
 
@@ -923,11 +923,11 @@ async function sendAppointmentStatusEmail({
 
 
 
-    let subject
+    let subject
 
 
 
-    let text
+    let text
 
 
 
@@ -935,27 +935,27 @@ async function sendAppointmentStatusEmail({
 
 
 
-    if (
+    if (
 
 
 
-        status ===
+        status ===
 
 
 
-        "Approved"
+        "Approved"
 
 
 
-    ) {
+    ) {
 
 
 
-        subject =
+        subject =
 
 
 
-            "Your Dahling’s Escape appointment is approved"
+            "Your Dahling’s Escape appointment is approved"
 
 
 
@@ -963,95 +963,95 @@ async function sendAppointmentStatusEmail({
 
 
 
-        text = [
+        text = [
 
 
 
-            `Hi ${customerName},`,
+            `Hi ${customerName},`,
 
 
 
-            "",
+            "",
 
 
 
-            "Your appointment request has been approved.",
+            "Your appointment request has been approved.",
 
 
 
-            "",
+            "",
 
 
 
-            `Service: ${service}`,
+            `Service: ${service}`,
 
 
 
-            `Date: ${appointmentDate}`,
+            `Date: ${appointmentDate}`,
 
 
 
-            `Time: ${appointmentTime}`,
+            `Time: ${appointmentTime}`,
 
 
 
-            "",
+            "",
 
 
 
-            "Your down payment has been verified and your appointment is confirmed.",
+            "Your down payment has been verified and your appointment is confirmed.",
 
 
 
-            "",
+            "",
 
 
 
-            "Please arrive on time for your scheduled appointment.",
+            "Please arrive on time for your scheduled appointment.",
 
 
 
-            "",
+            "",
 
 
 
-            "If you have questions or need assistance, please contact Dahling’s Escape Salon & Spa.",
+            "If you have questions or need assistance, please contact Dahling’s Escape Salon & Spa.",
 
 
 
-            "",
+            "",
 
 
 
-            "Thank you,",
+            "Thank you,",
 
 
 
-            "Dahling’s Escape Salon & Spa",
+            "Dahling’s Escape Salon & Spa",
 
 
 
-        ].join("\n")
+        ].join("\n")
 
 
 
-    } else {
+    } else {
 
 
 
-        const suggestedDateText =
+        const suggestedDateText =
 
 
 
-            formatDateForEmail(
+            formatDateForEmail(
 
 
 
-                suggestedDate,
+                suggestedDate,
 
 
 
-            )
+            )
 
 
 
@@ -1059,19 +1059,19 @@ async function sendAppointmentStatusEmail({
 
 
 
-        const suggestedTimeText =
+        const suggestedTimeText =
 
 
 
-            formatTimeForEmail(
+            formatTimeForEmail(
 
 
 
-                suggestedTime,
+                suggestedTime,
 
 
 
-            )
+            )
 
 
 
@@ -1079,59 +1079,59 @@ async function sendAppointmentStatusEmail({
 
 
 
-        const lines = [
+        const lines = [
 
 
 
-            `Hi ${customerName},`,
+            `Hi ${customerName},`,
 
 
 
-            "",
+            "",
 
 
 
-            "We’re sorry, but your requested appointment schedule could not be approved.",
+            "We’re sorry, but your requested appointment schedule could not be approved.",
 
 
 
-            "",
+            "",
 
 
 
-            `Service: ${service}`,
+            `Service: ${service}`,
 
 
 
-            `Requested date: ${appointmentDate}`,
+            `Requested date: ${appointmentDate}`,
 
 
 
-            `Requested time: ${appointmentTime}`,
+            `Requested time: ${appointmentTime}`,
 
 
 
-            "",
+            "",
 
 
 
-            `Reason: ${
+            `Reason: ${
 
 
 
-                declineReason ||
+                declineReason ||
 
 
 
-                "The requested schedule is unavailable."
+                "The requested schedule is unavailable."
 
 
 
-            }`,
+            }`,
 
 
 
-        ]
+        ]
 
 
 
@@ -1139,39 +1139,39 @@ async function sendAppointmentStatusEmail({
 
 
 
-        if (
+        if (
 
 
 
-            suggestedDateText &&
+            suggestedDateText &&
 
 
 
-            suggestedTimeText
+            suggestedTimeText
 
 
 
-        ) {
+        ) {
 
 
 
-            lines.push(
+            lines.push(
 
 
 
-                "",
+                "",
 
 
 
-                `Suggested alternative: ${suggestedDateText} at ${suggestedTimeText}`,
+                `Suggested alternative: ${suggestedDateText} at ${suggestedTimeText}`,
 
 
 
-            )
+            )
 
 
 
-        }
+        }
 
 
 
@@ -1179,39 +1179,39 @@ async function sendAppointmentStatusEmail({
 
 
 
-        lines.push(
+        lines.push(
 
 
 
-            "",
+            "",
 
 
 
-            "You may return to the StyleSync booking page to choose another schedule.",
+            "You may return to the StyleSync booking page to choose another schedule.",
 
 
 
-            "",
+            "",
 
 
 
-            "If you need assistance, please contact Dahling’s Escape Salon & Spa.",
+            "If you need assistance, please contact Dahling’s Escape Salon & Spa.",
 
 
 
-            "",
+            "",
 
 
 
-            "Thank you,",
+            "Thank you,",
 
 
 
-            "Dahling’s Escape Salon & Spa",
+            "Dahling’s Escape Salon & Spa",
 
 
 
-        )
+        )
 
 
 
@@ -1219,15 +1219,15 @@ async function sendAppointmentStatusEmail({
 
 
 
-        text =
+        text =
 
 
 
-            lines.join("\n")
+            lines.join("\n")
 
 
 
-    }
+    }
 
 
 
@@ -1235,19 +1235,19 @@ async function sendAppointmentStatusEmail({
 
 
 
-    try {
+    try {
 
 
 
-        const result =
+        const result =
 
 
 
-            await resend.emails.send({
+            await resend.emails.send({
 
 
 
-                from,
+                from,
 
 
 
@@ -1255,15 +1255,15 @@ async function sendAppointmentStatusEmail({
 
 
 
-                to: [
+                to: [
 
 
 
-                    recipient,
+                    recipient,
 
 
 
-                ],
+                ],
 
 
 
@@ -1271,7 +1271,7 @@ async function sendAppointmentStatusEmail({
 
 
 
-                subject,
+                subject,
 
 
 
@@ -1279,11 +1279,11 @@ async function sendAppointmentStatusEmail({
 
 
 
-                text,
+                text,
 
 
 
-            })
+            })
 
 
 
@@ -1291,23 +1291,23 @@ async function sendAppointmentStatusEmail({
 
 
 
-        if (result?.error) {
+        if (result?.error) {
 
 
 
-           console.error("Appointment email failed:", {
+           console.error("Appointment email failed:", {
 
 
 
-  name: result.error.name,
+  name: result.error.name,
 
 
 
-  message: result.error.message,
+  message: result.error.message,
 
 
 
-  statusCode: result.error.statusCode,
+  statusCode: result.error.statusCode,
 
 
 
@@ -1319,27 +1319,27 @@ async function sendAppointmentStatusEmail({
 
 
 
-            return {
+            return {
 
 
 
-                sent: false,
+                sent: false,
 
 
 
-                reason:
+                reason:
 
 
 
-                    "Email delivery failed.",
+                    "Email delivery failed.",
 
 
 
-            }
+            }
 
 
 
-        }
+        }
 
 
 
@@ -1347,19 +1347,19 @@ async function sendAppointmentStatusEmail({
 
 
 
-        console.log(
+        console.log(
 
 
 
-            "Appointment email sent:",
+            "Appointment email sent:",
 
 
 
-            status,
+            status,
 
 
 
-        )
+        )
 
 
 
@@ -1367,11 +1367,11 @@ async function sendAppointmentStatusEmail({
 
 
 
-        return {
+        return {
 
 
 
-            sent: true,
+            sent: true,
 
 
 
@@ -1379,39 +1379,39 @@ async function sendAppointmentStatusEmail({
 
 
 
-            id:
+            id:
 
 
 
-                result?.data
+                result?.data
 
 
 
-                    ?.id ||
+                    ?.id ||
 
 
 
-                null,
+                null,
 
 
 
-        }
+        }
 
 
 
-    } catch (error) {
+    } catch (error) {
 
 
 
-        console.error("Appointment email exception:", {
+        console.error("Appointment email exception:", {
 
 
 
-  name: error?.name,
+  name: error?.name,
 
 
 
-  message: error?.message,
+  message: error?.message,
 
 
 
@@ -1423,27 +1423,27 @@ async function sendAppointmentStatusEmail({
 
 
 
-        return {
+        return {
 
 
 
-            sent: false,
+            sent: false,
 
 
 
-            reason:
+            reason:
 
 
 
-                "Email delivery failed.",
+                "Email delivery failed.",
 
 
 
-        }
+        }
 
 
 
-    }
+    }
 
 
 
@@ -1459,99 +1459,99 @@ router.get(
 
 
 
-    "/",
+    "/",
 
 
 
-    async (
+    async (
 
 
 
-        req,
+        req,
 
 
 
-        res,
+        res,
 
 
 
-    ) => {
+    ) => {
 
 
 
-        try {
+        try {
 
 
 
-            const [rows] =
+            const [rows] =
 
 
 
-                await promiseDb.query(
+                await promiseDb.query(
 
 
 
-                    `SELECT
+                    `SELECT
 
 
 
-                        a.*,
+                        a.*,
 
 
 
-                        s.name AS staff_name,
+                        s.name AS staff_name,
 
 
 
-                        s.role AS staff_role,
+                        s.role AS staff_role,
 
 
 
-                        sv.duration_minutes
+                        sv.duration_minutes
 
 
 
-                     FROM appointments a
+                     FROM appointments a
 
 
 
-                     LEFT JOIN staff s
+                     LEFT JOIN staff s
 
 
 
-                        ON s.staff_id =
+                        ON s.staff_id =
 
 
 
-                           a.staff_id
+                           a.staff_id
 
 
 
-                     LEFT JOIN services sv
+                     LEFT JOIN services sv
 
 
 
-                        ON sv.service_id =
+                        ON sv.service_id =
 
 
 
-                           a.service_id
+                           a.service_id
 
 
 
-                     ORDER BY
+                     ORDER BY
 
 
 
-                        a.appointment_date DESC,
+                        a.appointment_date DESC,
 
 
 
-                        a.appointment_time DESC`,
+                        a.appointment_time DESC`,
 
 
 
-                )
+                )
 
 
 
@@ -1559,43 +1559,43 @@ router.get(
 
 
 
-            res.json(rows)
+            res.json(rows)
 
 
 
-        } catch (error) {
+        } catch (error) {
 
 
 
-            res.status(
+            res.status(
 
 
 
-                500,
+                500,
 
 
 
-            ).json({
+            ).json({
 
 
 
-                error:
+                error:
 
 
 
-                    error.message,
+                    error.message,
 
 
 
-            })
+            })
 
 
 
-        }
+        }
 
 
 
-    },
+    },
 
 
 
@@ -1611,7 +1611,7 @@ router.get(
 
 
 
-    "/availability",
+    "/availability",
 
 
 
@@ -1619,43 +1619,43 @@ router.get(
 
 
 
-    async (
+    async (
 
 
 
-        req,
+        req,
 
 
 
-        res,
+        res,
 
 
 
-    ) => {
+    ) => {
 
 
 
-        try {
+        try {
 
 
 
-            const service =
+            const service =
 
 
 
-                await resolveService(
+                await resolveService(
 
 
 
-                    promiseDb,
+                    promiseDb,
 
 
 
-                    req.query,
+                    req.query,
 
 
 
-                )
+                )
 
 
 
@@ -1663,27 +1663,27 @@ router.get(
 
 
 
-            const result =
+            const result =
 
 
 
-                await getAvailableStaff(
+                await getAvailableStaff(
 
 
 
-                    promiseDb,
+                    promiseDb,
 
 
 
-                    {
+                    {
 
 
 
-                        serviceId:
+                        serviceId:
 
 
 
-                            service.service_id,
+                            service.service_id,
 
 
 
@@ -1691,15 +1691,15 @@ router.get(
 
 
 
-                        appointmentDate:
+                        appointmentDate:
 
 
 
-                            req.query
+                            req.query
 
 
 
-                                .appointment_date,
+                                .appointment_date,
 
 
 
@@ -1707,15 +1707,15 @@ router.get(
 
 
 
-                        startTime:
+                        startTime:
 
 
 
-                            req.query
+                            req.query
 
 
 
-                                .appointment_time,
+                                .appointment_time,
 
 
 
@@ -1723,19 +1723,19 @@ router.get(
 
 
 
-                        durationMinutes:
+                        durationMinutes:
 
 
 
-                            Number(
+                            Number(
 
 
 
-                                service.duration_minutes,
+                                service.duration_minutes,
 
 
 
-                            ),
+                            ),
 
 
 
@@ -1743,23 +1743,23 @@ router.get(
 
 
 
-                        preferredStaffId:
+                        preferredStaffId:
 
 
 
-                            req.query
+                            req.query
 
 
 
-                                .staff_id,
+                                .staff_id,
 
 
 
-                    },
+                    },
 
 
 
-                )
+                )
 
 
 
@@ -1767,15 +1767,15 @@ router.get(
 
 
 
-            const qualifiedStaffCount =
+            const qualifiedStaffCount =
 
 
 
-                result.available
+                result.available
 
 
 
-                    .length
+                    .length
 
 
 
@@ -1783,23 +1783,23 @@ router.get(
 
 
 
-            const dailyLimitConfigured =
+            const dailyLimitConfigured =
 
 
 
-                Boolean(
+                Boolean(
 
 
 
-                    result.dailyLimit
+                    result.dailyLimit
 
 
 
-                        ?.configured,
+                        ?.configured,
 
 
 
-                )
+                )
 
 
 
@@ -1807,35 +1807,35 @@ router.get(
 
 
 
-            const dailyRemaining =
+            const dailyRemaining =
 
 
 
-                dailyLimitConfigured
+                dailyLimitConfigured
 
 
 
-                    ? Number(
+                    ? Number(
 
 
 
-                          result
+                          result
 
 
 
-                              .dailyLimit
+                              .dailyLimit
 
 
 
-                              .remaining,
+                              .remaining,
 
 
 
-                      )
+                      )
 
 
 
-                    : null
+                    : null
 
 
 
@@ -1843,31 +1843,31 @@ router.get(
 
 
 
-            const effectiveAvailableCount =
+            const effectiveAvailableCount =
 
 
 
-                dailyLimitConfigured
+                dailyLimitConfigured
 
 
 
-                    ? Math.min(
+                    ? Math.min(
 
 
 
-                          qualifiedStaffCount,
+                          qualifiedStaffCount,
 
 
 
-                          dailyRemaining,
+                          dailyRemaining,
 
 
 
-                      )
+                      )
 
 
 
-                    : qualifiedStaffCount
+                    : qualifiedStaffCount
 
 
 
@@ -1875,15 +1875,15 @@ router.get(
 
 
 
-            res.json({
+            res.json({
 
 
 
-                service_id:
+                service_id:
 
 
 
-                    service.service_id,
+                    service.service_id,
 
 
 
@@ -1891,11 +1891,11 @@ router.get(
 
 
 
-                service:
+                service:
 
 
 
-                    service.service,
+                    service.service,
 
 
 
@@ -1903,19 +1903,19 @@ router.get(
 
 
 
-                duration_minutes:
+                duration_minutes:
 
 
 
-                    Number(
+                    Number(
 
 
 
-                        service.duration_minutes,
+                        service.duration_minutes,
 
 
 
-                    ),
+                    ),
 
 
 
@@ -1923,11 +1923,11 @@ router.get(
 
 
 
-                start_time:
+                start_time:
 
 
 
-                    result.startTime,
+                    result.startTime,
 
 
 
@@ -1935,11 +1935,11 @@ router.get(
 
 
 
-                end_time:
+                end_time:
 
 
 
-                    result.endTime,
+                    result.endTime,
 
 
 
@@ -1947,11 +1947,11 @@ router.get(
 
 
 
-                available_count:
+                available_count:
 
 
 
-                    effectiveAvailableCount,
+                    effectiveAvailableCount,
 
 
 
@@ -1959,11 +1959,11 @@ router.get(
 
 
 
-                qualified_staff_count:
+                qualified_staff_count:
 
 
 
-                    qualifiedStaffCount,
+                    qualifiedStaffCount,
 
 
 
@@ -1971,11 +1971,11 @@ router.get(
 
 
 
-                available_staff:
+                available_staff:
 
 
 
-                    result.available,
+                    result.available,
 
 
 
@@ -1983,11 +1983,11 @@ router.get(
 
 
 
-                daily_limit_configured:
+                daily_limit_configured:
 
 
 
-                    dailyLimitConfigured,
+                    dailyLimitConfigured,
 
 
 
@@ -1995,35 +1995,35 @@ router.get(
 
 
 
-                daily_client_limit:
+                daily_client_limit:
 
 
 
-                    dailyLimitConfigured
+                    dailyLimitConfigured
 
 
 
-                        ? Number(
+                        ? Number(
 
 
 
-                              result
+                              result
 
 
 
-                                  .dailyLimit
+                                  .dailyLimit
 
 
 
-                                  .limit,
+                                  .limit,
 
 
 
-                          )
+                          )
 
 
 
-                        : null,
+                        : null,
 
 
 
@@ -2031,35 +2031,35 @@ router.get(
 
 
 
-                daily_booked:
+                daily_booked:
 
 
 
-                    dailyLimitConfigured
+                    dailyLimitConfigured
 
 
 
-                        ? Number(
+                        ? Number(
 
 
 
-                              result
+                              result
 
 
 
-                                  .dailyLimit
+                                  .dailyLimit
 
 
 
-                                  .booked,
+                                  .booked,
 
 
 
-                          )
+                          )
 
 
 
-                        : null,
+                        : null,
 
 
 
@@ -2067,55 +2067,55 @@ router.get(
 
 
 
-                daily_remaining:
+                daily_remaining:
 
 
 
-                    dailyRemaining,
+                    dailyRemaining,
 
 
 
-            })
+            })
 
 
 
-        } catch (error) {
+        } catch (error) {
 
 
 
-            res.status(
+            res.status(
 
 
 
-                error.status ||
+                error.status ||
 
 
 
-                    500,
+                    500,
 
 
 
-            ).json({
+            ).json({
 
 
 
-                error:
+                error:
 
 
 
-                    error.message,
+                    error.message,
 
 
 
-            })
+            })
 
 
 
-        }
+        }
 
 
 
-    },
+    },
 
 
 
@@ -2131,7 +2131,7 @@ router.post(
 
 
 
-    "/",
+    "/",
 
 
 
@@ -2139,31 +2139,31 @@ router.post(
 
 
 
-    async (
+    async (
 
 
 
-        req,
+        req,
 
 
 
-        res,
+        res,
 
 
 
-    ) => {
+    ) => {
 
 
 
-        const connection =
+        const connection =
 
 
 
-            await promiseDb
+            await promiseDb
 
 
 
-                .getConnection()
+                .getConnection()
 
 
 
@@ -2171,71 +2171,71 @@ router.post(
 
 
 
-        try {
+        try {
 
 
 
-            const {
+            const {
 
 
 
-                customer_name,
+                customer_name,
 
 
 
-                contact_number,
+                contact_number,
 
 
 
-                email,
+                email,
 
 
 
-                gender,
+                gender,
 
 
 
-                customer_type,
+                customer_type,
 
 
 
-                service_id,
+                service_id,
 
 
 
-                service,
+                service,
 
 
 
-                appointment_date,
+                appointment_date,
 
 
 
-                appointment_time,
+                appointment_time,
 
 
 
-                notes,
+                notes,
 
 
 
-                staff_id,
+                staff_id,
 
 
 
-                offline_id,
+                offline_id,
 
 
 
-            } =
+            } =
 
 
 
-                req.body ||
+                req.body ||
 
 
 
-                {}
+                {}
 
 
 
@@ -2243,63 +2243,63 @@ router.post(
 
 
 
-            if (
+            if (
 
 
 
-                !customer_name ||
+                !customer_name ||
 
 
 
-                !contact_number ||
+                !contact_number ||
 
 
 
-                !appointment_date ||
+                !appointment_date ||
 
 
 
-                !appointment_time
+                !appointment_time
 
 
 
-            ) {
+            ) {
 
 
 
-                return res
+                return res
 
 
 
-                    .status(
+                    .status(
 
 
 
-                        400,
+                        400,
 
 
 
-                    )
+                    )
 
 
 
-                    .json({
+                    .json({
 
 
 
-                        error:
+                        error:
 
 
 
-                            "Customer, contact number, appointment date, and time are required",
+                            "Customer, contact number, appointment date, and time are required",
 
 
 
-                    })
+                    })
 
 
 
-            }
+            }
 
 
 
@@ -2307,79 +2307,79 @@ router.post(
 
 
 
-            if (offline_id) {
+            if (offline_id) {
 
 
 
-                const [
+                const [
 
 
 
-                    duplicate,
+                    duplicate,
 
 
 
-                ] =
+                ] =
 
 
 
-                    await connection.query(
+                    await connection.query(
 
 
 
-                        `SELECT
+                        `SELECT
 
 
 
-                            id,
+                            id,
 
 
 
-                            booking_number,
+                            booking_number,
 
 
 
-                            status,
+                            status,
 
 
 
-                            staff_id
+                            staff_id
 
 
 
-                         FROM appointments
+                         FROM appointments
 
 
 
-                         WHERE offline_id = ?
+                         WHERE offline_id = ?
 
 
 
-                         LIMIT 1`,
+                         LIMIT 1`,
 
 
 
-                        [
+                        [
 
 
 
-                            String(
+                            String(
 
 
 
-                                offline_id,
+                                offline_id,
 
 
 
-                            ),
+                            ),
 
 
 
-                        ],
+                        ],
 
 
 
-                    )
+                    )
 
 
 
@@ -2387,27 +2387,27 @@ router.post(
 
 
 
-                if (
+                if (
 
 
 
-                    duplicate.length
+                    duplicate.length
 
 
 
-                ) {
+                ) {
 
 
 
-                    return res.json({
+                    return res.json({
 
 
 
-                        message:
+                        message:
 
 
 
-                            "Offline appointment was already synchronized",
+                            "Offline appointment was already synchronized",
 
 
 
@@ -2415,15 +2415,15 @@ router.post(
 
 
 
-                        id:
+                        id:
 
 
 
-                            duplicate[0]
+                            duplicate[0]
 
 
 
-                                .id,
+                                .id,
 
 
 
@@ -2431,15 +2431,15 @@ router.post(
 
 
 
-                        booking_number:
+                        booking_number:
 
 
 
-                            duplicate[0]
+                            duplicate[0]
 
 
 
-                                .booking_number,
+                                .booking_number,
 
 
 
@@ -2447,15 +2447,15 @@ router.post(
 
 
 
-                        status:
+                        status:
 
 
 
-                            duplicate[0]
+                            duplicate[0]
 
 
 
-                                .status,
+                                .status,
 
 
 
@@ -2463,23 +2463,23 @@ router.post(
 
 
 
-                        duplicate:
+                        duplicate:
 
 
 
-                            true,
+                            true,
 
 
 
-                    })
+                    })
 
 
 
-                }
+                }
 
 
 
-            }
+            }
 
 
 
@@ -2487,11 +2487,11 @@ router.post(
 
 
 
-            await connection
+            await connection
 
 
 
-                .beginTransaction()
+                .beginTransaction()
 
 
 
@@ -2499,23 +2499,23 @@ router.post(
 
 
 
-            const selectedService =
+            const selectedService =
 
 
 
-                await resolveService(
+                await resolveService(
 
 
 
-                    connection,
+                    connection,
 
 
 
-                    {
+                    {
 
 
 
-                        service_id,
+                        service_id,
 
 
 
@@ -2523,15 +2523,15 @@ router.post(
 
 
 
-                        service,
+                        service,
 
 
 
-                    },
+                    },
 
 
 
-                )
+                )
 
 
 
@@ -2539,31 +2539,31 @@ router.post(
 
 
 
-            const reservation =
+            const reservation =
 
 
 
-                await reserveAvailableStaff(
+                await reserveAvailableStaff(
 
 
 
-                    connection,
+                    connection,
 
 
 
-                    {
+                    {
 
 
 
-                        serviceId:
+                        serviceId:
 
 
 
-                            selectedService
+                            selectedService
 
 
 
-                                .service_id,
+                                .service_id,
 
 
 
@@ -2571,11 +2571,11 @@ router.post(
 
 
 
-                        appointmentDate:
+                        appointmentDate:
 
 
 
-                            appointment_date,
+                            appointment_date,
 
 
 
@@ -2583,11 +2583,11 @@ router.post(
 
 
 
-                        startTime:
+                        startTime:
 
 
 
-                            appointment_time,
+                            appointment_time,
 
 
 
@@ -2595,23 +2595,23 @@ router.post(
 
 
 
-                        durationMinutes:
+                        durationMinutes:
 
 
 
-                            Number(
+                            Number(
 
 
 
-                                selectedService
+                                selectedService
 
 
 
-                                    .duration_minutes,
+                                    .duration_minutes,
 
 
 
-                            ),
+                            ),
 
 
 
@@ -2619,19 +2619,19 @@ router.post(
 
 
 
-                        preferredStaffId:
+                        preferredStaffId:
 
 
 
-                            staff_id,
+                            staff_id,
 
 
 
-                    },
+                    },
 
 
 
-                )
+                )
 
 
 
@@ -2639,39 +2639,39 @@ router.post(
 
 
 
-            if (
+            if (
 
 
 
-                !reservation.staff
+                !reservation.staff
 
 
 
-            ) {
+            ) {
 
 
 
-                const error =
+                const error =
 
 
 
-                    new Error(
+                    new Error(
 
 
 
-                        offline_id
+                        offline_id
 
 
 
-                            ? "No qualified staff is available for this offline appointment. It needs manual review."
+                            ? "No qualified staff is available for this offline appointment. It needs manual review."
 
 
 
-                            : "No qualified staff is available for the complete service duration. Choose another schedule.",
+                            : "No qualified staff is available for the complete service duration. Choose another schedule.",
 
 
 
-                    )
+                    )
 
 
 
@@ -2679,11 +2679,11 @@ router.post(
 
 
 
-                error.status =
+                error.status =
 
 
 
-                    409
+                    409
 
 
 
@@ -2691,11 +2691,11 @@ router.post(
 
 
 
-                throw error
+                throw error
 
 
 
-            }
+            }
 
 
 
@@ -2703,19 +2703,19 @@ router.post(
 
 
 
-            const bookingNumber =
+            const bookingNumber =
 
 
 
-                await nextBookingNumber(
+                await nextBookingNumber(
 
 
 
-                    connection,
+                    connection,
 
 
 
-                )
+                )
 
 
 
@@ -2723,87 +2723,87 @@ router.post(
 
 
 
-            const [
+            const [
 
 
 
-                appointmentResult,
+                appointmentResult,
 
 
 
-            ] =
+            ] =
 
 
 
-                await connection.query(
+                await connection.query(
 
 
 
-                    `INSERT INTO appointments
+                    `INSERT INTO appointments
 
 
 
-                    (
+                    (
 
 
 
-                        booking_number,
+                        booking_number,
 
 
 
-                        customer_name,
+                        customer_name,
 
 
 
-                        contact_number,
+                        contact_number,
 
 
 
-                        email,
+                        email,
 
 
 
-                        service_id,
+                        service_id,
 
 
 
-                        service,
+                        service,
 
 
 
-                        appointment_date,
+                        appointment_date,
 
 
 
-                        appointment_time,
+                        appointment_time,
 
 
 
-                        appointment_end_time,
+                        appointment_end_time,
 
 
 
-                        staff_id,
+                        staff_id,
 
 
 
-                        notes,
+                        notes,
 
 
 
-                        status,
+                        status,
 
 
 
-                        offline_id,
+                        offline_id,
 
 
 
-                        sync_status
+                        sync_status
 
 
 
-                    )
+                    )
 
 
 
@@ -2811,39 +2811,39 @@ router.post(
 
 
 
-                    VALUES
+                    VALUES
 
 
 
-                    (
+                    (
 
 
 
-                        ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?,
 
 
 
-                        ?, ?, ?, ?,
+                        ?, ?, ?, ?,
 
 
 
-                        'Pending',
+                        'Pending',
 
 
 
-                        ?, ?
+                        ?, ?
 
 
 
-                    )`,
+                    )`,
 
 
 
-                    [
+                    [
 
 
 
-                        bookingNumber,
+                        bookingNumber,
 
 
 
@@ -2851,15 +2851,15 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            customer_name,
+                            customer_name,
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
@@ -2867,15 +2867,15 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            contact_number,
+                            contact_number,
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
@@ -2883,15 +2883,15 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            email || "",
+                            email || "",
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
@@ -2899,11 +2899,11 @@ router.post(
 
 
 
-                        selectedService
+                        selectedService
 
 
 
-                            .service_id,
+                            .service_id,
 
 
 
@@ -2911,11 +2911,11 @@ router.post(
 
 
 
-                        selectedService
+                        selectedService
 
 
 
-                            .service,
+                            .service,
 
 
 
@@ -2923,7 +2923,7 @@ router.post(
 
 
 
-                        appointment_date,
+                        appointment_date,
 
 
 
@@ -2931,11 +2931,11 @@ router.post(
 
 
 
-                        reservation
+                        reservation
 
 
 
-                            .startTime,
+                            .startTime,
 
 
 
@@ -2943,11 +2943,11 @@ router.post(
 
 
 
-                        reservation
+                        reservation
 
 
 
-                            .endTime,
+                            .endTime,
 
 
 
@@ -2955,11 +2955,11 @@ router.post(
 
 
 
-                        reservation.staff
+                        reservation.staff
 
 
 
-                            .staff_id,
+                            .staff_id,
 
 
 
@@ -2967,15 +2967,15 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            notes || "",
+                            notes || "",
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
@@ -2983,23 +2983,23 @@ router.post(
 
 
 
-                        offline_id
+                        offline_id
 
 
 
-                            ? String(
+                            ? String(
 
 
 
-                                  offline_id,
+                                  offline_id,
 
 
 
-                              )
+                              )
 
 
 
-                            : null,
+                            : null,
 
 
 
@@ -3007,23 +3007,23 @@ router.post(
 
 
 
-                        offline_id
+                        offline_id
 
 
 
-                            ? "Synced"
+                            ? "Synced"
 
 
 
-                            : "Online",
+                            : "Online",
 
 
 
-                    ],
+                    ],
 
 
 
-                )
+                )
 
 
 
@@ -3031,51 +3031,51 @@ router.post(
 
 
 
-            const [customers] =
+            const [customers] =
 
 
 
-                await connection.query(
+                await connection.query(
 
 
 
-                    `SELECT customer_id
+                    `SELECT customer_id
 
 
 
-                     FROM customers
+                     FROM customers
 
 
 
-                     WHERE contact_number = ?
+                     WHERE contact_number = ?
 
 
 
-                     LIMIT 1`,
+                     LIMIT 1`,
 
 
 
-                    [
+                    [
 
 
 
-                        String(
+                        String(
 
 
 
-                            contact_number,
+                            contact_number,
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
-                    ],
+                    ],
 
 
 
-                )
+                )
 
 
 
@@ -3083,51 +3083,51 @@ router.post(
 
 
 
-            if (
+            if (
 
 
 
-                !customers.length
+                !customers.length
 
 
 
-            ) {
+            ) {
 
 
 
-                await connection.query(
+                await connection.query(
 
 
 
-                    `INSERT INTO customers
+                    `INSERT INTO customers
 
 
 
-                    (
+                    (
 
 
 
-                        customer_name,
+                        customer_name,
 
 
 
-                        contact_number,
+                        contact_number,
 
 
 
-                        email,
+                        email,
 
 
 
-                        gender,
+                        gender,
 
 
 
-                        customer_type
+                        customer_type
 
 
 
-                    )
+                    )
 
 
 
@@ -3135,23 +3135,23 @@ router.post(
 
 
 
-                    VALUES (?, ?, ?, ?, ?)`,
+                    VALUES (?, ?, ?, ?, ?)`,
 
 
 
-                    [
+                    [
 
 
 
-                        String(
+                        String(
 
 
 
-                            customer_name,
+                            customer_name,
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
@@ -3159,15 +3159,15 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            contact_number,
+                            contact_number,
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
@@ -3175,15 +3175,15 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            email || "",
+                            email || "",
 
 
 
-                        ).trim(),
+                        ).trim(),
 
 
 
@@ -3191,19 +3191,19 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            gender ||
+                            gender ||
 
 
 
-                                "Prefer not to say",
+                                "Prefer not to say",
 
 
 
-                        ),
+                        ),
 
 
 
@@ -3211,31 +3211,31 @@ router.post(
 
 
 
-                        String(
+                        String(
 
 
 
-                            customer_type ||
+                            customer_type ||
 
 
 
-                                "Regular",
+                                "Regular",
 
 
 
-                        ),
+                        ),
 
 
 
-                    ],
+                    ],
 
 
 
-                )
+                )
 
 
 
-            }
+            }
 
 
 
@@ -3243,11 +3243,11 @@ router.post(
 
 
 
-            await connection
+            await connection
 
 
 
-                .commit()
+                .commit()
 
 
 
@@ -3255,31 +3255,31 @@ router.post(
 
 
 
-            res.status(
+            res.status(
 
 
 
-                201,
+                201,
 
 
 
-            ).json({
+            ).json({
 
 
 
-                message:
+                message:
 
 
 
-                    offline_id
+                    offline_id
 
 
 
-                        ? "Offline appointment synchronized and validated"
+                        ? "Offline appointment synchronized and validated"
 
 
 
-                        : "Appointment saved and staff time reserved",
+                        : "Appointment saved and staff time reserved",
 
 
 
@@ -3287,15 +3287,15 @@ router.post(
 
 
 
-                id:
+                id:
 
 
 
-                    appointmentResult
+                    appointmentResult
 
 
 
-                        .insertId,
+                        .insertId,
 
 
 
@@ -3303,11 +3303,11 @@ router.post(
 
 
 
-                booking_number:
+                booking_number:
 
 
 
-                    bookingNumber,
+                    bookingNumber,
 
 
 
@@ -3315,11 +3315,11 @@ router.post(
 
 
 
-                status:
+                status:
 
 
 
-                    "Pending",
+                    "Pending",
 
 
 
@@ -3327,11 +3327,11 @@ router.post(
 
 
 
-                staff:
+                staff:
 
 
 
-                    reservation.staff,
+                    reservation.staff,
 
 
 
@@ -3339,15 +3339,15 @@ router.post(
 
 
 
-                start_time:
+                start_time:
 
 
 
-                    reservation
+                    reservation
 
 
 
-                        .startTime,
+                        .startTime,
 
 
 
@@ -3355,43 +3355,43 @@ router.post(
 
 
 
-                end_time:
+                end_time:
 
 
 
-                    reservation
+                    reservation
 
 
 
-                        .endTime,
+                        .endTime,
 
 
 
-            })
+            })
 
 
 
-        } catch (error) {
+        } catch (error) {
 
 
 
-            await connection
+            await connection
 
 
 
-                .rollback()
+                .rollback()
 
 
 
-                .catch(
+                .catch(
 
 
 
-                    () => {},
+                    () => {},
 
 
 
-                )
+                )
 
 
 
@@ -3399,99 +3399,99 @@ router.post(
 
 
 
-            if (
+            if (
 
 
 
-                error.code ===
+                error.code ===
 
 
 
-                    "ER_DUP_ENTRY" &&
+                    "ER_DUP_ENTRY" &&
 
 
 
-                req.body
+                req.body
 
 
 
-                    ?.offline_id
+                    ?.offline_id
 
 
 
-            ) {
+            ) {
 
 
 
-                const [
+                const [
 
 
 
-                    duplicate,
+                    duplicate,
 
 
 
-                ] =
+                ] =
 
 
 
-                    await promiseDb.query(
+                    await promiseDb.query(
 
 
 
-                        `SELECT
+                        `SELECT
 
 
 
-                            id,
+                            id,
 
 
 
-                            booking_number,
+                            booking_number,
 
 
 
-                            status
+                            status
 
 
 
-                         FROM appointments
+                         FROM appointments
 
 
 
-                         WHERE offline_id = ?
+                         WHERE offline_id = ?
 
 
 
-                         LIMIT 1`,
+                         LIMIT 1`,
 
 
 
-                        [
+                        [
 
 
 
-                            String(
+                            String(
 
 
 
-                                req.body
+                                req.body
 
 
 
-                                    .offline_id,
+                                    .offline_id,
 
 
 
-                            ),
+                            ),
 
 
 
-                        ],
+                        ],
 
 
 
-                    )
+                    )
 
 
 
@@ -3499,27 +3499,27 @@ router.post(
 
 
 
-                if (
+                if (
 
 
 
-                    duplicate.length
+                    duplicate.length
 
 
 
-                ) {
+                ) {
 
 
 
-                    return res.json({
+                    return res.json({
 
 
 
-                        message:
+                        message:
 
 
 
-                            "Offline appointment was already synchronized",
+                            "Offline appointment was already synchronized",
 
 
 
@@ -3527,15 +3527,15 @@ router.post(
 
 
 
-                        id:
+                        id:
 
 
 
-                            duplicate[0]
+                            duplicate[0]
 
 
 
-                                .id,
+                                .id,
 
 
 
@@ -3543,15 +3543,15 @@ router.post(
 
 
 
-                        booking_number:
+                        booking_number:
 
 
 
-                            duplicate[0]
+                            duplicate[0]
 
 
 
-                                .booking_number,
+                                .booking_number,
 
 
 
@@ -3559,15 +3559,15 @@ router.post(
 
 
 
-                        status:
+                        status:
 
 
 
-                            duplicate[0]
+                            duplicate[0]
 
 
 
-                                .status,
+                                .status,
 
 
 
@@ -3575,23 +3575,23 @@ router.post(
 
 
 
-                        duplicate:
+                        duplicate:
 
 
 
-                            true,
+                            true,
 
 
 
-                    })
+                    })
 
 
 
-                }
+                }
 
 
 
-            }
+            }
 
 
 
@@ -3599,47 +3599,47 @@ router.post(
 
 
 
-            res.status(
+            res.status(
 
 
 
-                error.status ||
+                error.status ||
 
 
 
-                    500,
+                    500,
 
 
 
-            ).json({
+            ).json({
 
 
 
-                error:
+                error:
 
 
 
-                    error.message,
+                    error.message,
 
 
 
-            })
+            })
 
 
 
-        } finally {
+        } finally {
 
 
 
-            connection.release()
+            connection.release()
 
 
 
-        }
+        }
 
 
 
-    },
+    },
 
 
 
@@ -3655,7 +3655,7 @@ router.put(
 
 
 
-    "/:id/status",
+    "/:id/status",
     requireAppointmentAdmin,
 
 
@@ -3664,31 +3664,31 @@ router.put(
 
 
 
-    async (
+    async (
 
 
 
-        req,
+        req,
 
 
 
-        res,
+        res,
 
 
 
-    ) => {
+    ) => {
 
 
 
-        const connection =
+        const connection =
 
 
 
-            await promiseDb
+            await promiseDb
 
 
 
-                .getConnection()
+                .getConnection()
 
 
 
@@ -3696,11 +3696,11 @@ router.put(
 
 
 
-        let committed =
+        let committed =
 
 
 
-            false
+            false
 
 
 
@@ -3708,23 +3708,23 @@ router.put(
 
 
 
-        try {
+        try {
 
 
 
-            const appointmentId =
+            const appointmentId =
 
 
 
-                Number(
+                Number(
 
 
 
-                    req.params.id,
+                    req.params.id,
 
 
 
-                )
+                )
 
 
 
@@ -3732,67 +3732,67 @@ router.put(
 
 
 
-            if (
+            if (
 
 
 
-                !Number.isSafeInteger(
+                !Number.isSafeInteger(
 
 
 
-                    appointmentId,
+                    appointmentId,
 
 
 
-                ) ||
+                ) ||
 
 
 
-                appointmentId <=
+                appointmentId <=
 
 
 
-                    0
+                    0
 
 
 
-            ) {
+            ) {
 
 
 
-                return res
+                return res
 
 
 
-                    .status(
+                    .status(
 
 
 
-                        400,
+                        400,
 
 
 
-                    )
+                    )
 
 
 
-                    .json({
+                    .json({
 
 
 
-                        error:
+                        error:
 
 
 
-                            "Invalid appointment.",
+                            "Invalid appointment.",
 
 
 
-                    })
+                    })
 
 
 
-            }
+            }
 
 
 
@@ -3800,27 +3800,27 @@ router.put(
 
 
 
-            const status =
+            const status =
 
 
 
-                String(
+                String(
 
 
 
-                    req.body
+                    req.body
 
 
 
-                        ?.status ||
+                        ?.status ||
 
 
 
-                        "",
+                        "",
 
 
 
-                ).trim()
+                ).trim()
 
 
 
@@ -3828,27 +3828,27 @@ router.put(
 
 
 
-            const requestedDeclineReason =
+            const requestedDeclineReason =
 
 
 
-                String(
+                String(
 
 
 
-                    req.body
+                    req.body
 
 
 
-                        ?.decline_reason ||
+                        ?.decline_reason ||
 
 
 
-                        "",
+                        "",
 
 
 
-                ).trim()
+                ).trim()
 
 
 
@@ -3856,27 +3856,27 @@ router.put(
 
 
 
-            const requestedSuggestedDate =
+            const requestedSuggestedDate =
 
 
 
-                String(
+                String(
 
 
 
-                    req.body
+                    req.body
 
 
 
-                        ?.suggested_date ||
+                        ?.suggested_date ||
 
 
 
-                        "",
+                        "",
 
 
 
-                ).trim()
+                ).trim()
 
 
 
@@ -3884,27 +3884,27 @@ router.put(
 
 
 
-            const requestedSuggestedTime =
+            const requestedSuggestedTime =
 
 
 
-                String(
+                String(
 
 
 
-                    req.body
+                    req.body
 
 
 
-                        ?.suggested_time ||
+                        ?.suggested_time ||
 
 
 
-                        "",
+                        "",
 
 
 
-                ).trim()
+                ).trim()
 
 
 
@@ -3912,27 +3912,27 @@ router.put(
 
 
 
-            const allowedStatuses =
+            const allowedStatuses =
 
 
 
-                [
+                [
 
 
 
-                    "Pending",
+                    "Pending",
 
 
 
-                    "Approved",
+                    "Approved",
 
 
 
-                    "Declined",
+                    "Declined",
 
 
 
-                    "Cancelled",
+                    "Cancelled",
 
 
 
@@ -3940,7 +3940,7 @@ router.put(
 
 
 
-                ]
+                ]
 
 
 
@@ -3948,59 +3948,59 @@ router.put(
 
 
 
-            if (
+            if (
 
 
 
-                !allowedStatuses.includes(
+                !allowedStatuses.includes(
 
 
 
-                    status,
+                    status,
 
 
 
-                )
+                )
 
 
 
-            ) {
+            ) {
 
 
 
-                return res
+                return res
 
 
 
-                    .status(
+                    .status(
 
 
 
-                        400,
+                        400,
 
 
 
-                    )
+                    )
 
 
 
-                    .json({
+                    .json({
 
 
 
-                        error:
+                        error:
 
 
 
-                            "Invalid appointment status",
+                            "Invalid appointment status",
 
 
 
-                    })
+                    })
 
 
 
-            }
+            }
 
 
 
@@ -4008,11 +4008,11 @@ router.put(
 
 
 
-            await connection
+            await connection
 
 
 
-                .beginTransaction()
+                .beginTransaction()
 
 
 
@@ -4020,7 +4020,7 @@ router.put(
 
 
 
-            const [rows] = await connection.query(
+            const [rows] = await connection.query(
                 `SELECT * FROM appointments WHERE id = ? FOR UPDATE`,
                 [appointmentId]
             )
@@ -4039,23 +4039,23 @@ router.put(
 
 
 
-            if (!rows.length) {
+            if (!rows.length) {
 
 
 
-                const error =
+                const error =
 
 
 
-                    new Error(
+                    new Error(
 
 
 
-                        "Appointment not found",
+                        "Appointment not found",
 
 
 
-                    )
+                    )
 
 
 
@@ -4063,11 +4063,11 @@ router.put(
 
 
 
-                error.status =
+                error.status =
 
 
 
-                    404
+                    404
 
 
 
@@ -4075,11 +4075,11 @@ router.put(
 
 
 
-                throw error
+                throw error
 
 
 
-            }
+            }
 
 
 
@@ -4087,21 +4087,21 @@ router.put(
 
 
 
-            const appointment =
+            const appointment =
 
 
 
-                rows[0]
+                rows[0]
 
-            if (appointment.service_status === "Completed") {
+            if (appointment.service_status === "Completed") {
 
-                const error = new Error("Completed services cannot be modified.")
+                const error = new Error("Completed services cannot be modified.")
 
-                error.status = 409
+                error.status = 409
 
-                throw error
+                throw error
 
-            }
+            }
 
 
 
@@ -4113,37 +4113,37 @@ router.put(
 
 
 
-            if (appointment.status === "Completed") {
+            if (appointment.status === "Completed") {
 
-                const error = new Error("Legacy completed bookings must be migrated before editing.")
+                const error = new Error("Legacy completed bookings must be migrated before editing.")
 
-                error.status = 409
+                error.status = 409
 
-                throw error
+                throw error
 
-            }
+            }
 
-            if (!["Pending", "Approved"].includes(appointment.status) ||
+            if (!["Pending", "Approved"].includes(appointment.status) ||
 
-                (status === "Approved" && appointment.status !== "Pending") ||
+                (status === "Approved" && appointment.status !== "Pending") ||
 
-                (status === "Declined" && appointment.status !== "Pending") ||
+                (status === "Declined" && appointment.status !== "Pending") ||
 
-                (status === "Pending" && appointment.status !== "Pending")) {
+                (status === "Pending" && appointment.status !== "Pending")) {
 
-                const error = new Error("This booking status transition is not allowed.")
+                const error = new Error("This booking status transition is not allowed.")
 
-                error.status = 409
+                error.status = 409
 
-                throw error
+                throw error
 
-            }
+            }
 
-            let assignedStaffId =
+            let assignedStaffId =
 
 
 
-                appointment.staff_id
+                appointment.staff_id
 
 
 
@@ -4151,15 +4151,15 @@ router.put(
 
 
 
-            let endTime =
+            let endTime =
 
 
 
-                appointment
+                appointment
 
 
 
-                    .appointment_end_time
+                    .appointment_end_time
 
 
 
@@ -4167,11 +4167,11 @@ router.put(
 
 
 
-            let declineReason =
+            let declineReason =
 
 
 
-                null
+                null
 
 
 
@@ -4179,11 +4179,11 @@ router.put(
 
 
 
-            let suggestedDate =
+            let suggestedDate =
 
 
 
-                null
+                null
 
 
 
@@ -4191,11 +4191,11 @@ router.put(
 
 
 
-            let suggestedTime =
+            let suggestedTime =
 
 
 
-                null
+                null
 
 
 
@@ -4203,47 +4203,47 @@ router.put(
 
 
 
-            if (
+            if (
 
 
 
-                status ===
+                status ===
 
 
 
-                "Approved"
+                "Approved"
 
 
 
-            ) {
+            ) {
 
 
 
-                const reservation =
+                const reservation =
 
 
 
-                    await reserveAvailableStaff(
+                    await reserveAvailableStaff(
 
 
 
-                        connection,
+                        connection,
 
 
 
-                        {
+                        {
 
 
 
-                            serviceId:
+                            serviceId:
 
 
 
-                                appointment
+                                appointment
 
 
 
-                                    .service_id,
+                                    .service_id,
 
 
 
@@ -4251,15 +4251,15 @@ router.put(
 
 
 
-                            appointmentDate:
+                            appointmentDate:
 
 
 
-                                appointment
+                                appointment
 
 
 
-                                    .appointment_date,
+                                    .appointment_date,
 
 
 
@@ -4267,15 +4267,15 @@ router.put(
 
 
 
-                            startTime:
+                            startTime:
 
 
 
-                                appointment
+                                appointment
 
 
 
-                                    .appointment_time,
+                                    .appointment_time,
 
 
 
@@ -4283,23 +4283,23 @@ router.put(
 
 
 
-                            durationMinutes:
+                            durationMinutes:
 
 
 
-                                Number(
+                                Number(
 
 
 
-                                    appointment
+                                    appointment
 
 
 
-                                        .duration_minutes,
+                                        .duration_minutes,
 
 
 
-                                ),
+                                ),
 
 
 
@@ -4307,15 +4307,15 @@ router.put(
 
 
 
-                            preferredStaffId:
+                            preferredStaffId:
 
 
 
-                                appointment
+                                appointment
 
 
 
-                                    .staff_id,
+                                    .staff_id,
 
 
 
@@ -4323,19 +4323,19 @@ router.put(
 
 
 
-                            excludeAppointmentId:
+                            excludeAppointmentId:
 
 
 
-                                appointmentId,
+                                appointmentId,
 
 
 
-                        },
+                        },
 
 
 
-                    )
+                    )
 
 
 
@@ -4343,35 +4343,35 @@ router.put(
 
 
 
-                if (
+                if (
 
 
 
-                    !reservation
+                    !reservation
 
 
 
-                        .staff
+                        .staff
 
 
 
-                ) {
+                ) {
 
 
 
-                    const error =
+                    const error =
 
 
 
-                        new Error(
+                        new Error(
 
 
 
-                            "Approval blocked: assigned staff is no longer available for the full interval",
+                            "Approval blocked: assigned staff is no longer available for the full interval",
 
 
 
-                        )
+                        )
 
 
 
@@ -4379,11 +4379,11 @@ router.put(
 
 
 
-                    error.status =
+                    error.status =
 
 
 
-                        409
+                        409
 
 
 
@@ -4391,11 +4391,11 @@ router.put(
 
 
 
-                    throw error
+                    throw error
 
 
 
-                }
+                }
 
 
 
@@ -4403,19 +4403,19 @@ router.put(
 
 
 
-                assignedStaffId =
+                assignedStaffId =
 
 
 
-                    reservation
+                    reservation
 
 
 
-                        .staff
+                        .staff
 
 
 
-                        .staff_id
+                        .staff_id
 
 
 
@@ -4423,19 +4423,19 @@ router.put(
 
 
 
-                endTime =
+                endTime =
 
 
 
-                    reservation
+                    reservation
 
 
 
-                        .endTime
+                        .endTime
 
 
 
-            }
+            }
 
 
 
@@ -4443,47 +4443,47 @@ router.put(
 
 
 
-            if (
+            if (
 
 
 
-                status ===
+                status ===
 
 
 
-                "Declined"
+                "Declined"
 
 
 
-            ) {
+            ) {
 
 
 
-                if (
+                if (
 
 
 
-                    !requestedDeclineReason
+                    !requestedDeclineReason
 
 
 
-                ) {
+                ) {
 
 
 
-                    const error =
+                    const error =
 
 
 
-                        new Error(
+                        new Error(
 
 
 
-                            "Enter a reason for declining this appointment",
+                            "Enter a reason for declining this appointment",
 
 
 
-                        )
+                        )
 
 
 
@@ -4491,11 +4491,11 @@ router.put(
 
 
 
-                    error.status =
+                    error.status =
 
 
 
-                        400
+                        400
 
 
 
@@ -4503,11 +4503,11 @@ router.put(
 
 
 
-                    throw error
+                    throw error
 
 
 
-                }
+                }
 
 
 
@@ -4515,39 +4515,39 @@ router.put(
 
 
 
-                if (
+                if (
 
 
 
-                    !/^\d{4}-\d{2}-\d{2}$/.test(
+                    !/^\d{4}-\d{2}-\d{2}$/.test(
 
 
 
-                        requestedSuggestedDate,
+                        requestedSuggestedDate,
 
 
 
-                    )
+                    )
 
 
 
-                ) {
+                ) {
 
 
 
-                    const error =
+                    const error =
 
 
 
-                        new Error(
+                        new Error(
 
 
 
-                            "Select a valid suggested alternative date",
+                            "Select a valid suggested alternative date",
 
 
 
-                        )
+                        )
 
 
 
@@ -4555,11 +4555,11 @@ router.put(
 
 
 
-                    error.status =
+                    error.status =
 
 
 
-                        400
+                        400
 
 
 
@@ -4567,11 +4567,11 @@ router.put(
 
 
 
-                    throw error
+                    throw error
 
 
 
-                }
+                }
 
 
 
@@ -4579,39 +4579,39 @@ router.put(
 
 
 
-                if (
+                if (
 
 
 
-                    !/^\d{2}:\d{2}(:\d{2})?$/.test(
+                    !/^\d{2}:\d{2}(:\d{2})?$/.test(
 
 
 
-                        requestedSuggestedTime,
+                        requestedSuggestedTime,
 
 
 
-                    )
+                    )
 
 
 
-                ) {
+                ) {
 
 
 
-                    const error =
+                    const error =
 
 
 
-                        new Error(
+                        new Error(
 
 
 
-                            "Select a valid suggested alternative time",
+                            "Select a valid suggested alternative time",
 
 
 
-                        )
+                        )
 
 
 
@@ -4619,11 +4619,11 @@ router.put(
 
 
 
-                    error.status =
+                    error.status =
 
 
 
-                        400
+                        400
 
 
 
@@ -4631,11 +4631,11 @@ router.put(
 
 
 
-                    throw error
+                    throw error
 
 
 
-                }
+                }
 
 
 
@@ -4643,31 +4643,31 @@ router.put(
 
 
 
-                const alternativeMoment =
+                const alternativeMoment =
 
 
 
-                    new Date(
+                    new Date(
 
 
 
-                        `${requestedSuggestedDate}T${requestedSuggestedTime.slice(
+                        `${requestedSuggestedDate}T${requestedSuggestedTime.slice(
 
 
 
-                            0,
+                            0,
 
 
 
-                            5,
+                            5,
 
 
 
-                        )}:00+08:00`,
+                        )}:00+08:00`,
 
 
 
-                    )
+                    )
 
 
 
@@ -4675,51 +4675,51 @@ router.put(
 
 
 
-                if (
+                if (
 
 
 
-                    Number.isNaN(
+                    Number.isNaN(
 
 
 
-                        alternativeMoment
+                        alternativeMoment
 
 
 
-                            .getTime(),
+                            .getTime(),
 
 
 
-                    ) ||
+                    ) ||
 
 
 
-                    alternativeMoment <=
+                    alternativeMoment <=
 
 
 
-                        new Date()
+                        new Date()
 
 
 
-                ) {
+                ) {
 
 
 
-                    const error =
+                    const error =
 
 
 
-                        new Error(
+                        new Error(
 
 
 
-                            "The suggested alternative schedule must be in the future",
+                            "The suggested alternative schedule must be in the future",
 
 
 
-                        )
+                        )
 
 
 
@@ -4727,11 +4727,11 @@ router.put(
 
 
 
-                    error.status =
+                    error.status =
 
 
 
-                        400
+                        400
 
 
 
@@ -4739,11 +4739,11 @@ router.put(
 
 
 
-                    throw error
+                    throw error
 
 
 
-                }
+                }
 
 
 
@@ -4751,31 +4751,31 @@ router.put(
 
 
 
-                const alternative =
+                const alternative =
 
 
 
-                    await getAvailableStaff(
+                    await getAvailableStaff(
 
 
 
-                        connection,
+                        connection,
 
 
 
-                        {
+                        {
 
 
 
-                            serviceId:
+                            serviceId:
 
 
 
-                                appointment
+                                appointment
 
 
 
-                                    .service_id,
+                                    .service_id,
 
 
 
@@ -4783,11 +4783,11 @@ router.put(
 
 
 
-                            appointmentDate:
+                            appointmentDate:
 
 
 
-                                requestedSuggestedDate,
+                                requestedSuggestedDate,
 
 
 
@@ -4795,11 +4795,11 @@ router.put(
 
 
 
-                            startTime:
+                            startTime:
 
 
 
-                                requestedSuggestedTime,
+                                requestedSuggestedTime,
 
 
 
@@ -4807,23 +4807,23 @@ router.put(
 
 
 
-                            durationMinutes:
+                            durationMinutes:
 
 
 
-                                Number(
+                                Number(
 
 
 
-                                    appointment
+                                    appointment
 
 
 
-                                        .duration_minutes,
+                                        .duration_minutes,
 
 
 
-                                ),
+                                ),
 
 
 
@@ -4831,19 +4831,19 @@ router.put(
 
 
 
-                            excludeAppointmentId:
+                            excludeAppointmentId:
 
 
 
-                                appointmentId,
+                                appointmentId,
 
 
 
-                        },
+                        },
 
 
 
-                    )
+                    )
 
 
 
@@ -4851,39 +4851,39 @@ router.put(
 
 
 
-                if (
+                if (
 
 
 
-                    !alternative
+                    !alternative
 
 
 
-                        .available
+                        .available
 
 
 
-                        .length
+                        .length
 
 
 
-                ) {
+                ) {
 
 
 
-                    const error =
+                    const error =
 
 
 
-                        new Error(
+                        new Error(
 
 
 
-                            "No qualified staff is available for the suggested alternative schedule",
+                            "No qualified staff is available for the suggested alternative schedule",
 
 
 
-                        )
+                        )
 
 
 
@@ -4891,11 +4891,11 @@ router.put(
 
 
 
-                    error.status =
+                    error.status =
 
 
 
-                        409
+                        409
 
 
 
@@ -4903,11 +4903,11 @@ router.put(
 
 
 
-                    throw error
+                    throw error
 
 
 
-                }
+                }
 
 
 
@@ -4915,27 +4915,27 @@ router.put(
 
 
 
-                declineReason =
+                declineReason =
 
 
 
-                    requestedDeclineReason
+                    requestedDeclineReason
 
 
 
-                        .slice(
+                        .slice(
 
 
 
-                            0,
+                            0,
 
 
 
-                            500,
+                            500,
 
 
 
-                        )
+                        )
 
 
 
@@ -4943,11 +4943,11 @@ router.put(
 
 
 
-                suggestedDate =
+                suggestedDate =
 
 
 
-                    requestedSuggestedDate
+                    requestedSuggestedDate
 
 
 
@@ -4955,19 +4955,19 @@ router.put(
 
 
 
-                suggestedTime =
+                suggestedTime =
 
 
 
-                    alternative
+                    alternative
 
 
 
-                        .startTime
+                        .startTime
 
 
 
-            }
+            }
 
 
 
@@ -4975,51 +4975,51 @@ router.put(
 
 
 
-            await connection.query(
+            await connection.query(
 
 
 
-                `UPDATE appointments
+                `UPDATE appointments
 
 
 
-                 SET
+                 SET
 
 
 
-                    status = ?,
+                    status = ?,
 
 
 
-                    staff_id = ?,
+                    staff_id = ?,
 
 
 
-                    appointment_end_time = ?,
+                    appointment_end_time = ?,
 
 
 
-                    decline_reason = ?,
+                    decline_reason = ?,
 
 
 
-                    suggested_date = ?,
+                    suggested_date = ?,
 
 
 
-                    suggested_time = ?
+                    suggested_time = ?
 
 
 
-                 WHERE id = ?`,
+                 WHERE id = ?`,
 
 
 
-                [
+                [
 
 
 
-                    status,
+                    status,
 
 
 
@@ -5027,7 +5027,7 @@ router.put(
 
 
 
-                    assignedStaffId,
+                    assignedStaffId,
 
 
 
@@ -5035,7 +5035,7 @@ router.put(
 
 
 
-                    endTime,
+                    endTime,
 
 
 
@@ -5043,7 +5043,7 @@ router.put(
 
 
 
-                    declineReason,
+                    declineReason,
 
 
 
@@ -5051,7 +5051,7 @@ router.put(
 
 
 
-                    suggestedDate,
+                    suggestedDate,
 
 
 
@@ -5059,7 +5059,7 @@ router.put(
 
 
 
-                    suggestedTime,
+                    suggestedTime,
 
 
 
@@ -5067,15 +5067,15 @@ router.put(
 
 
 
-                    appointmentId,
+                    appointmentId,
 
 
 
-                ],
+                ],
 
 
 
-            )
+            )
 
 
 
@@ -5083,11 +5083,11 @@ router.put(
 
 
 
-            await connection
+            await connection
 
 
 
-                .commit()
+                .commit()
 
 
 
@@ -5095,11 +5095,11 @@ router.put(
 
 
 
-            committed =
+            committed =
 
 
 
-                true
+                true
 
 
 
@@ -5107,15 +5107,15 @@ router.put(
 
 
 
-            let emailResult = {
+            let emailResult = {
 
 
 
-                sent: false,
+                sent: false,
 
 
 
-            }
+            }
 
 
 
@@ -5123,39 +5123,39 @@ router.put(
 
 
 
-            if (
+            if (
 
 
 
-                status ===
+                status ===
 
 
 
-                    "Approved" ||
+                    "Approved" ||
 
 
 
-                status ===
+                status ===
 
 
 
-                    "Declined"
+                    "Declined"
 
 
 
-            ) {
+            ) {
 
 
 
-                emailResult =
+                emailResult =
 
 
 
-                    await sendAppointmentStatusEmail({
+                    await sendAppointmentStatusEmail({
 
 
 
-                        appointment,
+                        appointment,
 
 
 
@@ -5163,7 +5163,7 @@ router.put(
 
 
 
-                        status,
+                        status,
 
 
 
@@ -5171,7 +5171,7 @@ router.put(
 
 
 
-                        declineReason,
+                        declineReason,
 
 
 
@@ -5179,7 +5179,7 @@ router.put(
 
 
 
-                        suggestedDate,
+                        suggestedDate,
 
 
 
@@ -5187,15 +5187,15 @@ router.put(
 
 
 
-                        suggestedTime,
+                        suggestedTime,
 
 
 
-                    })
+                    })
 
 
 
-            }
+            }
 
 
 
@@ -5203,63 +5203,63 @@ router.put(
 
 
 
-            return res.json({
+            return res.json({
 
 
 
-                message:
+                message:
 
 
 
-                    status ===
+                    status ===
 
 
 
-                    "Approved"
+                    "Approved"
 
 
 
-                        ? emailResult
+                        ? emailResult
 
 
 
-                              .sent
+                              .sent
 
 
 
-                            ? "Appointment approved and customer email sent."
+                            ? "Appointment approved and customer email sent."
 
 
 
-                            : "Appointment approved. Email could not be delivered."
+                            : "Appointment approved. Email could not be delivered."
 
 
 
-                        : status ===
+                        : status ===
 
 
 
-                              "Declined"
+                              "Declined"
 
 
 
-                          ? emailResult
+                          ? emailResult
 
 
 
-                                .sent
+                                .sent
 
 
 
-                              ? "Appointment declined and customer email sent."
+                              ? "Appointment declined and customer email sent."
 
 
 
-                              : "Appointment declined. Email could not be delivered."
+                              : "Appointment declined. Email could not be delivered."
 
 
 
-                          : "Appointment status updated successfully",
+                          : "Appointment status updated successfully",
 
 
 
@@ -5267,11 +5267,11 @@ router.put(
 
 
 
-                id:
+                id:
 
 
 
-                    appointmentId,
+                    appointmentId,
 
 
 
@@ -5279,15 +5279,15 @@ router.put(
 
 
 
-                booking_number:
+                booking_number:
 
 
 
-                    appointment
+                    appointment
 
 
 
-                        .booking_number,
+                        .booking_number,
 
 
 
@@ -5295,7 +5295,7 @@ router.put(
 
 
 
-                status,
+                status,
 
 
 
@@ -5303,11 +5303,11 @@ router.put(
 
 
 
-                staff_id:
+                staff_id:
 
 
 
-                    assignedStaffId,
+                    assignedStaffId,
 
 
 
@@ -5315,11 +5315,11 @@ router.put(
 
 
 
-                decline_reason:
+                decline_reason:
 
 
 
-                    declineReason,
+                    declineReason,
 
 
 
@@ -5327,11 +5327,11 @@ router.put(
 
 
 
-                suggested_date:
+                suggested_date:
 
 
 
-                    suggestedDate,
+                    suggestedDate,
 
 
 
@@ -5339,11 +5339,11 @@ router.put(
 
 
 
-                suggested_time:
+                suggested_time:
 
 
 
-                    suggestedTime,
+                    suggestedTime,
 
 
 
@@ -5351,47 +5351,47 @@ router.put(
 
 
 
-                email_sent:
+                email_sent:
 
 
 
-                    emailResult.sent,
+                    emailResult.sent,
 
 
 
-            })
+            })
 
 
 
-        } catch (error) {
+        } catch (error) {
 
 
 
-            if (!committed) {
+            if (!committed) {
 
 
 
-                await connection
+                await connection
 
 
 
-                    .rollback()
+                    .rollback()
 
 
 
-                    .catch(
+                    .catch(
 
 
 
-                        () => {},
+                        () => {},
 
 
 
-                    )
+                    )
 
 
 
-            }
+            }
 
 
 
@@ -5399,55 +5399,55 @@ router.put(
 
 
 
-            return res
+            return res
 
 
 
-                .status(
+                .status(
 
 
 
-                    error.status ||
+                    error.status ||
 
 
 
-                        500,
+                        500,
 
 
 
-                )
+                )
 
 
 
-                .json({
+                .json({
 
 
 
-                    error:
+                    error:
 
 
 
-                        error.message,
+                        error.message,
 
 
 
-                })
+                })
 
 
 
-        } finally {
+        } finally {
 
 
 
-            connection.release()
+            connection.release()
 
 
 
-        }
+        }
 
 
 
-    },
+    },
 
 
 
@@ -5463,7 +5463,7 @@ router.put(
 
 
 
-    "/:id/assign",
+    "/:id/assign",
     requireAppointmentAdmin,
 
 
@@ -5472,31 +5472,31 @@ router.put(
 
 
 
-    async (
+    async (
 
 
 
-        req,
+        req,
 
 
 
-        res,
+        res,
 
 
 
-    ) => {
+    ) => {
 
 
 
-        const connection =
+        const connection =
 
 
 
-            await promiseDb
+            await promiseDb
 
 
 
-                .getConnection()
+                .getConnection()
 
 
 
@@ -5504,23 +5504,23 @@ router.put(
 
 
 
-        try {
+        try {
 
 
 
-            const appointmentId =
+            const appointmentId =
 
 
 
-                Number(
+                Number(
 
 
 
-                    req.params.id,
+                    req.params.id,
 
 
 
-                )
+                )
 
 
 
@@ -5528,23 +5528,23 @@ router.put(
 
 
 
-            const staffId =
+            const staffId =
 
 
 
-                Number(
+                Number(
 
 
 
-                    req.body
+                    req.body
 
 
 
-                        .staff_id,
+                        .staff_id,
 
 
 
-                )
+                )
 
 
 
@@ -5552,11 +5552,11 @@ router.put(
 
 
 
-            await connection
+            await connection
 
 
 
-                .beginTransaction()
+                .beginTransaction()
 
 
 
@@ -5564,7 +5564,7 @@ router.put(
 
 
 
-            const [rows] = await connection.query(
+            const [rows] = await connection.query(
                 `SELECT * FROM appointments WHERE id = ? FOR UPDATE`,
                 [appointmentId]
             )
@@ -5583,35 +5583,23 @@ router.put(
 
 
 
-            if (!rows.length) {
+            if (!rows.length) {
 
 
 
-                const error =
+                const error =
 
 
 
-                    new Error(
+                    new Error(
 
 
 
-                        "Appointment not found",
+                        "Appointment not found",
 
 
 
-                    )
-
-
-
-
-
-
-
-                error.status =
-
-
-
-                    404
+                    )
 
 
 
@@ -5619,33 +5607,11 @@ router.put(
 
 
 
-                throw error
+                error.status =
 
 
 
-            }
-
-
-
-
-
-
-
-            const appointment =
-
-
-
-                rows[0]
-
-            if (appointment.service_status === "Completed") {
-
-                const error = new Error("Completed services cannot be modified.")
-
-                error.status = 409
-
-                throw error
-
-            }
+                    404
 
 
 
@@ -5653,19 +5619,53 @@ router.put(
 
 
 
+                throw error
+
+
+
+            }
 
 
 
 
-                        if (appointment.status !== "Approved") {
 
-                const error = new Error("Only approved bookings can be reassigned.")
 
-                error.status = 409
 
-                throw error
+            const appointment =
 
-            }
+
+
+                rows[0]
+
+            if (appointment.service_status === "Completed") {
+
+                const error = new Error("Completed services cannot be modified.")
+
+                error.status = 409
+
+                throw error
+
+            }
+
+
+
+
+
+
+
+
+
+
+
+                        if (appointment.status !== "Approved") {
+
+                const error = new Error("Only approved bookings can be reassigned.")
+
+                error.status = 409
+
+                throw error
+
+            }
 
 
 
@@ -5673,27 +5673,27 @@ const reservation =
 
 
 
-                await reserveAvailableStaff(
+                await reserveAvailableStaff(
 
 
 
-                    connection,
+                    connection,
 
 
 
-                    {
+                    {
 
 
 
-                        serviceId:
+                        serviceId:
 
 
 
-                            appointment
+                            appointment
 
 
 
-                                .service_id,
+                                .service_id,
 
 
 
@@ -5701,15 +5701,15 @@ const reservation =
 
 
 
-                        appointmentDate:
+                        appointmentDate:
 
 
 
-                            appointment
+                            appointment
 
 
 
-                                .appointment_date,
+                                .appointment_date,
 
 
 
@@ -5717,15 +5717,15 @@ const reservation =
 
 
 
-                        startTime:
+                        startTime:
 
 
 
-                            appointment
+                            appointment
 
 
 
-                                .appointment_time,
+                                .appointment_time,
 
 
 
@@ -5733,23 +5733,23 @@ const reservation =
 
 
 
-                        durationMinutes:
+                        durationMinutes:
 
 
 
-                            Number(
+                            Number(
 
 
 
-                                appointment
+                                appointment
 
 
 
-                                    .duration_minutes,
+                                    .duration_minutes,
 
 
 
-                            ),
+                            ),
 
 
 
@@ -5757,11 +5757,11 @@ const reservation =
 
 
 
-                        preferredStaffId:
+                        preferredStaffId:
 
 
 
-                            staffId,
+                            staffId,
 
 
 
@@ -5769,19 +5769,19 @@ const reservation =
 
 
 
-                        excludeAppointmentId:
+                        excludeAppointmentId:
 
 
 
-                            appointmentId,
+                            appointmentId,
 
 
 
-                    },
+                    },
 
 
 
-                )
+                )
 
 
 
@@ -5789,31 +5789,31 @@ const reservation =
 
 
 
-            if (
+            if (
 
 
 
-                !reservation.staff
+                !reservation.staff
 
 
 
-            ) {
+            ) {
 
 
 
-                const error =
+                const error =
 
 
 
-                    new Error(
+                    new Error(
 
 
 
-                        "Selected staff member is unavailable or unqualified",
+                        "Selected staff member is unavailable or unqualified",
 
 
 
-                    )
+                    )
 
 
 
@@ -5821,11 +5821,11 @@ const reservation =
 
 
 
-                error.status =
+                error.status =
 
 
 
-                    409
+                    409
 
 
 
@@ -5833,11 +5833,11 @@ const reservation =
 
 
 
-                throw error
+                throw error
 
 
 
-            }
+            }
 
 
 
@@ -5845,43 +5845,43 @@ const reservation =
 
 
 
-            await connection.query(
+            await connection.query(
 
 
 
-                `UPDATE appointments
+                `UPDATE appointments
 
 
 
-                 SET
+                 SET
 
 
 
-                    staff_id = ?,
+                    staff_id = ?,
 
 
 
-                    appointment_end_time = ?
+                    appointment_end_time = ?
 
 
 
-                 WHERE id = ?`,
+                 WHERE id = ?`,
 
 
 
-                [
+                [
 
 
 
-                    reservation
+                    reservation
 
 
 
-                        .staff
+                        .staff
 
 
 
-                        .staff_id,
+                        .staff_id,
 
 
 
@@ -5889,11 +5889,11 @@ const reservation =
 
 
 
-                    reservation
+                    reservation
 
 
 
-                        .endTime,
+                        .endTime,
 
 
 
@@ -5901,15 +5901,15 @@ const reservation =
 
 
 
-                    appointmentId,
+                    appointmentId,
 
 
 
-                ],
+                ],
 
 
 
-            )
+            )
 
 
 
@@ -5917,11 +5917,11 @@ const reservation =
 
 
 
-            await connection
+            await connection
 
 
 
-                .commit()
+                .commit()
 
 
 
@@ -5929,15 +5929,15 @@ const reservation =
 
 
 
-            res.json({
+            res.json({
 
 
 
-                message:
+                message:
 
 
 
-                    "Staff assignment updated",
+                    "Staff assignment updated",
 
 
 
@@ -5945,39 +5945,39 @@ const reservation =
 
 
 
-                staff:
+                staff:
 
 
 
-                    reservation.staff,
+                    reservation.staff,
 
 
 
-            })
+            })
 
 
 
-        } catch (error) {
+        } catch (error) {
 
 
 
-            await connection
+            await connection
 
 
 
-                .rollback()
+                .rollback()
 
 
 
-                .catch(
+                .catch(
 
 
 
-                    () => {},
+                    () => {},
 
 
 
-                )
+                )
 
 
 
@@ -5985,47 +5985,47 @@ const reservation =
 
 
 
-            res.status(
+            res.status(
 
 
 
-                error.status ||
+                error.status ||
 
 
 
-                    500,
+                    500,
 
 
 
-            ).json({
+            ).json({
 
 
 
-                error:
+                error:
 
 
 
-                    error.message,
+                    error.message,
 
 
 
-            })
+            })
 
 
 
-        } finally {
+        } finally {
 
 
 
-            connection.release()
+            connection.release()
 
 
 
-        }
+        }
 
 
 
-    },
+    },
 
 
 
@@ -6043,119 +6043,119 @@ const reservation =
 
 router.put("/:id/service-status", async (req, res) => {
 
-    if (!req.user || !["owner", "admin"].includes(req.user.role)) {
+    if (!req.user || !["owner", "admin"].includes(req.user.role)) {
 
-        return res.status(403).json({ error: "Owner or admin access is required." })
+        return res.status(403).json({ error: "Owner or admin access is required." })
 
-    }
-
-
-
-    const appointmentId = Number(req.params.id)
-
-    if (!Number.isSafeInteger(appointmentId) || appointmentId <= 0) {
-
-        return res.status(400).json({ error: "Invalid appointment." })
-
-    }
-
-    if (req.body?.service_status !== "Completed") {
-
-        return res.status(400).json({ error: "Only service completion is supported." })
-
-    }
+    }
 
 
 
-    let connection
+    const appointmentId = Number(req.params.id)
 
-    try {
+    if (!Number.isSafeInteger(appointmentId) || appointmentId <= 0) {
 
-        connection = await promiseDb.getConnection()
+        return res.status(400).json({ error: "Invalid appointment." })
 
-        await connection.beginTransaction()
+    }
 
-        const [rows] = await connection.query(
+    if (req.body?.service_status !== "Completed") {
 
-            `SELECT id, status, service_status, staff_id
+        return res.status(400).json({ error: "Only service completion is supported." })
 
-             FROM appointments WHERE id = ? FOR UPDATE`,
+    }
 
-            [appointmentId]
 
-        )
 
-        if (!rows.length) {
+    let connection
 
-            await connection.rollback()
+    try {
 
-            return res.status(404).json({ error: "Appointment not found." })
+        connection = await promiseDb.getConnection()
 
-        }
+        await connection.beginTransaction()
 
-        const appointment = rows[0]
+        const [rows] = await connection.query(
 
-        if (appointment.status !== "Approved") {
+            `SELECT id, status, service_status, staff_id
 
-            await connection.rollback()
+             FROM appointments WHERE id = ? FOR UPDATE`,
 
-            return res.status(409).json({ error: "Only approved bookings can be completed." })
+            [appointmentId]
 
-        }
+        )
 
-        if (appointment.service_status === "Completed") {
+        if (!rows.length) {
 
-            await connection.rollback()
+            await connection.rollback()
 
-            return res.status(409).json({ error: "Service is already completed." })
+            return res.status(404).json({ error: "Appointment not found." })
 
-        }
+        }
 
-        if (!appointment.staff_id) {
+        const appointment = rows[0]
 
-            await connection.rollback()
+        if (appointment.status !== "Approved") {
 
-            return res.status(409).json({ error: "Assign a staff member before completion." })
+            await connection.rollback()
 
-        }
+            return res.status(409).json({ error: "Only approved bookings can be completed." })
 
-        const [result] = await connection.query(
+        }
 
-            `UPDATE appointments SET service_status = 'Completed'
+        if (appointment.service_status === "Completed") {
 
-             WHERE id = ? AND status = 'Approved' AND service_status IN ('Pending', 'In Progress')`,
+            await connection.rollback()
 
-            [appointmentId]
+            return res.status(409).json({ error: "Service is already completed." })
 
-        )
+        }
 
-        if (result.affectedRows !== 1) {
+        if (!appointment.staff_id) {
 
-            await connection.rollback()
+            await connection.rollback()
 
-            return res.status(409).json({ error: "Service status changed. Refresh and retry." })
+            return res.status(409).json({ error: "Assign a staff member before completion." })
 
-        }
+        }
 
-        await connection.commit()
+        const [result] = await connection.query(
 
-        return res.json({ message: "Service marked as completed.", id: appointmentId,
+            `UPDATE appointments SET service_status = 'Completed'
 
-            status: "Approved", service_status: "Completed", staff_id: appointment.staff_id })
+             WHERE id = ? AND status = 'Approved' AND service_status IN ('Pending', 'In Progress')`,
 
-    } catch (error) {
+            [appointmentId]
 
-        if (connection) await connection.rollback().catch(() => {})
+        )
 
-        console.error("Service completion error:", error)
+        if (result.affectedRows !== 1) {
 
-        return res.status(500).json({ error: "Unable to complete service." })
+            await connection.rollback()
 
-    } finally {
+            return res.status(409).json({ error: "Service status changed. Refresh and retry." })
 
-        connection?.release()
+        }
 
-    }
+        await connection.commit()
+
+        return res.json({ message: "Service marked as completed.", id: appointmentId,
+
+            status: "Approved", service_status: "Completed", staff_id: appointment.staff_id })
+
+    } catch (error) {
+
+        if (connection) await connection.rollback().catch(() => {})
+
+        console.error("Service completion error:", error)
+
+        return res.status(500).json({ error: "Unable to complete service." })
+
+    } finally {
+
+        connection?.release()
+
+    }
 
 })
 
