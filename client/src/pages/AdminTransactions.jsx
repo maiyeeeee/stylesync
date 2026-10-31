@@ -505,6 +505,21 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
   const [cart, setCart] = useState({});
+  const [staffChoices, setStaffChoices] = useState({});
+  const [staffAssignments, setStaffAssignments] = useState({});
+  const [staffLoading, setStaffLoading] = useState({});
+  const manilaNow = () => new Intl.DateTimeFormat('en-GB', {timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date());
+  const refreshStaff = async (serviceId, startTime) => {
+    const key = `s:${serviceId}`;
+    setStaffLoading(prev => ({...prev,[key]:true}));
+    setStaffChoices(prev => ({...prev,[key]:null}));
+    try {
+      const data = await request(`/transactions/cart/staff-availability?service_id=${encodeURIComponent(serviceId)}&start_time=${encodeURIComponent(startTime)}`);
+      setStaffChoices(prev => ({...prev,[key]:data}));
+    } catch (e) {
+      setStaffChoices(prev => ({...prev,[key]:{staff:[],error:e.message}}));
+    } finally {setStaffLoading(prev => ({...prev,[key]:false}));}
+  };
   const [customer, setCustomer] = useState("");
   const [customerContact, setCustomerContact] = useState("");
   // Registered customer suggestions are advisory until the cashier confirms a profile.
@@ -589,10 +604,17 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
   const cashCents = moneyCents(cash || 0);
   const canPay = Boolean(normalizeRequiredPhone(customerContact) && quote && lines.length && customer.trim() && (payment !== "Cash" || cashCents >= payableCents) && (payment !== "GCash" || reference.trim()));
   const invalidateQuote = () => { setQuote(null); setReviewed(false); setSaveError(""); setStep("cart"); };
-  const itemsPayload = () => lines.map(x => ({ type: x.type, id: x.id, quantity: x.quantity }));
+  const itemsPayload = () => lines.map(x => ({ type: x.type, id: x.id, quantity: x.quantity,
+    ...(x.type === 'Service' ? { staff_id: staffAssignments[x.key]?.staff_id || null, start_time: staffAssignments[x.key]?.start_time || '' } : {}) }));
+  const allServicesAssigned = lines.every(x => x.type !== 'Service' || (staffAssignments[x.key]?.staff_id && staffChoices[x.key]?.staff?.some(s => Number(s.staff_id) === Number(staffAssignments[x.key].staff_id))));
 
   const adjust = (item, delta) => {
     invalidateQuote();
+    if (item.type === 'Service' && delta > 0 && !cart[item.key]) {
+      const startTime = manilaNow();
+      setStaffAssignments(prev => ({...prev,[item.key]:{start_time:startTime,staff_id:''}}));
+      refreshStaff(item.id, startTime);
+    }
     setCart(current => {
       const next = Math.max(0, (current[item.key] || 0) + delta);
       return { ...current, [item.key]: item.type === "Service" ? Math.min(next, 1) : Math.min(next, Math.max(0, Math.min(100, item.stock))) };
@@ -605,6 +627,7 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
       return;
     }
     if (!lines.length || !customer.trim() || quoting) return;
+    if (!allServicesAssigned) { setSaveError('Select an available staff member for every walk-in service.'); return; }
     setQuoting(true); setSaveError(""); setQuote(null);
     try {
       // Never silently attribute a new/walk-in sale to another registered contact.
@@ -660,6 +683,7 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
   };
 
   const startNewSale = () => {
+    setStaffChoices({}); setStaffAssignments({}); setStaffLoading({});
     setCart({}); setCustomer(""); setCustomerContact(""); setSelectedCustomer(null);
     setCustomerMatches([]); setCash(""); setReference(""); setQuote(null);
     setReviewed(false); setSaveError(""); setShowDiscount(false);
@@ -705,7 +729,24 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
               <div><h3 className="text-base font-bold text-purple-950">02 · Current Sale</h3><p className="mt-1 text-xs text-slate-500">Review quantities and your subtotal.</p></div>
               <h3 className="font-bold text-purple-950">Cart · {lines.length} items</h3>
               {lines.length === 0 && <p className="text-sm text-slate-500">Add a service or product to begin.</p>}
-              {lines.map(x => <div key={x.key} className="flex items-center justify-between gap-2 rounded-xl bg-purple-50 p-3"><div><p className="font-medium">{x.name}</p><p className="text-xs">{peso(x.price)} × {x.quantity}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => adjust(x, -1)} className="rounded border px-2">−</button><span>{x.quantity}</span><button type="button" onClick={() => adjust(x, 1)} disabled={x.type === "Service" || x.quantity >= x.stock} className="rounded border px-2 disabled:opacity-40">+</button></div></div>)}
+              {lines.map(x => <div key={x.key} className="rounded-xl bg-purple-50 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2"><div><p className="font-medium">{x.name}</p><p className="text-xs">{peso(x.price)} × {x.quantity}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => adjust(x, -1)} className="rounded border px-2">−</button><span>{x.quantity}</span><button type="button" onClick={() => adjust(x, 1)} disabled={x.type === "Service" || x.quantity >= x.stock} className="rounded border px-2 disabled:opacity-40">+</button></div></div>
+                {x.type === 'Service' && <div className="space-y-2 border-t border-purple-100 pt-2">
+                  <label className="block text-xs font-semibold text-purple-900">Service start (Philippine time)
+                    <input type="time" value={staffAssignments[x.key]?.start_time || ''} onChange={e => { const start_time=e.target.value; invalidateQuote(); setStaffAssignments(prev => ({...prev,[x.key]:{start_time,staff_id:''}})); setStaffChoices(prev => ({...prev,[x.key]:null})); if(start_time) refreshStaff(x.id,start_time); }} className="mt-1 w-full rounded-lg border p-2 text-sm" />
+                  </label>
+                  <label className="block text-xs font-semibold text-purple-900">Available qualified staff
+                    <select value={staffAssignments[x.key]?.staff_id || ''} onChange={e => { invalidateQuote(); setStaffAssignments(prev => ({...prev,[x.key]:{...prev[x.key],staff_id:e.target.value}})); }} className="mt-1 w-full rounded-lg border p-2 text-sm">
+                      <option value="">{staffLoading[x.key] ? 'Checking staff…' : 'Select staff'}</option>
+                      {(staffChoices[x.key]?.staff || []).map(s => <option key={s.staff_id} value={s.staff_id}>{s.name}</option>)}
+                    </select>
+                  </label>
+                  {staffChoices[x.key]?.endTime && <p className="text-xs text-slate-500">Scheduled until {staffChoices[x.key].endTime} · {staffChoices[x.key].duration_minutes} minutes</p>}
+                  {staffChoices[x.key]?.error && <p className="text-xs text-red-700">{staffChoices[x.key].error}</p>}
+                  {staffChoices[x.key] && !staffChoices[x.key].error && !staffChoices[x.key].staff?.length && <p className="text-xs text-amber-700">No qualified staff available for this full time slot.</p>}
+                  <button type="button" onClick={() => refreshStaff(x.id, staffAssignments[x.key]?.start_time || manilaNow())} className="text-xs font-semibold text-purple-700 underline">Refresh staff availability</button>
+                </div>}
+              </div>)}
               <div className="flex justify-between border-t pt-3 font-semibold"><span>Subtotal before discounts</span><span>{peso(subtotalCents / 100)}</span></div>
               <div className="rounded-xl border border-purple-100 p-3">
                 <label className="flex cursor-pointer items-center justify-between gap-3 text-xs font-semibold text-purple-900">
@@ -755,7 +796,7 @@ function StyleSyncMultiItemCheckoutModal({ open, onClose, onSaved, services = []
                   placeholder="09XXXXXXXXX" />
               </label>
               {selectedCustomer && <p className="text-xs text-green-800">The confirmed contact will be saved with this transaction for Customer Intelligence.</p>}
-              <button type="button" onClick={previewCart} disabled={!lines.length || !customer.trim() || quoting || !navigator.onLine} className="w-full rounded-xl bg-purple-700 p-3 font-semibold text-white disabled:opacity-40">{quoting ? "Calculating…" : "Continue to payment →"}</button>
+              <button type="button" onClick={previewCart} disabled={!lines.length || !customer.trim() || !allServicesAssigned || quoting || !navigator.onLine} className="w-full rounded-xl bg-purple-700 p-3 font-semibold text-white disabled:opacity-40">{quoting ? "Calculating…" : "Continue to payment →"}</button>
               {saveError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
             </section>
           </div>}
