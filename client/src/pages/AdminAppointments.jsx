@@ -57,7 +57,7 @@ function todayInManila() {
 }
 
 function statusClass(status) {
-    if (["Approved", "Completed"].includes(status)) {
+    if (status === "Approved") {
         return "bg-green-100 text-green-800"
     }
 
@@ -72,6 +72,7 @@ function AdminAppointments() {
     const [appointments, setAppointments] = useState([])
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState("All")
+    const [serviceFilter, setServiceFilter] = useState("All")
 
     const [loading, setLoading] = useState(true)
     const [loadError, setLoadError] = useState("")
@@ -242,6 +243,18 @@ function AdminAppointments() {
         )
     }
 
+    function updateServiceStatus(id, serviceStatus) {
+        return mutate(
+            `${API_URL}/appointments/${id}/service-status`,
+            {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ service_status: serviceStatus }),
+            },
+            `Service marked as ${serviceStatus}.`,
+        )
+    }
+
     function openDecline(
         appointment,
     ) {
@@ -387,10 +400,11 @@ function AdminAppointments() {
                               statusFilter
                     )
 
-                return (
-                    matchesSearch &&
-                    matchesStatus
-                )
+                const matchesService =
+                    serviceFilter === "All" ||
+                    (item.service_status || "Pending") === serviceFilter
+
+                return matchesSearch && matchesStatus && matchesService
             },
         )
 
@@ -400,7 +414,6 @@ function AdminAppointments() {
             "Approved",
             "Declined",
             "Cancelled",
-            "Completed",
 
             ...appointments
                 .map(
@@ -866,6 +879,19 @@ function AdminAppointments() {
                                 )}
                             </select>
                         </label>
+                        <label>
+                            <span className="sr-only">Filter by service progress</span>
+                            <select
+                                value={serviceFilter}
+                                onChange={(event) => setServiceFilter(event.target.value)}
+                                className={`${controlClass} w-full`}
+                            >
+                                <option value="All">All service progress</option>
+                                <option value="Pending">Service pending</option>
+                                <option value="In Progress">In progress</option>
+                                <option value="Completed">Service completed</option>
+                            </select>
+                        </label>
                     </div>
                 </div>
 
@@ -881,7 +907,8 @@ function AdminAppointments() {
                                     "Service",
                                     "Schedule",
                                     "Assigned staff",
-                                    "Status",
+                                    "Booking status",
+                                    "Service progress",
                                     "Source",
                                     "Actions",
                                 ].map(
@@ -909,7 +936,7 @@ function AdminAppointments() {
                                 <tr>
                                     <td
                                         colSpan={
-                                            7
+                                            8
                                         }
                                         className="px-5 py-10 text-center text-gray-500"
                                     >
@@ -1042,6 +1069,18 @@ function AdminAppointments() {
                                                 </td>
 
                                                 <td className="px-5 py-4 align-middle">
+                                                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                                                        appointment.service_status === "Completed"
+                                                            ? "bg-green-100 text-green-800"
+                                                            : appointment.service_status === "In Progress"
+                                                              ? "bg-blue-100 text-blue-800"
+                                                              : "bg-amber-100 text-amber-900"
+                                                    }`}>
+                                                        {appointment.service_status || "Pending"}
+                                                    </span>
+                                                </td>
+
+                                                <td className="px-5 py-4 align-middle">
                                                     <span
                                                         className={`inline-flex whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-medium ${
                                                             appointment.offline_id
@@ -1090,6 +1129,24 @@ function AdminAppointments() {
                                                             className={`${actionClass} border-red-200 bg-red-50 text-red-700 hover:bg-red-100`}
                                                         >
                                                             Decline
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            disabled={
+                                                                blocked ||
+                                                                appointment.status !== "Approved" ||
+                                                                !appointment.staff_id ||
+                                                                appointment.service_status === "Completed"
+                                                            }
+                                                            title={!appointment.staff_id ? "Assign a staff member before completing the service" : undefined}
+                                                            onClick={() => {
+                                                                if (window.confirm(`Mark service for ${appointment.customer_name} as completed? This cannot be undone here.`)) {
+                                                                    updateServiceStatus(id, "Completed")
+                                                                }
+                                                            }}
+                                                            className={`${actionClass} border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100`}
+                                                        >
+                                                            {appointment.service_status === "Completed" ? "Completed" : "Mark Completed"}
                                                         </button>
                                                     </div>
                                                 </td>

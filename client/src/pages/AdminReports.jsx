@@ -45,7 +45,7 @@ const emptyReport = {
     categories: [], paidServices: [], requestedServices: [],
   },
   mostRequestedServices: [],
-  staffAnalytics: { scope: "Paid booked services only", staff: [] },
+  staffAnalytics: { scope: "Completed booked services and paid revenue (separate date bases)", staff: [] },
   salesAnalytics: {
     previousPeriod: { startDate: "", endDate: "", sales: 0, transactions: 0 },
     salesByType: [],
@@ -829,10 +829,11 @@ function AdminReports() {
               topSellingServices: Array.isArray(data.salesAnalytics?.topSellingServices) ? data.salesAnalytics.topSellingServices : [],
             },
             staffAnalytics: {
-              scope: data.staffAnalytics?.scope || "Paid booked services only",
+              scope: data.staffAnalytics?.scope || "Completed booked services and paid revenue (separate date bases)",
               staff: Array.isArray(data.staffAnalytics?.staff)
                 ? data.staffAnalytics.staff.map((item) => ({
                     ...item,
+                    completedServices: Number(item.completedServices || 0),
                     paidAppointments: Number(item.paidAppointments || 0),
                     attributedRevenue: Number(item.attributedRevenue || 0),
                   }))
@@ -1311,7 +1312,7 @@ function AdminReports() {
             { id: "services", title: "Services", description: "Service performance", icon: "services" },
             { id: "discounts", title: "Promotions & Discounts", description: "Promo & loyalty analytics", icon: "discounts" },
             { id: "inventory", title: "Inventory", description: "Stock & inventory", icon: "inventory" },
-            { id: "staff", title: "Staff Performance", description: "Booked-service sales", icon: "staff" },
+            { id: "staff", title: "Staff Performance", description: "Completed services and paid sales", icon: "staff" },
           ].map((category) => {
             const selected = activeCategory === category.id
             return (
@@ -2925,10 +2926,10 @@ function AdminReports() {
         {activeCategory === "staff" && (
           <section className={`${panel} overflow-hidden`}>
             <div className="border-b border-purple-100 p-5">
-              <h2 className="text-lg font-bold text-purple-950">Staff Sales Performance</h2>
+              <h2 className="text-lg font-bold text-purple-950">Staff Performance</h2>
               <p className="mt-2 text-sm text-gray-600">
-                Paid, completed appointments linked to an assigned staff member in the selected transaction-date period.
-                Revenue is the final paid service transaction amount after applicable discounts.
+                Completed Services counts assigned, approved bookings completed within the selected appointment-date period.
+                Paid Appointments and Attributed Revenue use the selected transaction-date period and include only paid service transactions for completed bookings.
               </p>
               <p className="mt-2 text-xs text-gray-500">
                 Scope: {report.staffAnalytics.scope}. Walk-in sales, product sales, and mixed-cart sales are excluded.
@@ -2941,6 +2942,7 @@ function AdminReports() {
                   <tr>
                     <th className="px-5 py-3">Staff Member</th>
                     <th className="px-5 py-3">Role</th>
+                    <th className="px-5 py-3 text-right">Completed Services</th>
                     <th className="px-5 py-3 text-right">Paid Appointments</th>
                     <th className="px-5 py-3 text-right">Attributed Revenue</th>
                   </tr>
@@ -2950,11 +2952,12 @@ function AdminReports() {
                     <tr key={item.staffId} className="border-t border-gray-100">
                       <td className="px-5 py-3 font-semibold text-gray-900">{item.staffName || "Unnamed staff"}</td>
                       <td className="px-5 py-3 text-gray-600">{item.staffRole || "—"}</td>
+                      <td className="px-5 py-3 text-right tabular-nums">{item.completedServices}</td>
                       <td className="px-5 py-3 text-right tabular-nums">{item.paidAppointments}</td>
                       <td className="px-5 py-3 text-right font-semibold tabular-nums">{money(item.attributedRevenue)}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={4} className="px-5 py-8 text-center text-gray-500">No staff performance data available for this period.</td></tr>
+                    <tr><td colSpan={5} className="px-5 py-8 text-center text-gray-500">No staff performance data available for this period.</td></tr>
                   )}
                 </tbody>
               </table>

@@ -354,10 +354,14 @@ paymentCollections: paymentCollectionRows.map((row) => ({
     }
 
     // ====================================
-    // STAFF SALES PERFORMANCE (READ-ONLY)
+    // STAFF PERFORMANCE (READ-ONLY)
     // ====================================
-    // Counts paid, completed appointment-linked service sales only.
-    // Walk-ins, mixed carts, and products are excluded.
+    // Completed services: unique approved appointments by scheduled date.
+    // Paid revenue: unique paid service transactions by transaction date.
+    // Both metrics require service_status = 'Completed'.
+    // A paid transaction is counted once, even if the service is completed later.
+    // Deposits are included in t.amount; do not add them again.
+    // Walk-in, mixed/cart, and product sales are not staff-attributed here.
 
     const [staffPerformanceRows] = await connection.query(
       `SELECT
@@ -365,37 +369,45 @@ paymentCollections: paymentCollectionRows.map((row) => ({
          s.name AS staffName,
          s.role AS staffRole,
          s.active_status AS activeStatus,
-         COUNT(DISTINCT t.appointment_id) AS paidAppointments,
-         COALESCE(SUM(t.amount), 0) AS attributedRevenue
+         COALESCE(completed.completedServices, 0) AS completedServices,
+         COALESCE(paid.paidAppointments, 0) AS paidAppointments,
+         COALESCE(paid.attributedRevenue, 0) AS attributedRevenue
        FROM staff s
-       LEFT JOIN appointments a
-         ON a.staff_id = s.staff_id
-         AND a.status = 'Completed'
-       LEFT JOIN transactions t
-         ON t.appointment_id = a.id
-         AND t.status = 'Paid'
-         AND t.sale_type = 'Service'
-         AND t.transaction_date >= ?
-         AND t.transaction_date < ?
-       GROUP BY
-         s.staff_id,
-         s.name,
-         s.role,
-         s.active_status
-       ORDER BY
-         attributedRevenue DESC,
-         paidAppointments DESC,
-         s.name ASC`,
-      [startDate, endDate]
+       LEFT JOIN (
+         SELECT a.staff_id, COUNT(DISTINCT a.id) AS completedServices
+         FROM appointments a
+         WHERE a.status = 'Approved'
+           AND a.service_status = 'Completed'
+           AND a.staff_id IS NOT NULL
+           AND a.appointment_date >= ? AND a.appointment_date < ?
+         GROUP BY a.staff_id
+       ) completed ON completed.staff_id = s.staff_id
+       LEFT JOIN (
+         SELECT a.staff_id,
+                COUNT(DISTINCT a.id) AS paidAppointments,
+                COALESCE(SUM(t.amount), 0) AS attributedRevenue
+         FROM transactions t
+         INNER JOIN appointments a ON a.id = t.appointment_id
+         WHERE a.status = 'Approved'
+           AND a.service_status = 'Completed'
+           AND a.staff_id IS NOT NULL
+           AND t.status = 'Paid'
+           AND t.sale_type = 'Service'
+           AND t.transaction_date >= ? AND t.transaction_date < ?
+         GROUP BY a.staff_id
+       ) paid ON paid.staff_id = s.staff_id
+       ORDER BY attributedRevenue DESC, completedServices DESC, s.name ASC`,
+      [startDate, endDate, startDate, endDate]
     )
 
     const staffAnalytics = {
-      scope: "Paid booked services only",
+      scope: "Completed booked services and paid revenue (separate date bases)",
       staff: staffPerformanceRows.map((row) => ({
         staffId: Number(row.staffId),
         staffName: row.staffName,
         staffRole: row.staffRole,
         activeStatus: row.activeStatus,
+        completedServices: Number(row.completedServices || 0),
         paidAppointments: Number(row.paidAppointments || 0),
         attributedRevenue: Number(row.attributedRevenue || 0),
       })),
@@ -576,13 +588,24 @@ paymentCollections: paymentCollectionRows.map((row) => ({
       [startDate, endDate]
     )
 
+    // Service progress is independent of booking approval.
+    const [serviceStatusRows] = await connection.query(
+      `SELECT service_status AS status, COUNT(*) AS count
+       FROM appointments
+       WHERE appointment_date >= ? AND appointment_date < ?
+         AND status = 'Approved'
+       GROUP BY service_status
+       ORDER BY count DESC, service_status`,
+      [startDate, endDate]
+    )
+
     // Appointment analytics: count every stored booking, including expired holds.
     // Dates refer to the scheduled appointment date (not the booking creation date).
     const [appointmentTotalsRows] = await connection.query(
       `SELECT
          COUNT(*) AS totalBookings,
          SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) AS approved,
-         SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed,
+         SUM(CASE WHEN service_status = 'Completed' THEN 1 ELSE 0 END) AS completed,
          SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending,
          SUM(CASE WHEN status = 'Pending Validation' THEN 1 ELSE 0 END) AS pendingValidation,
          SUM(CASE WHEN status = 'Awaiting Payment' THEN 1 ELSE 0 END) AS awaitingPayment,
@@ -616,7 +639,7 @@ paymentCollections: paymentCollectionRows.map((row) => ({
       `SELECT DATE_FORMAT(appointment_date, '%Y-%m-%d') AS date,
               COUNT(*) AS total,
               SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) AS approved,
-              SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed,
+              SUM(CASE WHEN service_status = 'Completed' THEN 1 ELSE 0 END) AS completed,
               SUM(CASE WHEN status = 'Declined' THEN 1 ELSE 0 END) AS declined,
               SUM(CASE WHEN status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled
        FROM appointments
@@ -979,6 +1002,10 @@ paymentCollections: paymentCollectionRows.map((row) => ({
       salesAnalytics,
       serviceAnalytics,
       appointmentAnalytics,
+      serviceStatus: serviceStatusRows.map((row) => ({
+        status: row.status,
+        count: Number(row.count || 0),
+      })),
       staffAnalytics,
 
       // Applied discounts on paid sales in the selected period.
