@@ -4020,95 +4020,18 @@ router.put(
 
 
 
-            const [rows] =
-
-
-
-                await connection.query(
-
-
-
-                    `SELECT
-
-
-
-                        a.*,
-
-
-
-
-
-
-
-                        COALESCE(
-
-
-
-                            sv.duration_minutes,
-
-
-
-                            60
-
-
-
-                        ) AS duration_minutes
-
-
-
-
-
-
-
-                     FROM appointments a
-
-
-
-
-
-
-
-                     LEFT JOIN services sv
-
-
-
-                        ON sv.service_id =
-
-
-
-                           a.service_id
-
-
-
-
-
-
-
-                     WHERE a.id = ?
-
-
-
-
-
-
-
-                     FOR UPDATE`,
-
-
-
-                    [
-
-
-
-                        appointmentId,
-
-
-
-                    ],
-
-
-
-                )
+            const [rows] = await connection.query(
+                `SELECT * FROM appointments WHERE id = ? FOR UPDATE`,
+                [appointmentId]
+            )
+
+            if (rows.length) {
+                const [serviceRows] = await connection.query(
+                    `SELECT duration_minutes FROM services WHERE service_id = ? LIMIT 1`,
+                    [rows[0].service_id]
+                )
+                rows[0].duration_minutes = serviceRows[0]?.duration_minutes ?? 60
+            }
 
 
 
@@ -5641,95 +5564,18 @@ router.put(
 
 
 
-            const [rows] =
-
-
-
-                await connection.query(
-
-
-
-                    `SELECT
-
-
-
-                        a.*,
-
-
-
-
-
-
-
-                        COALESCE(
-
-
-
-                            s.duration_minutes,
-
-
-
-                            60
-
-
-
-                        ) AS duration_minutes
-
-
-
-
-
-
-
-                     FROM appointments a
-
-
-
-
-
-
-
-                     LEFT JOIN services s
-
-
-
-                        ON s.service_id =
-
-
-
-                           a.service_id
-
-
-
-
-
-
-
-                     WHERE a.id = ?
-
-
-
-
-
-
-
-                     FOR UPDATE`,
-
-
-
-                    [
-
-
-
-                        appointmentId,
-
-
-
-                    ],
-
-
-
-                )
+            const [rows] = await connection.query(
+                `SELECT * FROM appointments WHERE id = ? FOR UPDATE`,
+                [appointmentId]
+            )
+
+            if (rows.length) {
+                const [serviceRows] = await connection.query(
+                    `SELECT duration_minutes FROM services WHERE service_id = ? LIMIT 1`,
+                    [rows[0].service_id]
+                )
+                rows[0].duration_minutes = serviceRows[0]?.duration_minutes ?? 60
+            }
 
 
 
