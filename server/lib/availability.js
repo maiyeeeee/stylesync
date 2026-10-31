@@ -547,6 +547,7 @@ module.exports = {
   getAvailableStaff,
   getDailyLimitStatus,
   listQualifiedScheduledStaff,
+  staffHasConflict,
   reserveAvailableStaff,
   resolveService,
-}
+};
