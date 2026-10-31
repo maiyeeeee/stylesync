@@ -544,8 +544,9 @@ async function reserveAvailableStaff(
 }
 
 module.exports = {
-    getAvailableStaff,
-    getDailyLimitStatus,
-    reserveAvailableStaff,
-    resolveService,
+  getAvailableStaff,
+  getDailyLimitStatus,
+  listQualifiedScheduledStaff,
+  reserveAvailableStaff,
+  resolveService,
 }
