@@ -10,13 +10,15 @@ const {
 const promiseDb = db.promise()
 // Restrict appointment administration to authenticated owners and admins.
 function requireAppointmentAdmin(req, res, next) {
-    if (!req.user) {
-        return res.status(401).json({ error: "Please log in to continue." })
-    }
-    if (!["owner", "admin"].includes(req.user.role)) {
-        return res.status(403).json({ error: "Administrator access is required." })
-    }
-    next()
+  if (!req.user) {
+    return res.status(401).json({ error: "Please log in to continue." })
+  }
+
+  if (!["owner", "admin", "user"].includes(req.user.role)) {
+    return res.status(403).json({ error: "Administrator access is required." })
+  }
+
+  next()
 }
 async function nextBookingNumber(connection) {
     const [rows] = await connection.query(
@@ -1292,8 +1294,8 @@ const reservation =
 )
 // Service completion is separate from booking approval and payment.
 router.put("/:id/service-status", async (req, res) => {
-    if (!req.user || !["owner", "admin"].includes(req.user.role)) {
-        return res.status(403).json({ error: "Owner or admin access is required." })
+    if (!req.user || !["owner", "admin", "user"].includes(req.user.role)) {
+        return res.status(403).json({ error: "Owner, admin, or user access is required." })
     }
     const appointmentId = Number(req.params.id)
     if (!Number.isSafeInteger(appointmentId) || appointmentId <= 0) {
