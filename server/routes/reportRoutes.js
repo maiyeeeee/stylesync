@@ -400,8 +400,36 @@ paymentCollections: paymentCollectionRows.map((row) => ({
       [startDate, endDate, startDate, endDate]
     )
 
+    // Walk-in services are attributed by their persisted POS service-line assignment.
+    // Use the discounted line amount, not the parent transaction total, so products
+    // and other service lines are never credited to the wrong staff member.
+    // This measures PAID walk-in services, not confirmed service completion.
+    const [walkinStaffRows] = await connection.query(
+      `SELECT
+         w.staff_id AS staffId,
+         COUNT(DISTINCT w.transaction_item_id) AS walkinServicesHandled,
+         COALESCE(SUM(ti.final_line_total), 0) AS walkinAttributedRevenue
+       FROM walkin_staff_assignments w
+       INNER JOIN transaction_items ti
+         ON ti.item_id = w.transaction_item_id
+        AND ti.transaction_id = w.transaction_id
+        AND ti.item_type = 'Service'
+       INNER JOIN transactions t ON t.transaction_id = w.transaction_id
+       WHERE t.status = 'Paid'
+         AND t.transaction_date >= ? AND t.transaction_date < ?
+       GROUP BY w.staff_id`,
+      [startDate, endDate]
+    )
+    const walkinByStaff = new Map(walkinStaffRows.map((row) => [
+      Number(row.staffId),
+      {
+        walkinServicesHandled: Number(row.walkinServicesHandled || 0),
+        walkinAttributedRevenue: Number(row.walkinAttributedRevenue || 0),
+      },
+    ]))
+
     const staffAnalytics = {
-      scope: "Completed booked services and paid revenue (separate date bases)",
+      scope: "Completed booked services and paid appointment revenue; paid walk-in service lines tracked separately",
       staff: staffPerformanceRows.map((row) => ({
         staffId: Number(row.staffId),
         staffName: row.staffName,
@@ -410,6 +438,8 @@ paymentCollections: paymentCollectionRows.map((row) => ({
         completedServices: Number(row.completedServices || 0),
         paidAppointments: Number(row.paidAppointments || 0),
         attributedRevenue: Number(row.attributedRevenue || 0),
+        walkinServicesHandled: walkinByStaff.get(Number(row.staffId))?.walkinServicesHandled || 0,
+        walkinAttributedRevenue: walkinByStaff.get(Number(row.staffId))?.walkinAttributedRevenue || 0,
       })),
     }
 

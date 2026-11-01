@@ -45,7 +45,7 @@ const emptyReport = {
     categories: [], paidServices: [], requestedServices: [],
   },
   mostRequestedServices: [],
-  staffAnalytics: { scope: "Completed booked services and paid revenue (separate date bases)", staff: [] },
+  staffAnalytics: { scope: "Completed booked services and paid appointment revenue; paid walk-in service lines tracked separately", staff: [] },
   salesAnalytics: {
     previousPeriod: { startDate: "", endDate: "", sales: 0, transactions: 0 },
     salesByType: [],
@@ -2932,8 +2932,9 @@ function AdminReports() {
                 Paid Appointments and Attributed Revenue use the selected transaction-date period and include only paid service transactions for completed bookings.
               </p>
               <p className="mt-2 text-xs text-gray-500">
-                Scope: {report.staffAnalytics.scope}. Walk-in sales, product sales, and mixed-cart sales are excluded.
-                These figures are not total staff sales or commissions.
+                Scope: {report.staffAnalytics.scope}. Walk-in columns include paid POS service lines only (including mixed carts);
+                product sales are excluded. Walk-in counts indicate paid assignments, not verified service completion.
+                These figures are not commissions.
               </p>
             </div>
             <div className="overflow-x-auto">
@@ -2944,7 +2945,9 @@ function AdminReports() {
                     <th className="px-5 py-3">Role</th>
                     <th className="px-5 py-3 text-right">Completed Services</th>
                     <th className="px-5 py-3 text-right">Paid Appointments</th>
-                    <th className="px-5 py-3 text-right">Attributed Revenue</th>
+                    <th className="px-5 py-3 text-right">Appointment Revenue</th>
+                    <th className="px-5 py-3 text-right">Walk-in Services Handled</th>
+                    <th className="px-5 py-3 text-right">Walk-in Attributed Revenue</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2955,9 +2958,11 @@ function AdminReports() {
                       <td className="px-5 py-3 text-right tabular-nums">{item.completedServices}</td>
                       <td className="px-5 py-3 text-right tabular-nums">{item.paidAppointments}</td>
                       <td className="px-5 py-3 text-right font-semibold tabular-nums">{money(item.attributedRevenue)}</td>
+                      <td className="px-5 py-3 text-right tabular-nums">{item.walkinServicesHandled || 0}</td>
+                      <td className="px-5 py-3 text-right font-semibold tabular-nums">{money(item.walkinAttributedRevenue)}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={5} className="px-5 py-8 text-center text-gray-500">No staff performance data available for this period.</td></tr>
+                    <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-500">No staff performance data available for this period.</td></tr>
                   )}
                 </tbody>
               </table>
