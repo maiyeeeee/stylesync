@@ -7,9 +7,24 @@ const db = require("../db");
 const router = express.Router();
 const pool = db.promise();
 
+function requireOwner(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({
+      error: "Please log in to continue.",
+    });
+  }
+
+  if (req.user.role !== "owner") {
+    return res.status(403).json({
+      error: "Only the owner can manage loyalty rewards.",
+    });
+  }
+
+  next();
+}
 // IMPORTANT:
-// server.js must mount this router behind requireOwner.
-// Existing global CSRF protection must remain enabled.
+// server.js must mount this router behind requireTeamMember.
+// Owner-only loyalty reward mutations use route-level requireOwner.
 
 // A transaction belongs to a customer when its saved contact
 // matches, or when its linked appointment supplies the contact.
@@ -358,7 +373,7 @@ COALESCE(final_line_total, line_total) AS final_line_total
 // Lock the customer row to serialize owner reward changes.
 // No reward is issued automatically after a visit.
 
-router.post("/:id/rewards", async (req, res) => {
+router.post("/:id/rewards", requireOwner, async (req, res) => {
   const customerId = id(req.params.id);
 
   if (!customerId) {
@@ -580,6 +595,7 @@ router.post("/:id/rewards", async (req, res) => {
 
 router.patch(
   "/:id/rewards/:rewardId",
+  requireOwner,
   async (req, res) => {
     const customerId = id(req.params.id);
     const rewardId = id(req.params.rewardId);

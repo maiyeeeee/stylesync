@@ -582,7 +582,7 @@ api.get("/public/booking-price", async (req, res) => {
 })
 
 api.use("/discounts", requireTeamMember, discountRoutes)
-api.use("/customers", requireOwner, customerRoutes)
+api.use("/customers", requireTeamMember, customerRoutes);
 api.use("/recommendations", requireAdmin, recommendationRoutes)
 api.use("/dashboard", requireAdmin, dashboardRoutes)
 api.use("/reports", requireAdmin, reportRoutes)
