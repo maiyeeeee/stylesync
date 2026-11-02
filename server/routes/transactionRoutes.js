@@ -1196,9 +1196,9 @@ router.post("/", async (req, res) => {
 
         if (emergencyReconciliation) {
 
-            if (!["owner", "admin"].includes(req.user.role)) {
+           if (!["owner", "admin", "user"].includes(req.user.role)) {
 
-                throw problem("Owner or admin approval is required for emergency reconciliation.", 403)
+                throw problem("You are not authorized to reconcile emergency sales.", 403)
 
             }
 
