@@ -46,6 +46,7 @@ const emptyReport = {
   },
   mostRequestedServices: [],
   staffAnalytics: { scope: "Completed booked services and paid appointment revenue; paid walk-in service lines tracked separately", staff: [] },
+  emergencyAnalytics: null, // Only populated by a verified server report response.
   salesAnalytics: {
     previousPeriod: { startDate: "", endDate: "", sales: 0, transactions: 0 },
     salesByType: [],
@@ -667,6 +668,8 @@ function ReportCategoryIcon({ name }) {
     discounts: <><path d="M12 2l9 9v6l-6 5-12-12V4a2 2 0 0 1 2-2z" /><circle cx="7.5" cy="7.5" r="1" /></>,
     inventory: <><path d="M12 2 21 7v10l-9 5-9-5V7z" /><path d="m3 7 9 5 9-5M12 12v10" /></>,
     staff: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-2a8 8 0 0 1 16 0v2" /></>,
+    emergency: <><path d="M12 3 3 20h18L12 3Z" /><path d="M12 9v5M12 17h.01" /></>,
+    insights: <><path d="M4 17l6-6 4 3 6-8" /><path d="M16 6h4v4" /></>,
   }
   return (
     <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -828,6 +831,7 @@ function AdminReports() {
               paymentBreakdown: Array.isArray(data.salesAnalytics?.paymentBreakdown) ? data.salesAnalytics.paymentBreakdown : [],
               topSellingServices: Array.isArray(data.salesAnalytics?.topSellingServices) ? data.salesAnalytics.topSellingServices : [],
             },
+            emergencyAnalytics: data.emergencyAnalytics && typeof data.emergencyAnalytics === "object" && !Array.isArray(data.emergencyAnalytics) ? data.emergencyAnalytics : null,
             staffAnalytics: {
               scope: data.staffAnalytics?.scope || "Completed booked services and paid revenue (separate date bases)",
               staff: Array.isArray(data.staffAnalytics?.staff)
@@ -1311,6 +1315,8 @@ function AdminReports() {
             { id: "discounts", title: "Promotions & Discounts", description: "Promo & loyalty analytics", icon: "discounts" },
             { id: "inventory", title: "Inventory", description: "Stock & inventory", icon: "inventory" },
             { id: "staff", title: "Staff Performance", description: "Completed services and paid sales", icon: "staff" },
+            { id: "emergency", title: "Emergency Mode", description: "Verified recovery activity", icon: "emergency" },
+            { id: "insights", title: "Management Insights", description: "Recorded trends and highlights", icon: "insights" },
           ].map((category) => {
             const selected = activeCategory === category.id
             return (
@@ -2935,6 +2941,37 @@ function AdminReports() {
                 These figures are not commissions.
               </p>
             </div>
+            <div className="grid gap-4 p-5 lg:grid-cols-2">
+              <div className="rounded-xl border border-purple-100 bg-purple-50/30 p-4">
+                <h3 className="mb-3 font-semibold text-purple-950">Completed Booked Services by Staff</h3>
+                {report.staffAnalytics.staff.length ? (
+                  <ResponsiveContainer width="100%" height={Math.max(240, report.staffAnalytics.staff.length * 42)}>
+                    <BarChart data={report.staffAnalytics.staff} layout="vertical" margin={{ left: 15, right: 18 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" allowDecimals={false} />
+                      <YAxis dataKey="staffName" type="category" width={105} tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="completedServices" name="Completed booked services" fill="#7e22ce" radius={[0, 5, 5, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <ChartEmpty>No staff performance records for this period.</ChartEmpty>}
+              </div>
+              <div className="rounded-xl border border-purple-100 bg-purple-50/30 p-4">
+                <h3 className="mb-3 font-semibold text-purple-950">Attributed Paid Service Revenue</h3>
+                {report.staffAnalytics.staff.length ? (
+                  <ResponsiveContainer width="100%" height={Math.max(240, report.staffAnalytics.staff.length * 42)}>
+                    <BarChart data={report.staffAnalytics.staff} layout="vertical" margin={{ left: 15, right: 18 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" tickFormatter={(value) => `₱${Number(value).toLocaleString("en-PH")}`} />
+                      <YAxis dataKey="staffName" type="category" width={105} tick={{ fontSize: 11 }} />
+                      <Tooltip formatter={(value) => money(value)} />
+                      <Bar dataKey="attributedRevenue" stackId="revenue" name="Booked appointment revenue" fill="#7e22ce" />
+                      <Bar dataKey="walkinAttributedRevenue" stackId="revenue" name="Paid walk-in service revenue" fill="#c084fc" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <ChartEmpty>No attributed paid revenue for this period.</ChartEmpty>}
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[620px] text-left text-sm">
                 <thead className="bg-purple-50 text-purple-950">
@@ -2965,6 +3002,54 @@ function AdminReports() {
                 </tbody>
               </table>
             </div>
+          </section>
+        )}
+
+        {activeCategory === "emergency" && (
+          <section className={`${panel} p-5 space-y-4`}>
+            <h2 className="text-lg font-bold text-purple-950">Emergency Mode Recovery</h2>
+            <p className="text-sm text-gray-600">Only server-confirmed recovery activity can appear in official reporting. Unsynchronized device-only records are not counted as paid sales.</p>
+            {report.emergencyAnalytics?.verified === true && Array.isArray(report.emergencyAnalytics.dailyActivity) ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    ["Synchronized Records", report.emergencyAnalytics.synchronizedCount],
+                    ["Duplicate Records Prevented", report.emergencyAnalytics.duplicatesPrevented],
+                    ["Verified Recovered Sales", money(report.emergencyAnalytics.recoveredSales)],
+                  ].map(([label, value]) => <div key={label} className="rounded-xl bg-purple-50 p-4"><p className="text-xs text-purple-700">{label}</p><p className="mt-1 text-xl font-bold text-purple-950">{value ?? "Not reported"}</p></div>)}
+                </div>
+                {report.emergencyAnalytics.dailyActivity.length ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={report.emergencyAnalytics.dailyActivity}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" /><YAxis allowDecimals={false} /><Tooltip />
+                      <Bar dataKey="synchronized" name="Synchronized records" fill="#7e22ce" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <ChartEmpty>No verified emergency recoveries in this period.</ChartEmpty>}
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-purple-200 bg-purple-50/40 p-6 text-sm text-gray-600">
+                Verified Emergency Mode analytics are not yet provided by the reports API. No recovery totals or chart values will be invented. The backend must return a verified emergencyAnalytics payload before this chart can display.
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeCategory === "insights" && (
+          <section className={`${panel} p-5`}>
+            <h2 className="text-lg font-bold text-purple-950">Automatic Management Insights</h2>
+            <p className="mt-1 text-sm text-gray-600">Calculated from recorded data in the selected report period; not predictions.</p>
+            <ul className="mt-4 space-y-3 text-sm text-gray-700">
+              <li className="rounded-xl bg-purple-50 p-4">Paid sales: <strong>{money(report.sales)}</strong> across <strong>{report.transactions}</strong> paid transactions; average transaction <strong>{money(report.averageSale)}</strong>.</li>
+              {report.mostRequestedServices?.[0] && <li className="rounded-xl bg-purple-50 p-4">Most requested service: <strong>{report.mostRequestedServices[0].service}</strong> ({report.mostRequestedServices[0].count} requests).</li>}
+              <li className="rounded-xl bg-purple-50 p-4">Inventory attention: <strong>{report.inventoryAnalytics.snapshot.needsAttention}</strong> product(s) currently need attention, based on the latest stock snapshot.</li>
+              {report.staffAnalytics.staff.length > 0 && (() => {
+                const leader = [...report.staffAnalytics.staff].sort((a, b) => b.completedServices - a.completedServices)[0]
+                return <li className="rounded-xl bg-purple-50 p-4">Most completed booked services: <strong>{leader.staffName || "Unnamed staff"}</strong> ({leader.completedServices}). This is a count, not an employee rating.</li>
+              })()}
+              {report.emergencyAnalytics?.verified === true && <li className="rounded-xl bg-purple-50 p-4">Verified Emergency Mode synchronized records: <strong>{report.emergencyAnalytics.synchronizedCount ?? "Not reported"}</strong>.</li>}
+            </ul>
           </section>
         )}
 
