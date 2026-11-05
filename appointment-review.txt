@@ -1,0 +1,53 @@
+diff --git a/server/routes/appointments.js b/server/routes/appointments.js
+index d72f2c1..1a96048 100644
+--- a/server/routes/appointments.js
++++ b/server/routes/appointments.js
+@@ -3748,11 +800 @@ router.put(
+-
+-
+-
+-                appointmentId <=
+-
+-
+-
+-                    0
+-
+-
+-
++                appointmentId <=0
+@@ -6079,3 +1310,3 @@ router.put("/:id/service-status", async (req, res) => {
+-
+-            `SELECT id, status, service_status, staff_id
+-
++            `SELECT id, status, service_status, staff_id,
++                    DATE_FORMAT(appointment_date, '%Y-%m-%d') AS scheduled_date,
++                    TIME_FORMAT(appointment_end_time, '%H:%i:%s') AS scheduled_end_time
+@@ -6121 +1333,27 @@ router.put("/:id/service-status", async (req, res) => {
+-
++        // Appointment schedule is stored in Philippine local time (UTC+08:00).
++        // Require the scheduled service end to have passed before completion.
++        const scheduledDate = appointment.scheduled_date
++        const scheduledEndTime = appointment.scheduled_end_time
++        if (
++            !/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate || "") ||
++            !/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(scheduledEndTime || "")
++        ) {
++            await connection.rollback()
++            return res.status(409).json({
++                error: "Appointment end time is missing or invalid. Please review the schedule."
++            })
++        }
++        const scheduledEnd = new Date(`${scheduledDate}T${scheduledEndTime}+08:00`)
++        if (
++            Number.isNaN(scheduledEnd.getTime()) ||
++            !Number.isFinite(scheduledEnd.getTime())
++        ) {
++            await connection.rollback()
++            return res.status(409).json({ error: "Invalid appointment end time." })
++        }
++        if (Date.now() < scheduledEnd.getTime()) {
++            await connection.rollback()
++            return res.status(409).json({
++                error: "This service cannot be marked Completed before its scheduled end time."
++            })
++        }

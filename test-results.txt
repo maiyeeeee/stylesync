@@ -1,0 +1,26 @@
+
+> stylesync@1.0.0 test
+> node --test server/tests
+
+TAP version 13
+# Subtest: appointment checkout rejects missing saved phone
+ok 1 - appointment checkout rejects missing saved phone
+  ---
+  duration_ms: 485.4152
+  ...
+# Subtest: appointment checkout rejects invalid saved phone
+ok 2 - appointment checkout rejects invalid saved phone
+  ---
+  duration_ms: 4.2905
+  ...
+# Subtest: appointment checkout rejects mismatched POS phone
+ok 3 - appointment checkout rejects mismatched POS phone
+  ---
+  duration_ms: 4.0745
+  ...
+# Subtest: appointment checkout accepts matching +63 phone
+ok 4 - appointment checkout accepts matching +63 phone
+  ---
+  duration_ms: 4.5985
+  ...
+# MySQL Connected Successfully

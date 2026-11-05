@@ -15,6 +15,7 @@
 
   "prettier.requireConfig": true,
   "prettier.useEditorConfig": false,
+  "css.lint.unknownAtRules": "ignore",
 
   "eslint.workingDirectories": [{ "directory": "client", "changeProcessCWD": true }],
   "editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },

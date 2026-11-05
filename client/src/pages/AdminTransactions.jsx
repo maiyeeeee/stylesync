@@ -1559,6 +1559,13 @@ function AdminTransactions() {
 
         if (lock.current) return
 
+        // Manual historical entry was removed from POS. Preserve existing
+        // historical records and Emergency Mode reconciliation separately.
+        if (form.historicalDate) {
+            setError("Manual historical sale entry is no longer available. Clear the form and use current checkout or Emergency Mode recovery.")
+            return
+        }
+
         setError("")
         setMessage("")
         const checkoutPhone = normalizeRequiredPhone(
@@ -1680,28 +1687,6 @@ function AdminTransactions() {
             return
         }
 
-        if (
-            form.historicalDate &&
-            form.historicalDate >= philippineDate()
-        ) {
-            setError(
-                "Choose a past Philippine date for a historical sale."
-            )
-            return
-        }
-
-        if (
-            form.payment === "Not recorded" &&
-            (!form.historicalDate ||
-                booked ||
-                productSale)
-        ) {
-            setError(
-                "An unrecorded payment method is allowed only for a historical service sale."
-            )
-            return
-        }
-
         // Do not charge the regular price while an
         // eligible customer's reward status is unknown.
         if (
@@ -1781,10 +1766,7 @@ function AdminTransactions() {
             payment:
                 form.payment,
 
-            historical_date:
-                !booked && !productSale
-                    ? form.historicalDate || null
-                    : null,
+            historical_date: null,
 
             status: "Paid",
 
@@ -2656,35 +2638,6 @@ function AdminTransactions() {
                                         disabled={disabled}
                                     />
 
-                                    {!productSale && (
-                                        <Field label="Historical sale date (optional)">
-                                            <input
-                                                type="date"
-                                                className={input}
-                                                max={philippineDate()}
-                                                value={form.historicalDate}
-                                                onChange={(event) =>
-                                                    setForm((previous) => ({
-                                                        ...previous,
-                                                        historicalDate:
-                                                            event.target.value,
-                                                        payment:
-                                                            event.target.value
-                                                                ? "Not recorded"
-                                                                : "Cash",
-                                                    }))
-                                                }
-                                            />
-
-                                            <span className="mt-1 block text-xs text-gray-500">
-                                                Leave blank for a sale
-                                                made now. Historical
-                                                sales do not redeem
-                                                loyalty rewards.
-                                            </span>
-                                        </Field>
-                                    )}
-
                                     {productSale && (
                                         <Field label="Quantity">
                                             <input
@@ -2950,14 +2903,6 @@ function AdminTransactions() {
                                         <option value="GCash">
                                             GCash
                                         </option>
-
-                                        {!booked &&
-                                            !productSale &&
-                                            form.historicalDate && (
-                                                <option value="Not recorded">
-                                                    Not recorded
-                                                </option>
-                                            )}
                                     </select>
                                 </Field>
                             )}
