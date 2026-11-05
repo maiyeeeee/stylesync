@@ -1170,12 +1170,10 @@ function AdminReports() {
               font-weight: 700;
             }
 
+            /* Recharts charts can print as empty fixed-height boxes.
+               Hide them in the PDF so the following tables sit below headings. */
             .stylesync-print-chart {
-              width: 100%;
-              height: 175px;
-              margin: 10px 0 12px;
-              break-inside: avoid;
-              page-break-inside: avoid;
+              display: none !important;
             }
 
             .stylesync-print-section table {
